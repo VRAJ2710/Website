@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /__auth/
+
+Sitemap: https://thedispatch.uk/sitemap.xml

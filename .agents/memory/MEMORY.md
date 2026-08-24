@@ -1,0 +1,5 @@
+- [xAI provider readiness](xai-provider-readiness.md) — A connected xAI integration can still reject inference until its xAI team has available credits.
+- [Stripe connector credential shape](stripe-connector-credential-shape.md) — Managed Stripe connections may expose the secret as `settings.secret`, not the older `secret_key` field.
+- [Neon empty-result quirk](neon-empty-result-quirk.md) — Wrap optional lookups in an aggregate because empty HTTP query results can fail driver decoding.
+- [Node subprocess probes](node-subprocess-probes.md) — Plain Node child processes are more reliable than nested test-runner processes for signal lifecycle probes.
+- [Twelve Data free-tier budgeting](twelve-data-free-tier-budgeting.md) — Multi-symbol quote requests consume enough credits to require a small allowlist and shared cache.

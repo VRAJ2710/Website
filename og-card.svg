@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#06080F"/>
+  <rect x="60" y="60" width="1080" height="510" rx="16" fill="#0B0F18" stroke="rgba(255,255,255,0.08)"/>
+  <rect x="100" y="130" width="72" height="72" rx="14" fill="#0d0e12" stroke="rgba(212,162,76,0.55)"/>
+  <text x="136" y="180" text-anchor="middle" font-family="ui-monospace,monospace" font-size="42" font-weight="700" fill="#D4A24C">D</text>
+  <text x="190" y="180" font-family="system-ui,sans-serif" font-size="42" font-weight="700" letter-spacing="0.08em" fill="#E8E6E0">THE DISPATCH</text>
+  <text x="190" y="218" font-family="ui-monospace,monospace" font-size="22" font-weight="700" letter-spacing="0.16em" fill="#D4A24C">MARKETS</text>
+  <text x="100" y="300" font-family="system-ui,sans-serif" font-size="32" fill="#E8EBF2" font-weight="600">AI Market Intelligence Terminal</text>
+  <text x="100" y="340" font-family="system-ui,sans-serif" font-size="24" fill="#8B97AD">Regime-aware research · Live prices · Lens Engine</text>
+  <text x="100" y="500" font-family="monospace" font-size="20" fill="#4A5568">thedispatch.uk</text>
+</svg>

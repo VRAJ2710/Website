@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+// One-shot cache bust — never loop-reload
+(function(){
+  var V='TD-1786750800';
+  try {
+    var s=sessionStorage.getItem('td_ver');
+    if(!s){ sessionStorage.setItem('td_ver',V); return; }
+    if(s!==V){
+      sessionStorage.setItem('td_ver',V);
+      if(!sessionStorage.getItem('td_reloaded_'+V)){
+        sessionStorage.setItem('td_reloaded_'+V,'1');
+        location.reload();
+      }
+    }
+  } catch(e) {}
+})();
+
+// Theme, applied in <head> BEFORE first paint.
+// app.js loads at the end of <body>, so doing this there meant the page
+// painted light first and then repainted dark — a white flash on every load
+// for anyone on the dark theme. This must stay inline and stay in the head;
+// app.js keeps setTheme() for runtime switching.
+(function(){
+  try {
+    var t = localStorage.getItem('td_theme');
+    if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+  } catch(e) {}
+})();
+</script>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="The Dispatch">
+<meta name="theme-color" content="#EFEEE9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#14151A" media="(prefers-color-scheme: dark)">
+<meta name="description" content="The Dispatch Markets — gold and macro intelligence. Weekly conditional playbooks, live market context, and premium AI research. Know what matters before gold moves.">
+<meta name="author" content="Vraj Patel">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://thedispatch.uk/">
+<title>The Dispatch Markets | Gold Desk · Weekly Playbook</title>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="The Dispatch Markets">
+<meta property="og:title" content="The Dispatch Markets | Gold Desk · Weekly Playbook">
+<meta property="og:description" content="Live market context, weekly gold playbooks, and premium AI research for independent analysts.">
+<meta property="og:url" content="https://thedispatch.uk/">
+<meta property="og:image" content="https://thedispatch.uk/og-card.svg">
+<meta property="og:image:alt" content="The Dispatch Markets — AI market intelligence terminal">
+<meta name="twitter:image" content="https://thedispatch.uk/og-card.svg">
+<link rel="manifest" href="/manifest.json">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The Dispatch Markets | Gold Desk · Weekly Playbook">
+<meta name="twitter:description" content="Gold and macro intelligence workspace — weekly conditional playbooks, live market context, and premium AI research.">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebSite","name":"The Dispatch Markets","url":"https://thedispatch.uk/","description":"Gold and macro trading intelligence workspace with weekly conditional playbooks.","publisher":{"@type":"Person","name":"Vraj Patel","url":"https://www.linkedin.com/in/VRAJ2710"}}
+</script>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%2306060A' width='100' height='100' rx='20'/><text x='50' y='72' text-anchor='middle' fill='%23F59E0B' font-size='62' font-weight='400' font-family='Georgia,serif' font-style='italic'>D</text></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%2306060A' width='100' height='100' rx='20'/><text x='50' y='72' text-anchor='middle' fill='%23F59E0B' font-size='62' font-weight='400' font-family='Georgia,serif' font-style='italic'>D</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=optional" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css?v=1786750800">
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="app" id="app">
+  <div class="tape"><div class="tape-track" id="tape"></div></div>
+  <div class="status" id="statusBar"></div>
+  <div id="siteIntelBar" class="site-intel-bar"></div>
+
+<!-- Terminal layout wrapper (desktop only) -->
+<div class="terminal-wrap" id="termWrap">
+<!-- Sidebar nav (desktop only) -->
+<!-- Sidebar is generated from NAV_TOP + NAV_GROUPS in app.js (renderSidebarNav).
+     Keep it empty here so the markup cannot drift from the nav definition. -->
+<nav class="sidebar" id="sidebar" aria-label="Sections"></nav>
+<div class="terminal-right">
+<!-- Terminal command bar (desktop only) -->
+<div class="cmd-bar" id="cmdBar">
+  <div class="cmd-logo" aria-label="The Dispatch Markets" role="button" tabindex="0" onclick="openAbout()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAbout();}">
+    <img class="brand-mark-img brand-mark-img-sm" src="/logo-mark.svg?v=1786750501" width="28" height="28" alt="" decoding="async">
+    <span class="cmd-logo-text">
+      <span class="cmd-logo-name">THE DISPATCH</span>
+      <span class="cmd-logo-sep" aria-hidden="true">·</span>
+      <span class="cmd-logo-market">MARKETS</span>
+    </span>
+  </div>
+  <div class="cmd-ac-wrap">
+    <div class="cmd-input-wrap" style="flex:1">
+      <input class="cmd-input" id="cmdInput" placeholder="Enter ticker or command — AAPL, NEWS, WATCH, PORT..." autocomplete="off" autocorrect="off" spellcheck="false">
+      <span class="cmd-go" onclick="runCmd()">GO</span>
+    </div>
+    <div class="cmd-ac" id="cmdAc"></div>
+    <div id="cmdHint" style="display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--b2);border:1px solid var(--b3);border-radius:8px;padding:8px 12px;font-family:var(--mn);font-size:10px;color:var(--t3);gap:8px;flex-wrap:wrap;align-items:center;z-index:399;">
+      <span style="color:var(--t2);font-weight:600">Try:</span>
+      <span onclick="document.getElementById('cmdInput').value='AAPL';runCmd()" style="cursor:pointer;color:var(--gd);border:1px solid rgba(245,166,35,0.25);padding:1px 7px;border-radius:4px;">AAPL</span>
+      <span onclick="document.getElementById('cmdInput').value='NVDA';runCmd()" style="cursor:pointer;color:var(--gd);border:1px solid rgba(245,166,35,0.25);padding:1px 7px;border-radius:4px;">NVDA</span>
+      <span onclick="document.getElementById('cmdInput').value='XAU';runCmd()" style="cursor:pointer;color:var(--gd);border:1px solid rgba(245,166,35,0.25);padding:1px 7px;border-radius:4px;">XAU</span>
+      <span onclick="document.getElementById('cmdInput').value='BTC';runCmd()" style="cursor:pointer;color:var(--gd);border:1px solid rgba(245,166,35,0.25);padding:1px 7px;border-radius:4px;">BTC</span>
+      <span onclick="document.getElementById('cmdInput').value='RELIANCE.NS';runCmd()" style="cursor:pointer;color:var(--cy);border:1px solid rgba(0,212,245,0.25);padding:1px 7px;border-radius:4px;">RELIANCE.NS</span>
+      <span style="color:var(--b4)">·</span>
+      <span style="color:var(--t3)">Press / to focus</span>
+    </div>
+  </div>
+  <div class="cmd-status" id="cmdStatus">
+    <span class="status-dot cmd-live-dot" id="liveDot"></span>
+    <span id="cmdLive" class="cmd-live-label">Fetching</span>
+    <button type="button" class="cmd-ctl-btn" onclick="togglePause()" id="pauseBtn" title="Pause/resume live updates">⏸</button>
+    <button type="button" class="cmd-ctl-btn" onclick="fetchLivePrices();fetchLiveNews()" title="Refresh now">⟳</button>
+  </div>
+  <button type="button" class="cmd-about-btn" onclick="openAbout()" title="About &amp; Guide"><span class="cmd-about-ico" aria-hidden="true">i</span><span class="cmd-about-txt">About</span></button>
+  <div id="cmdAuthBtn" class="auth-group"><a href="/__auth/login" class="auth-btn auth-btn--ghost">Sign in</a><span class="auth-divider" aria-hidden="true"></span><a href="/__auth/subscribe" class="auth-btn auth-btn--premium">Premium<span class="auth-btn__price">£15/mo</span></a></div>
+  <div class="cmd-clk" id="cmdClk"></div>
+</div>
+
+<!-- Terminal 4-panel grid (desktop only) -->
+<div class="panel-grid" id="panelGrid">
+  <div class="panel" id="p1">
+    <div class="panel-hdr">
+      <span class="panel-title"><span class="panel-idx">01</span>Markets</span>
+      <span class="panel-hdr-r"><span class="panel-sub" id="p1sub">— LIVE</span><button type="button" class="p-exp-btn" onclick="toggleExpand('p1')" title="Expand (press 1)">⛶</button></span>
+    </div>
+    <div class="panel-body" id="p1body"></div>
+  </div>
+  <div class="panel" id="p2">
+    <div class="panel-hdr">
+      <span class="panel-title" id="p2title"><span class="panel-idx">02</span>News</span>
+      <span class="panel-hdr-r"><span class="panel-sub" id="p2sub">LIVE FEED</span><button type="button" class="p-exp-btn" onclick="toggleExpand('p2')" title="Expand (press 2)">⛶</button></span>
+    </div>
+    <div class="panel-body" id="p2body"></div>
+  </div>
+  <div class="panel" id="p3">
+    <div class="panel-hdr">
+      <span class="panel-title"><span class="panel-idx">03</span>Signals</span>
+      <span class="panel-hdr-r"><span class="panel-sub">CONVICTION-WEIGHTED</span><button type="button" class="p-exp-btn" onclick="toggleExpand('p3')" title="Expand (press 3)">⛶</button></span>
+    </div>
+    <div class="panel-body" id="p3body"></div>
+  </div>
+  <div class="panel" id="p4">
+    <div class="panel-hdr">
+      <span class="panel-title"><span class="panel-idx">04</span>Indices</span>
+      <span class="panel-hdr-r"><span class="panel-sub" id="p4sub">GLOBAL</span><button type="button" class="p-exp-btn" onclick="toggleExpand('p4')" title="Expand (press 4)">⛶</button></span>
+    </div>
+    <div class="panel-body" id="p4body"></div>
+  </div>
+</div>
+</div><!-- end terminal-right -->
+</div><!-- end terminal-wrap -->
+
+  <header class="hdr">
+    <div class="logo" onclick="openAbout()" aria-label="The Dispatch Markets" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAbout();}">
+       <img class="brand-mark-img brand-mark-img-sm" src="/logo-mark.svg?v=1786750501" width="28" height="28" alt="" decoding="async">
+      <span class="logo-text">
+        <span class="logo-the">The</span><span class="logo-disp">Dispatch</span>
+        <span class="logo-markets">Markets</span>
+      </span>
+    </div>
+    <div class="srch" onclick="openSearch()" role="button" tabindex="0" aria-label="Search tickers and commands" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openSearch();}">
+      <span class="srch-ico" aria-hidden="true">⌕</span>
+      <span class="srch-ph">Search…</span>
+      <kbd class="srch-kbd">/</kbd>
+    </div>
+    <div id="hdrAuthBtn" class="hdr-auth auth-group"><a href="/__auth/login" class="auth-btn auth-btn--ghost auth-btn--compact">Sign in</a><span class="auth-divider" aria-hidden="true"></span><a href="/__auth/subscribe" class="auth-btn auth-btn--premium auth-btn--compact">Premium</a></div>
+    <button class="info-btn" onclick="openAbout()" title="About">i</button>
+    <div><div class="clk" id="clk"></div><div class="clk-d" id="clkD"></div></div>
+  </header>
+  <div class="body-wrap"><main class="main" id="main"></main></div>
+  <nav class="bnav" id="bnav"></nav>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Search overlay -->
+<div class="sov hide" id="sov" onclick="closeSearch()">
+  <div class="sbox" onclick="event.stopPropagation()">
+    <div class="sbox-hdr">
+      <span class="sbox-title">Command Palette</span>
+      <button type="button" class="sbox-x" onclick="closeSearch()" aria-label="Close search">×</button>
+    </div>
+    <div class="sbox-inp-wrap">
+      <span class="sbox-ico" aria-hidden="true">⌕</span>
+      <input class="sinp" id="sinp" type="search" placeholder="Ticker, command, or research…" autocomplete="off" autocorrect="off" spellcheck="false" oninput="doSearch(this.value)" onkeydown="_searchKeydown(event)">
+      <kbd class="sbox-kbd">esc</kbd>
+    </div>
+    <div class="sbox-chips" id="sChips"></div>
+    <div id="sres" class="sres-list"></div>
+    <div class="sbox-foot">
+      <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+      <span><kbd>↵</kbd> select</span>
+      <span><kbd>/</kbd> open</span>
+    </div>
+  </div>
+</div>
+
+<!-- About & Guide modal -->
+<div class="sov hide" id="aboutOv" onclick="closeAbout()">
+  <div class="about-card" onclick="event.stopPropagation()" style="position:relative;max-width:520px;">
+    <button class="about-close" onclick="closeAbout()">×</button>
+
+    <!-- Masthead -->
+    <div style="text-align:center;padding-bottom:20px;border-bottom:1px solid var(--gb)">
+      <div class="about-mast">The <em>Dispatch</em> Markets</div>
+      <div class="about-tag">AI-Assisted Market Intelligence Terminal</div>
+      <div style="font-family:var(--mn);font-size:10px;color:var(--gd);letter-spacing:0.12em;margin-top:6px">↗ THEDISPATCH.UK</div>
+      <div id="aboutAuthRow" style="margin-top:14px">
+        <a href="/__auth/subscribe" class="about-signin">Subscribe — £15/month</a>
+        <div class="about-signin-hint">New users: pay with Stripe, then set your password. Returning? <a href="/__auth/login" style="color:var(--gd);text-decoration:none;font-weight:700">Sign In</a></div>
+      </div>
+    </div>
+
+    <!-- About the platform -->
+    <div class="about-section">
+      <div class="about-h">— About the Platform</div>
+      <div class="about-p">The Dispatch Markets is a gold and macro research workspace. Every Saturday the Gold Desk builds a conditional weekly playbook — market structure, key levels, volatility and dollar context, and the events that could change the thesis — stated as scenarios, never predictions. Live prices and desk tools are free; Premium adds AI briefs, lenses, and expert research.</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+        <span style="font-family:var(--mn);font-size:9px;background:var(--gdG);color:var(--gd);border:1px solid rgba(245,166,35,0.2);padding:2px 9px;border-radius:20px">Gold Desk</span>
+        <span style="font-family:var(--mn);font-size:9px;background:var(--gnG);color:var(--gn);border:1px solid rgba(0,200,150,0.2);padding:2px 9px;border-radius:20px">Weekly Playbook</span>
+        <span style="font-family:var(--mn);font-size:9px;background:var(--blG);color:var(--bl);border:1px solid rgba(79,142,247,0.2);padding:2px 9px;border-radius:20px">Live Prices</span>
+         <span style="font-family:var(--mn);font-size:9px;background:var(--puG);color:var(--pu);border:1px solid rgba(155,109,255,0.2);padding:2px 9px;border-radius:20px">Premium AI Research</span>
+      </div>
+    </div>
+
+    <!-- Founder -->
+    <div class="about-section" style="background:linear-gradient(135deg,rgba(245,166,35,0.05),rgba(79,142,247,0.03));border-radius:10px;padding:16px;border:1px solid rgba(245,166,35,0.1)">
+      <div class="about-h" style="margin-bottom:12px">— Founder &amp; Analyst</div>
+      <div class="about-creator">
+        <div class="about-avatar">V</div>
+        <div style="flex:1">
+          <div class="about-name">Vraj Patel</div>
+          <div class="about-role">Founder · Analyst</div>
+          <div style="font-family:var(--sn);font-size:11px;color:var(--t3);line-height:1.55;margin:6px 0 10px">Independent market researcher and platform builder. The Dispatch was created to give retail and independent analysts access to institutional-quality research tools without the Bloomberg Terminal price tag.</div>
+          <a href="https://www.linkedin.com/in/VRAJ2710" target="_blank" rel="noopener" class="about-li">
+            <svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.063 2.063 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+            Connect on LinkedIn
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- How to Use / Guide -->
+    <div class="about-section">
+      <div class="about-h">— How to Use</div>
+      <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+        <div style="background:var(--b1);border-radius:10px;padding:12px 14px;border:1px solid var(--gb)">
+          <div style="font-family:var(--mn);font-size:9px;color:var(--gd);letter-spacing:0.15em;margin-bottom:6px">SEARCH ANY TICKER</div>
+          <div style="font-family:var(--sn);font-size:12px;color:var(--t2);line-height:1.6">Type any stock, crypto, index, or commodity ticker in the search bar. Examples: <span style="color:var(--gd);font-family:var(--mn)">AAPL</span> · <span style="color:var(--gd);font-family:var(--mn)">BTC</span> · <span style="color:var(--gd);font-family:var(--mn)">XAU</span> · <span style="color:var(--cy);font-family:var(--mn)">RELIANCE.NS</span></div>
+        </div>
+        <div style="background:var(--b1);border-radius:10px;padding:12px 14px;border:1px solid var(--gb)">
+          <div style="font-family:var(--mn);font-size:9px;color:var(--gd);letter-spacing:0.15em;margin-bottom:6px">DESKTOP — 4-PANEL LAYOUT</div>
+          <div style="font-family:var(--sn);font-size:12px;color:var(--t2);line-height:1.7">
+            <strong style="color:var(--tx)">[1] Markets</strong> — all tracked assets with live prices<br>
+            <strong style="color:var(--tx)">[2] News / Analysis</strong> — live news or ticker deep-dive<br>
+            <strong style="color:var(--tx)">[3] Signals</strong> — conviction-weighted macro signals<br>
+            <strong style="color:var(--tx)">[4] Indices &amp; Watchlist</strong> — global markets at a glance
+          </div>
+        </div>
+        <div style="background:var(--b1);border-radius:10px;padding:12px 14px;border:1px solid var(--gb)">
+          <div style="font-family:var(--mn);font-size:9px;color:var(--gd);letter-spacing:0.15em;margin-bottom:6px">KEYBOARD SHORTCUTS</div>
+          <div style="font-family:var(--sn);font-size:12px;color:var(--t2);line-height:1.8">
+            <kbd style="background:var(--b3);padding:1px 7px;border-radius:3px;font-family:var(--mn);font-size:10px">/</kbd> Focus search &nbsp;·&nbsp;
+            <kbd style="background:var(--b3);padding:1px 7px;border-radius:3px;font-family:var(--mn);font-size:10px">1–4</kbd> Expand panel &nbsp;·&nbsp;
+            <kbd style="background:var(--b3);padding:1px 7px;border-radius:3px;font-family:var(--mn);font-size:10px">ESC</kbd> Close overlay
+          </div>
+        </div>
+        <div style="background:linear-gradient(135deg,rgba(245,166,35,0.06),rgba(155,109,255,0.04));border:1px solid rgba(245,166,35,0.12);border-radius:10px;padding:12px 14px">
+          <div style="font-family:var(--mn);font-size:9px;color:var(--gd);letter-spacing:0.15em;margin-bottom:6px">★ PREMIUM</div>
+          <div style="font-family:var(--sn);font-size:12px;color:var(--t2);line-height:1.7">
+             Gold Desk weekly playbook &nbsp;·&nbsp; Daily Dispatch Brief<br>
+             Dispatch Expert chat &nbsp;·&nbsp; AI research with xAI
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Coverage -->
+    <div class="about-section">
+      <div class="about-h">— Data Coverage</div>
+      <div class="about-p" style="font-size:11px;font-family:var(--sn);font-style:normal;line-height:1.7;color:var(--t2);">
+         Live US equity quotes via <strong style="color:var(--gn)">Yahoo Finance</strong> · Crypto via <strong style="color:var(--gn)">CoinGecko</strong> · Index sparklines &amp; screeners via <strong style="color:var(--gn)">Yahoo Finance</strong> · AI analysis via <strong style="color:var(--gn)">xAI</strong> · Financial news aggregated from multiple public sources
+      </div>
+    </div>
+
+    <!-- Disclaimer -->
+    <div class="about-section">
+      <div class="about-h">— Disclaimer</div>
+      <div class="about-p" style="font-size:11px;font-family:var(--sn);font-style:normal;line-height:1.6;color:var(--t3);">
+        The Dispatch Markets is for educational, analytical, and research purposes only. Nothing on this site should be treated as financial advice, investment advice, trading instruction, or a recommendation to buy or sell any security, commodity, cryptocurrency, derivative, or financial instrument. Market data may be delayed, incomplete, or inaccurate. AI-generated outputs may contain errors. Users are responsible for their own research and decisions.
+      </div>
+    </div>
+
+    <button onclick="closeAbout()" style="width:100%;background:var(--gd);color:var(--bg);border:none;border-radius:8px;padding:11px;font-family:var(--sn);font-size:14px;font-weight:700;cursor:pointer;margin-top:4px;transition:opacity 0.15s" onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">Close →</button>
+  </div>
+</div>
+
+<!-- Context menu -->
+<div class="ctx-menu" id="ctxMenu"></div>
+<script src="/app.js?v=1786750800"></script>
+</body>
+</html>
+

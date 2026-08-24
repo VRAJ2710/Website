@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <rect x="1" y="1" width="30" height="30" rx="7" fill="#0d0e12" stroke="#D4A24C" stroke-opacity="0.55" stroke-width="1.5"/>
+  <!-- Capital D, optical center at (16,16). Stem weight shifted +0.7x -->
+  <path fill="#D4A24C" fill-rule="evenodd" d="M9.7 7.4h6.9c4.2 0 7.5 3.2 7.5 8.6s-3.3 8.6-7.5 8.6H9.7V7.4zm3.4 3.3v10.6h3.5c2.5 0 4.4-2.25 4.4-5.3s-1.9-5.3-4.4-5.3h-3.5z"/>
+</svg>

@@ -1,0 +1,36 @@
+{
+  "name": "dispatch-markets",
+  "version": "1.0.0",
+  "description": "The Dispatch Markets — AI-assisted market intelligence terminal",
+  "main": "index.js",
+  "scripts": {
+    "test": "npm run story:check && npm run test:market-proxy && npm run test:auth",
+    "test:market-proxy": "node --test test/market-proxy.test.js",
+    "test:auth": "node --test --test-force-exit test/auth.integration.test.js",
+    "story:check": "tsc -p tsconfig.story.json",
+    "story:generate": "drizzle-kit generate --config drizzle.config.ts",
+    "story:migrate": "drizzle-kit migrate --config drizzle.config.ts",
+    "story:dev": "wrangler dev --config wrangler.story.toml --test-scheduled",
+    "story:deploy": "wrangler deploy --config wrangler.story.toml"
+  },
+  "keywords": [],
+  "author": "Vraj Patel",
+  "license": "ISC",
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "@replit/connectors-sdk": "^0.4.2",
+    "drizzle-orm": "^0.45.2",
+    "fast-xml-parser": "^5.10.1",
+    "openai": "^6.49.0",
+    "stripe": "^22.5.0",
+    "stripe-replit-sync": "^1.0.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260724.1",
+    "@types/node": "^26.1.1",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.23.1",
+    "typescript": "^7.0.2"
+  }
+}
