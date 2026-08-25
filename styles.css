@@ -507,6 +507,10 @@ p  { margin: 0 0 var(--space-3); }
   font-size: var(--t-meta); color: var(--ink-2);
 }
 .cmd-ctl-btn:hover { border-color: var(--rule-strong); color: var(--ink); }
+.cmd-ctl-btn { cursor: pointer; background: transparent; }
+.cmd-theme-btn { font-size: 13px; line-height: 1; font-style: normal; }
+.cmd-theme-btn:hover { color: var(--gold); border-color: var(--gold); }
+.info-btn.theme-btn { font-style: normal; font-size: 15px; }
 .status-dot, .live-dot {
   width: 6px; height: 6px; border-radius: 50%;
   background: var(--pos); display: inline-block; flex-shrink: 0;
@@ -2218,6 +2222,9 @@ no CSS box wars).
   .hdr .clk, .hdr .clk-d { display: none; }
   /* The mark already opens About. Two controls, one action. */
   .hdr .info-btn { display: none; }
+  /* ...but the theme toggle earns its place: it is the one control with no
+     other home on a phone (Settings is buried under More). */
+  .hdr .info-btn.theme-btn { display: flex; }
 
   .hdr .srch { flex: 1 1 auto; min-width: 0; }
   .hdr .srch-ph { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

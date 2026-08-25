@@ -5529,6 +5529,71 @@ function showToast(msg,col){
 }
 
 // ═══════════════════════════════════════════════════════════
+// THEME — light / dark / system
+// index.html applies a stored explicit theme before first paint (no flash).
+// These provide runtime switching plus a "system" mode that defers to the OS.
+// The pre-paint script only honours an explicit 'light' or 'dark' value, so
+// "system" is represented by the ABSENCE of the td_theme key.
+// ═══════════════════════════════════════════════════════════
+function getThemePref(){
+  try{const t=localStorage.getItem('td_theme');return (t==='light'||t==='dark')?t:'system';}catch(e){return 'system';}
+}
+function _systemPrefersDark(){
+  return typeof window.matchMedia==='function' && window.matchMedia('(prefers-color-scheme: dark)').matches;
+}
+function resolvedTheme(){
+  const pref=getThemePref();
+  return pref==='system' ? (_systemPrefersDark()?'dark':'light') : pref;
+}
+function setTheme(mode){
+  const root=document.documentElement;
+  if(mode==='light'||mode==='dark'){
+    root.setAttribute('data-theme',mode);
+    try{localStorage.setItem('td_theme',mode);}catch(e){}
+  } else { // system
+    root.removeAttribute('data-theme');
+    try{localStorage.removeItem('td_theme');}catch(e){}
+  }
+  _updateThemeControls();
+  return resolvedTheme();
+}
+function cycleTheme(){
+  // One-tap toggle: flip whatever is currently shown to its opposite.
+  const next = resolvedTheme()==='dark' ? 'light' : 'dark';
+  setTheme(next);
+  showToast(next==='dark'?'Dark theme on':'Light theme on','var(--gd)');
+}
+function _updateThemeControls(){
+  const pref=getThemePref();
+  const shown=resolvedTheme();
+  document.querySelectorAll('[data-theme-toggle]').forEach(btn=>{
+    btn.textContent = shown==='dark' ? '☀' : '☾';
+    const nextLabel = shown==='dark' ? 'Switch to light theme' : 'Switch to dark theme';
+    btn.setAttribute('aria-label', nextLabel);
+    btn.setAttribute('title', nextLabel + (pref==='system' ? ' (following system)' : ''));
+  });
+  ['light','dark','system'].forEach(m=>{
+    const seg=document.getElementById('themeseg-'+m);
+    if(seg){
+      const on = pref===m;
+      seg.style.background = on ? 'var(--gdG)' : 'transparent';
+      seg.style.color = on ? 'var(--gd)' : 'var(--t2)';
+      seg.style.borderColor = on ? 'var(--gd)' : 'var(--b4)';
+    }
+  });
+}
+function _initTheme(){
+  _updateThemeControls();
+  // Keep the toggle icon in sync when the OS theme flips while in "system" mode.
+  if(typeof window.matchMedia==='function'){
+    const mq=window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange=()=>{ if(getThemePref()==='system') _updateThemeControls(); };
+    if(mq.addEventListener) mq.addEventListener('change',onChange);
+    else if(mq.addListener) mq.addListener(onChange);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
 // FEAR & GREED
 // ═══════════════════════════════════════════════════════════
 function calcFearGreed(){
@@ -5927,6 +5992,15 @@ function openSettings(){
     </div>
     <div style="overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:20px">
 
+      <!-- Appearance -->
+      <div>
+        <div style="font-family:var(--mn);font-size:10px;color:var(--gd);letter-spacing:0.18em;margin-bottom:12px">APPEARANCE</div>
+        <div style="display:flex;gap:6px">
+          ${[['light','Light'],['dark','Dark'],['system','System']].map(([m,l])=>`<button id="themeseg-${m}" onclick="setTheme('${m}')" style="flex:1;font-family:var(--mn);font-size:11px;font-weight:700;padding:8px 0;border-radius:6px;cursor:pointer;border:1px solid var(--b4);background:transparent;color:var(--t2)">${l}</button>`).join('')}
+        </div>
+        <div style="font-family:var(--mn);font-size:10px;color:var(--t3);margin-top:8px">System follows your device's light/dark setting.</div>
+      </div>
+
       <!-- Panel Visibility -->
       <div>
         <div style="font-family:var(--mn);font-size:10px;color:var(--gd);letter-spacing:0.18em;margin-bottom:12px">PANEL VISIBILITY</div>
@@ -5978,6 +6052,7 @@ function openSettings(){
     </div>
   </div>`;
   document.body.appendChild(el);
+  _updateThemeControls();
   el.addEventListener('click',e=>{if(e.target===el){el.remove();settingsOpen=false;}});
 }
 
@@ -15609,3 +15684,4 @@ setInterval(renderStatus, isMobile ? MOBILE_STATUS_FREQ : 5000);
 _initKeyboard();
 wireTopNav();
 enhanceCommandPalette();
+_initTheme();
