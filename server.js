@@ -13,6 +13,7 @@ const {
   normalizeTwelveDataQuotes,
 } = require("./marketProxy");
 const { approvedRssFeedUrl } = require("./rssFeeds");
+const { moderateInput, moderateOutput } = require("./moderation");
 const {
   ensureDispatchPremiumPrice,
   getStripeMode,
@@ -163,9 +164,14 @@ function page(res, title, content) {
   button,a{display:inline-block;margin-top:20px;padding:11px 16px;border:0;border-radius:7px;background:#f5a623;color:#111;font-weight:700;text-decoration:none;cursor:pointer}
   .muted{font-size:12px;color:#718096}</style></head><body><main>${content}</main></body></html>`);
 }
-async function readBody(req) {
+async function readBody(req, maxBytes = 2 * 1024 * 1024) {
   let text = "";
-  for await (const chunk of req) text += chunk;
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > maxBytes) throw new AiRequestError(413, "Request body is too large.", "BODY_TOO_LARGE");
+    text += chunk;
+  }
   try { return text ? JSON.parse(text) : {}; } catch { return {}; }
 }
 async function readRawBody(req, maxBytes = 2 * 1024 * 1024) {
@@ -286,6 +292,25 @@ function asAiMessages(messages, limit = 16) {
     role: message?.role === "assistant" ? "assistant" : "user",
     content: clipped(message?.content, 6000),
   })).filter(message => message.content);
+}
+// Collect the free-form, user-authored text an AI endpoint received, so it can be
+// screened before reaching the AI provider. Machine-generated fields (terminal
+// context, market snapshots) are intentionally excluded.
+function userSubmittedText(pathname, body) {
+  const parts = [];
+  if (pathname === "/api/chat" || pathname === "/api/committee") {
+    // Screen only the newest user turn. The client resends prior turns for
+    // context, and each was already moderated when it was first submitted;
+    // rescanning the whole history would let one earlier flagged message wrongly
+    // block every later message in the conversation.
+    const userMessages = asAiMessages(body?.messages, 16).filter(message => message.role === "user");
+    if (userMessages.length) parts.push(userMessages[userMessages.length - 1].content);
+    if (typeof body?.system === "string") parts.push(body.system);
+  }
+  if (pathname === "/api/lenses") {
+    if (typeof body?.userThesis === "string") parts.push(body.userThesis);
+  }
+  return parts;
 }
 function withTimeout(promise, timeoutMs, message = "The AI request timed out. Please try again.") {
   let timeout;
@@ -585,7 +610,7 @@ async function syncMembershipFromSubscription(customerId, subscriptionId) {
   if (!subscriptionId) return;
   const stripe = await getUncachableStripeClient();
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-  updateUserMembership({ customerId: String(customerId || subscription.customer), subscription });
+  await updateUserMembership({ customerId: String(customerId || subscription.customer), subscription });
 }
 async function applyStripeMembershipEvent(event) {
   const object = event?.data?.object;
@@ -658,7 +683,7 @@ async function handle(req, res) {
     await sql`INSERT INTO dispatch_password_resets (token_hash, user_id, expires_at) VALUES (${tokenHash(token)}, ${user.id}, NOW() + INTERVAL '30 minutes')`;
     return page(res, "Reset password", `<h1>RESET LINK READY</h1><p class="muted">In production, this link would be emailed to you.</p><a href="/__auth/reset?token=${encodeURIComponent(token)}">Reset password</a>`);
   }
-  if (p === "/__auth/reset" && req.method === "GET") return page(res, "Reset password", `<h1>RESET PASSWORD</h1><form method="post"><input type="hidden" name="token" value="${url.searchParams.get("token") || ""}"><label>New password</label><input name="password" type="password" minlength="8" required><button>Set password</button></form>`);
+  if (p === "/__auth/reset" && req.method === "GET") return page(res, "Reset password", `<h1>RESET PASSWORD</h1><form method="post"><input type="hidden" name="token" value="${safeText(url.searchParams.get("token"), 256)}"><label>New password</label><input name="password" type="password" minlength="8" required><button>Set password</button></form>`);
   if (p === "/__auth/reset" && req.method === "POST") {
     let raw = ""; for await (const c of req) raw += c;
     const form = new URLSearchParams(raw); const token = form.get("token") || ""; const password = form.get("password") || "";
@@ -765,8 +790,21 @@ async function handle(req, res) {
   if (["/api/brief", "/api/intelligence", "/api/lenses", "/api/committee", "/api/chat", "/api/gold-desk"].includes(p)) {
     const user = await currentUser(req);
     if (!user || user.tier !== "premium") return json(res, 401, { error: "Premium membership required" });
-    const body = req.method === "POST" ? await readBody(req) : {};
     try {
+      const body = req.method === "POST" ? await readBody(req) : {};
+      // Auto-moderate inbound user text before it reaches the AI provider.
+      const submitted = userSubmittedText(p, body);
+      if (submitted.length) {
+        const verdict = moderateInput(submitted);
+        if (!verdict.allowed) {
+          console.warn("Moderation blocked user input:", verdict.categories.join(", ") || "policy");
+          return json(res, 400, {
+            error: verdict.message,
+            code: "MODERATION_BLOCKED",
+            moderation: { blocked: true, categories: verdict.categories },
+          });
+        }
+      }
       if (p === "/api/chat") {
         const context = clipped(JSON.stringify(body.context || {}), 12000);
         const result = await generateAi({
@@ -775,7 +813,7 @@ async function handle(req, res) {
           maxTokens: 1200,
           temperature: 0.25,
         });
-        return json(res, 200, { reply: safeText(result.text, 9000), meta: { provider: "xAI", model: result.model } });
+        return json(res, 200, { reply: safeText(moderateOutput(result.text).text, 9000), meta: { provider: "xAI", model: result.model } });
       }
       if (p === "/api/brief") {
         const context = clipped(JSON.stringify(body.context || {}), 16000);
@@ -820,8 +858,9 @@ async function handle(req, res) {
           maxTokens: body.max_tokens || body.maxTokens || 1400,
           temperature: 0.2,
         });
-        let content = safeText(result.text, 12000);
-        try { content = JSON.stringify(safeGeneratedValue(jsonFromText(result.text))); } catch {}
+        const moderatedText = moderateOutput(result.text).text;
+        let content = safeText(moderatedText, 12000);
+        try { content = JSON.stringify(safeGeneratedValue(jsonFromText(moderatedText))); } catch {}
         return json(res, 200, { content: [{ type: "text", text: content }], meta: { provider: "xAI", model: result.model } });
       }
       if (p === "/api/gold-desk") {
