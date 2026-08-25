@@ -1,0 +1,18 @@
+{
+  "name": "The Dispatch Markets",
+  "install": "bash .cursor/dev/install.sh",
+  "start": "bash .cursor/dev/start.sh",
+  "terminals": [
+    {
+      "name": "app",
+      "command": "bash .cursor/dev/run-app.sh",
+      "description": "The Dispatch Markets preview server on http://localhost:5000 (Neon driver routed to the local Postgres proxy)."
+    }
+  ],
+  "ports": [
+    {
+      "name": "web",
+      "port": 5000
+    }
+  ]
+}
