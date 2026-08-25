@@ -5563,9 +5563,23 @@ function cycleTheme(){
   setTheme(next);
   showToast(next==='dark'?'Dark theme on':'Light theme on','var(--gd)');
 }
+function _syncThemeColorMeta(shown){
+  // The static <meta name="theme-color"> tags are OS-scoped, so an explicit
+  // override that disagrees with the OS would leave the mobile browser chrome
+  // out of sync. A single JS-managed tag (always last, no media) fixes that.
+  let m=document.getElementById('td-theme-color');
+  if(!m){
+    m=document.createElement('meta');
+    m.setAttribute('name','theme-color');
+    m.id='td-theme-color';
+    document.head.appendChild(m);
+  }
+  m.setAttribute('content', shown==='dark' ? '#14151A' : '#EFEEE9');
+}
 function _updateThemeControls(){
   const pref=getThemePref();
   const shown=resolvedTheme();
+  _syncThemeColorMeta(shown);
   document.querySelectorAll('[data-theme-toggle]').forEach(btn=>{
     btn.textContent = shown==='dark' ? '☀' : '☾';
     const nextLabel = shown==='dark' ? 'Switch to light theme' : 'Switch to dark theme';
@@ -7115,6 +7129,9 @@ function _initResponsiveShell() {
     if (modeChanged) {
       if (desk) { renderTerminalPanels(); updateSidebarActive(); }
       else { renderMain(); renderNav(); }
+      // The desktop and mobile theme buttons toggle between shown/hidden on a
+      // layout flip; re-sync so the newly visible one carries the right glyph.
+      if (typeof _updateThemeControls === "function") _updateThemeControls();
     }
   };
   _layoutMode = IS_DESKTOP() ? "d" : "m";
