@@ -15418,6 +15418,10 @@ function _renderChatMsgs() {
 }
 
 function toggleChat() {
+  // Lazily create the chat panel on first use. Without this the panel never
+  // exists in the DOM, so toggleChat() was a no-op and Dispatch Expert could
+  // not be opened.
+  initChatWidget();
   _chatOpen = !_chatOpen;
   const panel = document.getElementById("chatPanel");
   const dockFab = document.getElementById("smartDockFab");
