@@ -163,9 +163,14 @@ function page(res, title, content) {
   button,a{display:inline-block;margin-top:20px;padding:11px 16px;border:0;border-radius:7px;background:#f5a623;color:#111;font-weight:700;text-decoration:none;cursor:pointer}
   .muted{font-size:12px;color:#718096}</style></head><body><main>${content}</main></body></html>`);
 }
-async function readBody(req) {
+async function readBody(req, maxBytes = 2 * 1024 * 1024) {
   let text = "";
-  for await (const chunk of req) text += chunk;
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > maxBytes) throw new AiRequestError(413, "Request body is too large.", "BODY_TOO_LARGE");
+    text += chunk;
+  }
   try { return text ? JSON.parse(text) : {}; } catch { return {}; }
 }
 async function readRawBody(req, maxBytes = 2 * 1024 * 1024) {
@@ -585,7 +590,7 @@ async function syncMembershipFromSubscription(customerId, subscriptionId) {
   if (!subscriptionId) return;
   const stripe = await getUncachableStripeClient();
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-  updateUserMembership({ customerId: String(customerId || subscription.customer), subscription });
+  await updateUserMembership({ customerId: String(customerId || subscription.customer), subscription });
 }
 async function applyStripeMembershipEvent(event) {
   const object = event?.data?.object;
@@ -658,7 +663,7 @@ async function handle(req, res) {
     await sql`INSERT INTO dispatch_password_resets (token_hash, user_id, expires_at) VALUES (${tokenHash(token)}, ${user.id}, NOW() + INTERVAL '30 minutes')`;
     return page(res, "Reset password", `<h1>RESET LINK READY</h1><p class="muted">In production, this link would be emailed to you.</p><a href="/__auth/reset?token=${encodeURIComponent(token)}">Reset password</a>`);
   }
-  if (p === "/__auth/reset" && req.method === "GET") return page(res, "Reset password", `<h1>RESET PASSWORD</h1><form method="post"><input type="hidden" name="token" value="${url.searchParams.get("token") || ""}"><label>New password</label><input name="password" type="password" minlength="8" required><button>Set password</button></form>`);
+  if (p === "/__auth/reset" && req.method === "GET") return page(res, "Reset password", `<h1>RESET PASSWORD</h1><form method="post"><input type="hidden" name="token" value="${safeText(url.searchParams.get("token"), 256)}"><label>New password</label><input name="password" type="password" minlength="8" required><button>Set password</button></form>`);
   if (p === "/__auth/reset" && req.method === "POST") {
     let raw = ""; for await (const c of req) raw += c;
     const form = new URLSearchParams(raw); const token = form.get("token") || ""; const password = form.get("password") || "";
