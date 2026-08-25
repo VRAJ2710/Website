@@ -299,9 +299,12 @@ function asAiMessages(messages, limit = 16) {
 function userSubmittedText(pathname, body) {
   const parts = [];
   if (pathname === "/api/chat" || pathname === "/api/committee") {
-    for (const message of asAiMessages(body?.messages, 16)) {
-      if (message.role === "user") parts.push(message.content);
-    }
+    // Screen only the newest user turn. The client resends prior turns for
+    // context, and each was already moderated when it was first submitted;
+    // rescanning the whole history would let one earlier flagged message wrongly
+    // block every later message in the conversation.
+    const userMessages = asAiMessages(body?.messages, 16).filter(message => message.role === "user");
+    if (userMessages.length) parts.push(userMessages[userMessages.length - 1].content);
     if (typeof body?.system === "string") parts.push(body.system);
   }
   if (pathname === "/api/lenses") {
