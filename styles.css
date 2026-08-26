@@ -234,6 +234,89 @@
   box-shadow: 0 0 0 1px var(--gold-line), 0 6px 20px rgba(92, 200, 255, 0.28);
 }
 
+/* ── Layout · focus ───────────────────────────────────────────────────────────
+   A second styling axis, orthogonal to theme: an experience STYLE, not a palette.
+   "Focus" turns the dense terminal into a calmer, reading-first workspace and
+   changes UX as well as UI — larger type, generous spacing, rounder cards that
+   lift and respond to the cursor, motion on navigation, and bigger navigation
+   targets. Toggled via data-ux and composes with any theme (light/dark/neo).  */
+:root[data-ux="focus"] {
+  --t-meta: 12px;
+  --t-fine: 13px;
+  --t-body: 15px;
+  --t-lead: 18px;
+  --t-h3:   21px;
+  --t-h2:   27px;
+  --t-h1:   38px;
+  --space-3: 14px;
+  --space-4: 20px;
+  --space-5: 30px;
+  --space-6: 40px;
+  --radius-sm: 8px;
+  --radius:    12px;
+  --radius-lg: 18px;
+}
+:root[data-ux="focus"] body { line-height: 1.62; scroll-behavior: smooth; }
+
+/* Reading-first: a narrower, roomier main column instead of a wall-to-wall grid. */
+:root[data-ux="focus"] .main { max-width: 960px; padding: var(--space-6) var(--space-5); }
+
+/* Bigger, friendlier navigation targets. */
+:root[data-ux="focus"] .sb-item { padding: 9px var(--space-4); font-size: 12px; }
+:root[data-ux="focus"] .sb-primary { font-size: 18px; }
+:root[data-ux="focus"] .sb-item svg { width: 16px; height: 16px; }
+
+/* Cards lift off the page and respond to the cursor — a different feel from the
+   flat "laid on paper" terminal surfaces. */
+:root[data-ux="focus"] .gc,
+:root[data-ux="focus"] .card,
+:root[data-ux="focus"] .news-card,
+:root[data-ux="focus"] .desk-run-card,
+:root[data-ux="focus"] .lab-panel,
+:root[data-ux="focus"] .pro-hub-card {
+  padding: var(--space-5);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+:root[data-ux="focus"] .gc:hover,
+:root[data-ux="focus"] .card:hover,
+:root[data-ux="focus"] .news-card:hover,
+:root[data-ux="focus"] .desk-run-card:hover,
+:root[data-ux="focus"] .lab-panel:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--gold-line);
+}
+
+/* Smooth affordances on interactive chrome. */
+:root[data-ux="focus"] .sb-item,
+:root[data-ux="focus"] .qa-btn,
+:root[data-ux="focus"] .chat-chip {
+  transition: color 0.16s ease, background-color 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+/* A quiet entrance so moving between views feels like a transition, not a repaint.
+   Panels/cards/sheets are rebuilt on each view render, so this runs per navigation. */
+@keyframes dispFocusIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+:root[data-ux="focus"] .panel,
+:root[data-ux="focus"] .gc,
+:root[data-ux="focus"] .card,
+:root[data-ux="focus"] .sheet,
+:root[data-ux="focus"] .term-overlay-card { animation: dispFocusIn 0.34s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-ux="focus"] .panel,
+  :root[data-ux="focus"] .gc,
+  :root[data-ux="focus"] .card,
+  :root[data-ux="focus"] .sheet,
+  :root[data-ux="focus"] .term-overlay-card { animation: none; }
+  :root[data-ux="focus"] .gc:hover,
+  :root[data-ux="focus"] .card:hover,
+  :root[data-ux="focus"] .news-card:hover,
+  :root[data-ux="focus"] .desk-run-card:hover,
+  :root[data-ux="focus"] .lab-panel:hover { transform: none; }
+}
+
 /* ── Legacy token aliases ─────────────────────────────────────────────────────
    app.js carries ~1,400 inline style attributes and 2,212 var(--…) references
    under the OLD token names. Aliasing them here means every component this
