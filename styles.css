@@ -161,6 +161,79 @@
   }
 }
 
+/* ── Tokens · neo ─────────────────────────────────────────────────────────────
+   A distinct third UI — an "aurora glass" terminal. Deep blue-black canvas with
+   depth, glassy live sheets, an electric azure accent in place of bronze, neon
+   semantics, and rounder surfaces. It rides the same token layer as light/dark,
+   so the whole app adopts it; a few scoped rules below add the glass + glow that
+   make it read as a genuinely different kind of UI rather than a recolour.   */
+:root[data-theme="neo"] {
+  color-scheme: dark;
+  --paper:        #070B15;
+  --paper-2:      #0E1526;
+  --carbon:       #131C31;
+  --carbon-2:     #1A2640;
+  --ink:          #EAF1FF;
+  --ink-2:        #A7B6D4;
+  --ink-3:        #6C7C9E;
+  --rule:         rgba(96, 165, 250, 0.16);
+  --rule-strong:  rgba(96, 165, 250, 0.34);
+  --rule-hair:    rgba(96, 165, 250, 0.08);
+  /* Accent: electric azure. --gold stays text-safe on the deep canvas;
+     --gold-leaf is the brighter non-text glow value. */
+  --gold:         #5CC8FF;
+  --gold-leaf:    #8FDBFF;
+  --gold-wash:    rgba(92, 200, 255, 0.14);
+  --gold-line:    rgba(92, 200, 255, 0.38);
+  --rail-bg:      #0B1322;
+  --rail-ink:     #B9C6E4;
+  --rail-ink-2:   #7C8CB0;
+  --pos:          #37E0A8;
+  --neg:          #FF6B84;
+  --pos-wash:     rgba(55, 224, 168, 0.14);
+  --neg-wash:     rgba(255, 107, 132, 0.14);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 4px 18px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 18px 48px rgba(3, 8, 20, 0.72);
+  /* Modern feel: rounder than the editorial themes. */
+  --radius-sm: 6px;
+  --radius:    10px;
+  --radius-lg: 16px;
+}
+
+/* Neo: give the canvas depth so the glass sheets read as floating on it. */
+:root[data-theme="neo"] body {
+  background:
+    radial-gradient(1100px 720px at 12% -8%, rgba(56, 120, 220, 0.22), transparent 60%),
+    radial-gradient(900px 620px at 108% 2%, rgba(122, 84, 240, 0.16), transparent 55%),
+    var(--paper);
+  background-attachment: fixed;
+}
+:root[data-theme="neo"] .app { background: transparent; }
+
+/* Neo: turn the "carbon" live sheets into frosted glass. */
+:root[data-theme="neo"] .live,
+:root[data-theme="neo"] .gc,
+:root[data-theme="neo"] .card,
+:root[data-theme="neo"] .news-card,
+:root[data-theme="neo"] .desk-run-card,
+:root[data-theme="neo"] .lab-panel,
+:root[data-theme="neo"] .pro-hub-card,
+:root[data-theme="neo"] .lab-learn-card,
+:root[data-theme="neo"] .trust-stat,
+:root[data-theme="neo"] .chat-panel {
+  background: rgba(19, 28, 49, 0.68);
+  backdrop-filter: blur(12px) saturate(130%);
+  -webkit-backdrop-filter: blur(12px) saturate(130%);
+  border-color: var(--rule);
+}
+
+/* Neo: a soft glow on the primary accent so buttons/marks feel lit. */
+:root[data-theme="neo"] .chat-send,
+:root[data-theme="neo"] .qa-gold {
+  box-shadow: 0 0 0 1px var(--gold-line), 0 6px 20px rgba(92, 200, 255, 0.28);
+}
+
 /* ── Legacy token aliases ─────────────────────────────────────────────────────
    app.js carries ~1,400 inline style attributes and 2,212 var(--…) references
    under the OLD token names. Aliasing them here means every component this
