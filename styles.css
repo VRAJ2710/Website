@@ -317,6 +317,53 @@
   :root[data-ux="focus"] .lab-panel:hover { transform: none; }
 }
 
+/* ── Customization · accent ───────────────────────────────────────────────────
+   User-chosen accent colour. Overrides the --gold token family (which every
+   --gd / --accent / --wire alias resolves from), so a preset repaints every
+   accent in the app. "Signal" = no attribute = the theme's own accent. Light
+   values are text-safe on paper; the dark+neo overrides brighten for dark canvases.
+   Placed after the theme blocks so the light values win over a theme's gold, while
+   the theme-qualified selectors win on dark/neo by specificity.               */
+:root[data-accent="azure"]   { --gold:#1F6FEB; --gold-leaf:#4C93FF; --gold-wash:rgba(31,111,235,0.12); --gold-line:rgba(31,111,235,0.34); }
+:root[data-accent="emerald"] { --gold:#0E7A54; --gold-leaf:#2FA576; --gold-wash:rgba(14,122,84,0.12);  --gold-line:rgba(14,122,84,0.34); }
+:root[data-accent="violet"]  { --gold:#6D3BD6; --gold-leaf:#8A5CF0; --gold-wash:rgba(109,59,214,0.12); --gold-line:rgba(109,59,214,0.34); }
+:root[data-accent="amber"]   { --gold:#B4700E; --gold-leaf:#D89A2A; --gold-wash:rgba(180,112,14,0.12); --gold-line:rgba(180,112,14,0.34); }
+:root[data-accent="rose"]    { --gold:#C02A5B; --gold-leaf:#E0507F; --gold-wash:rgba(192,42,91,0.12);  --gold-line:rgba(192,42,91,0.34); }
+
+:root[data-theme="dark"][data-accent="azure"],   :root[data-theme="neo"][data-accent="azure"]   { --gold:#5CA8FF; --gold-leaf:#8FC5FF; --gold-wash:rgba(92,168,255,0.16); --gold-line:rgba(92,168,255,0.38); }
+:root[data-theme="dark"][data-accent="emerald"], :root[data-theme="neo"][data-accent="emerald"] { --gold:#37E0A8; --gold-leaf:#6FF0C6; --gold-wash:rgba(55,224,168,0.16); --gold-line:rgba(55,224,168,0.38); }
+:root[data-theme="dark"][data-accent="violet"],  :root[data-theme="neo"][data-accent="violet"]  { --gold:#A98BFF; --gold-leaf:#C4AEFF; --gold-wash:rgba(169,139,255,0.16); --gold-line:rgba(169,139,255,0.38); }
+:root[data-theme="dark"][data-accent="amber"],   :root[data-theme="neo"][data-accent="amber"]   { --gold:#E7B44E; --gold-leaf:#F4CE7C; --gold-wash:rgba(231,180,78,0.16); --gold-line:rgba(231,180,78,0.38); }
+:root[data-theme="dark"][data-accent="rose"],    :root[data-theme="neo"][data-accent="rose"]    { --gold:#FF6B98; --gold-leaf:#FF9BB8; --gold-wash:rgba(255,107,152,0.16); --gold-line:rgba(255,107,152,0.38); }
+
+/* ── Customization · text size ────────────────────────────────────────────────
+   Scales the whole type system. Placed after [data-ux="focus"] so an explicit
+   size choice wins over the layout's own type bump.                           */
+:root[data-scale="compact"] { --t-micro:9px;  --t-meta:10px; --t-fine:11px; --t-body:13px; --t-lead:15px; --t-h3:18px; --t-h2:22px; --t-h1:31px; --t-mast:42px; }
+:root[data-scale="large"]   { --t-micro:11px; --t-meta:12px; --t-fine:13px; --t-body:16px; --t-lead:18px; --t-h3:22px; --t-h2:29px; --t-h1:42px; --t-mast:54px; }
+
+/* ── Customization · market colours ───────────────────────────────────────────
+   Colourblind-safe up/down. Overrides the --pos/--neg tokens (which --gn/--rd and
+   the *positive*/*negative* aliases resolve from), so gains/losses recolour app-wide.
+   Blue = up, amber = down: distinguishable under deuteranopia/protanopia.       */
+:root[data-updown="cb"] { --pos:#2F73E8; --neg:#E08A1E; --pos-wash:rgba(47,115,232,0.12); --neg-wash:rgba(224,138,30,0.12); }
+:root[data-theme="dark"][data-updown="cb"], :root[data-theme="neo"][data-updown="cb"] { --pos:#5AA0FF; --neg:#F0A83C; --pos-wash:rgba(90,160,255,0.14); --neg-wash:rgba(240,168,60,0.14); }
+
+/* ── Customization · reduced motion ───────────────────────────────────────────
+   Opt-in kill switch for the Focus layout's entrance animation and hover lift,
+   independent of the OS-level prefers-reduced-motion.                          */
+:root[data-motion="reduced"] .panel,
+:root[data-motion="reduced"] .gc,
+:root[data-motion="reduced"] .card,
+:root[data-motion="reduced"] .sheet,
+:root[data-motion="reduced"] .term-overlay-card { animation: none !important; }
+:root[data-motion="reduced"] .gc:hover,
+:root[data-motion="reduced"] .card:hover,
+:root[data-motion="reduced"] .news-card:hover,
+:root[data-motion="reduced"] .desk-run-card:hover,
+:root[data-motion="reduced"] .lab-panel:hover { transform: none !important; }
+:root[data-motion="reduced"] body { scroll-behavior: auto !important; }
+
 /* ── Legacy token aliases ─────────────────────────────────────────────────────
    app.js carries ~1,400 inline style attributes and 2,212 var(--…) references
    under the OLD token names. Aliasing them here means every component this

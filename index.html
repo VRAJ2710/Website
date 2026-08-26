@@ -33,6 +33,14 @@
     if (t === 'light' || t === 'dark' || t === 'neo') document.documentElement.setAttribute('data-theme', t);
     var u = localStorage.getItem('td_ux');
     if (u === 'focus') document.documentElement.setAttribute('data-ux', u);
+    var a = localStorage.getItem('td_accent');
+    if (['azure','emerald','violet','amber','rose'].indexOf(a) !== -1) document.documentElement.setAttribute('data-accent', a);
+    var sc = localStorage.getItem('td_scale');
+    if (sc === 'compact' || sc === 'large') document.documentElement.setAttribute('data-scale', sc);
+    var ud = localStorage.getItem('td_updown');
+    if (ud === 'cb') document.documentElement.setAttribute('data-updown', ud);
+    var mo = localStorage.getItem('td_motion');
+    if (mo === 'reduced') document.documentElement.setAttribute('data-motion', mo);
   } catch(e) {}
 })();
 </script>
