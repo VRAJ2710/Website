@@ -5958,6 +5958,52 @@ function setUx(id){
   if (typeof showToast === "function") showToast(def.label + " layout", "var(--gd)");
 }
 
+// ─── Appearance customization ───
+// Accent colour, text size, market (up/down) colours, and motion. Each is an
+// attribute on <html> backed by CSS token overrides (see styles.css), applied
+// pre-paint in index.html and persisted here. "Default" values clear the
+// attribute so the active theme/layout supplies the value.
+const ACCENTS = [
+  { id: "signal",  label: "Signal",  swatch: "var(--gold)" },
+  { id: "azure",   label: "Azure",   swatch: "#3B86F0" },
+  { id: "emerald", label: "Emerald", swatch: "#18915F" },
+  { id: "violet",  label: "Violet",  swatch: "#7A4CE0" },
+  { id: "amber",   label: "Amber",   swatch: "#CC8A20" },
+  { id: "rose",    label: "Rose",    swatch: "#D23B67" },
+];
+const SCALES   = [{ id: "compact", label: "Compact" }, { id: "default", label: "Default" }, { id: "large", label: "Large" }];
+const UPDOWNS  = [{ id: "classic", label: "Classic", sub: "Green / Red" }, { id: "cb", label: "Colorblind", sub: "Blue / Amber" }];
+const MOTIONS  = [{ id: "full", label: "Full" }, { id: "reduced", label: "Reduced" }];
+
+function _prefAttr(attr, fallback){ return document.documentElement.getAttribute(attr) || fallback; }
+function _currentAccent(){ return _prefAttr("data-accent", "signal"); }
+function _currentScale(){ return _prefAttr("data-scale", "default"); }
+function _currentUpDown(){ return _prefAttr("data-updown", "classic"); }
+function _currentMotion(){ return _prefAttr("data-motion", "full"); }
+
+function _applyPref(attr, storeKey, id, defaultId, toast){
+  if (id === defaultId) document.documentElement.removeAttribute(attr);
+  else document.documentElement.setAttribute(attr, id);
+  try { localStorage.setItem(storeKey, id); } catch(e) {}
+  if (document.getElementById("settingsOv")) { openSettings(); openSettings(); }
+  if (toast && typeof showToast === "function") showToast(toast, "var(--gd)");
+}
+function setAccent(id){ if (ACCENTS.some(a => a.id === id)) _applyPref("data-accent", "td_accent", id, "signal", "Accent updated"); }
+function setScale(id){ if (SCALES.some(s => s.id === id)) _applyPref("data-scale", "td_scale", id, "default", "Text size updated"); }
+function setUpDown(id){ if (UPDOWNS.some(u => u.id === id)) _applyPref("data-updown", "td_updown", id, "classic", "Market colors updated"); }
+function setMotion(id){ if (MOTIONS.some(m => m.id === id)) _applyPref("data-motion", "td_motion", id, "full", "Motion updated"); }
+function resetCustomization(){
+  ["data-accent", "data-scale", "data-updown", "data-motion"].forEach(a => document.documentElement.removeAttribute(a));
+  try {
+    localStorage.setItem("td_accent", "signal");
+    localStorage.setItem("td_scale", "default");
+    localStorage.setItem("td_updown", "classic");
+    localStorage.setItem("td_motion", "full");
+  } catch(e) {}
+  if (document.getElementById("settingsOv")) { openSettings(); openSettings(); }
+  if (typeof showToast === "function") showToast("Customization reset", "var(--gd)");
+}
+
 // ─── Settings overlay ───
 function openSettings(){
   let el=document.getElementById('settingsOv');
@@ -5995,6 +6041,33 @@ function openSettings(){
             <span style="font-family:var(--mn);font-size:9px;color:var(--t3)">${m.sub}</span>
           </button>`;}).join('')}
         </div>
+        <div style="font-family:var(--mn);font-size:10px;color:var(--gd);letter-spacing:0.18em;margin:16px 0 12px">ACCENT</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${ACCENTS.map(a=>{const on=_currentAccent()===a.id;return `<button onclick="setAccent('${a.id}')" title="${a.label}" style="display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:999px;cursor:pointer;border:1px solid ${on?'var(--gd)':'var(--b4)'};background:${on?'var(--gdG)':'transparent'}">
+            <span style="width:16px;height:16px;border-radius:50%;flex-shrink:0;border:1px solid var(--b4);background:${a.swatch}"></span>
+            <span style="font-family:var(--sn);font-size:11px;font-weight:600;color:${on?'var(--gd)':'var(--tx)'}">${a.label}</span>
+          </button>`;}).join('')}
+        </div>
+        <div style="font-family:var(--mn);font-size:10px;color:var(--gd);letter-spacing:0.18em;margin:16px 0 12px">TEXT SIZE</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${SCALES.map(s=>{const on=_currentScale()===s.id;return `<button onclick="setScale('${s.id}')" style="font-family:var(--mn);font-size:11px;font-weight:700;padding:6px 14px;border-radius:6px;cursor:pointer;border:1px solid ${on?'var(--gd)':'var(--b4)'};background:${on?'var(--gdG)':'transparent'};color:${on?'var(--gd)':'var(--t2)'}">${s.label}</button>`;}).join('')}
+        </div>
+        <div style="font-family:var(--mn);font-size:10px;color:var(--gd);letter-spacing:0.18em;margin:16px 0 12px">MARKET COLORS</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${UPDOWNS.map(u=>{const on=_currentUpDown()===u.id;return `<button onclick="setUpDown('${u.id}')" style="flex:1;min-width:118px;display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:10px 12px;border-radius:10px;cursor:pointer;border:1px solid ${on?'var(--gd)':'var(--b4)'};background:${on?'var(--gdG)':'transparent'}">
+            <span style="display:flex;align-items:center;gap:6px">
+              <span style="width:10px;height:10px;border-radius:2px;background:${u.id==='cb'?'#3B86F0':'var(--gn)'}"></span>
+              <span style="width:10px;height:10px;border-radius:2px;background:${u.id==='cb'?'#E08A1E':'var(--rd)'}"></span>
+              <span style="font-family:var(--sn);font-size:12px;font-weight:700;color:${on?'var(--gd)':'var(--tx)'}">${u.label}</span>
+            </span>
+            <span style="font-family:var(--mn);font-size:9px;color:var(--t3)">${u.sub}</span>
+          </button>`;}).join('')}
+        </div>
+        <div style="font-family:var(--mn);font-size:10px;color:var(--gd);letter-spacing:0.18em;margin:16px 0 12px">MOTION</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${MOTIONS.map(m=>{const on=_currentMotion()===m.id;return `<button onclick="setMotion('${m.id}')" style="font-family:var(--mn);font-size:11px;font-weight:700;padding:6px 14px;border-radius:6px;cursor:pointer;border:1px solid ${on?'var(--gd)':'var(--b4)'};background:${on?'var(--gdG)':'transparent'};color:${on?'var(--gd)':'var(--t2)'}">${m.label}</button>`;}).join('')}
+        </div>
+        <button onclick="resetCustomization()" style="margin-top:16px;background:var(--b3);border:1px solid var(--gb);border-radius:7px;padding:8px 16px;color:var(--t2);font-family:var(--mn);font-size:10px;cursor:pointer;width:100%">Reset customization</button>
       </div>
 
       <!-- Panel Visibility -->
