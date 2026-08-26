@@ -5939,6 +5939,25 @@ function cycleTheme(){
   setTheme(order[(order.indexOf(_currentTheme()) + 1) % order.length]);
 }
 
+// Layout is a second axis, orthogonal to theme: "Terminal" is the dense pro
+// workspace; "Focus" is the reading-first experience (see [data-ux] in styles.css).
+const UX_MODES = [
+  { id: "terminal", label: "Terminal", sub: "Dense · pro" },
+  { id: "focus",    label: "Focus",    sub: "Roomy · calm" },
+];
+function _currentUx(){
+  return document.documentElement.getAttribute("data-ux") === "focus" ? "focus" : "terminal";
+}
+function setUx(id){
+  const def = UX_MODES.find(m => m.id === id);
+  if (!def) return;
+  if (id === "focus") document.documentElement.setAttribute("data-ux", "focus");
+  else document.documentElement.removeAttribute("data-ux");
+  try { localStorage.setItem("td_ux", id); } catch(e) {}
+  if (document.getElementById("settingsOv")) { openSettings(); openSettings(); }
+  if (typeof showToast === "function") showToast(def.label + " layout", "var(--gd)");
+}
+
 // ─── Settings overlay ───
 function openSettings(){
   let el=document.getElementById('settingsOv');
@@ -5967,6 +5986,13 @@ function openSettings(){
               <span style="font-family:var(--sn);font-size:12px;font-weight:700;color:${on?'var(--gd)':'var(--tx)'}">${t.label}</span>
               <span style="font-family:var(--mn);font-size:9px;color:var(--t3)">${t.sub}</span>
             </span>
+          </button>`;}).join('')}
+        </div>
+        <div style="font-family:var(--mn);font-size:10px;color:var(--gd);letter-spacing:0.18em;margin:16px 0 12px">LAYOUT</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${UX_MODES.map(m=>{const on=_currentUx()===m.id;return `<button onclick="setUx('${m.id}')" style="flex:1;min-width:118px;display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 12px;border-radius:10px;cursor:pointer;border:1px solid ${on?'var(--gd)':'var(--b4)'};background:${on?'var(--gdG)':'transparent'}">
+            <span style="font-family:var(--sn);font-size:12px;font-weight:700;color:${on?'var(--gd)':'var(--tx)'}">${m.label}</span>
+            <span style="font-family:var(--mn);font-size:9px;color:var(--t3)">${m.sub}</span>
           </button>`;}).join('')}
         </div>
       </div>
