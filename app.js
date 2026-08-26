@@ -5909,6 +5909,36 @@ function renderPortfolio(){
   return h;
 }
 
+// ─── Theme ───
+// Light and Dark are the editorial "paper/carbon" themes; Neo is the aurora-glass
+// UI. All three ride the CSS token layer in styles.css, so switching restyles the
+// whole app. Persisted to localStorage and applied pre-paint in index.html.
+const THEMES = [
+  { id: "light", label: "Light", sub: "Paper & bronze", swatch: "#EFEEE9" },
+  { id: "dark",  label: "Dark",  sub: "Carbon & bronze", swatch: "#14151A" },
+  { id: "neo",   label: "Neo",   sub: "Aurora glass",    swatch: "#070B15" },
+];
+function _currentTheme(){
+  const t = document.documentElement.getAttribute("data-theme");
+  if (t === "light" || t === "dark" || t === "neo") return t;
+  return (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+}
+function setTheme(id){
+  const def = THEMES.find(t => t.id === id);
+  if (!def) return;
+  document.documentElement.setAttribute("data-theme", id);
+  try { localStorage.setItem("td_theme", id); } catch(e) {}
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", def.swatch);
+  // Refresh the settings overlay so the active swatch updates (toggle off/on).
+  if (document.getElementById("settingsOv")) { openSettings(); openSettings(); }
+  if (typeof showToast === "function") showToast(def.label + " theme", "var(--gd)");
+}
+function cycleTheme(){
+  const order = THEMES.map(t => t.id);
+  setTheme(order[(order.indexOf(_currentTheme()) + 1) % order.length]);
+}
+
 // ─── Settings overlay ───
 function openSettings(){
   let el=document.getElementById('settingsOv');
@@ -5926,6 +5956,20 @@ function openSettings(){
       ${_isPremium()?`<div style="display:flex;align-items:center;gap:8px"><span style="font-family:var(--mn);font-size:9px;font-weight:700;color:var(--gd);letter-spacing:0.12em">★ PREMIUM</span><span style="font-family:var(--sn);font-size:12px;color:var(--t2)">All features unlocked</span></div><a href="/__auth/logout" style="font-family:var(--mn);font-size:9px;color:var(--t3);text-decoration:none;padding:5px 10px;border:1px solid var(--b4);border-radius:5px" onmouseover="this.style.borderColor='var(--rd)';this.style.color='var(--rd)'" onmouseout="this.style.borderColor='var(--b4)';this.style.color='var(--t3)'">Sign Out</a>`:`<div style="display:flex;flex-direction:column;gap:4px"><span style="font-family:var(--mn);font-size:9px;color:var(--t3);letter-spacing:0.12em">FREE TIER</span><span style="font-family:var(--sn);font-size:12px;color:var(--t2)">Subscribe → pay → set password → premium</span></div><div style="display:flex;gap:6px;flex-shrink:0"><a href="/__auth/subscribe" style="font-family:var(--mn);font-size:9px;font-weight:700;color:var(--bg);background:var(--gd);text-decoration:none;padding:5px 12px;border-radius:5px">Subscribe</a><a href="/__auth/login" style="font-family:var(--mn);font-size:9px;font-weight:600;color:var(--t2);text-decoration:none;padding:5px 10px;border:1px solid var(--b4);border-radius:5px">Sign In</a></div>`}
     </div>
     <div style="overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:20px">
+
+      <!-- Appearance -->
+      <div>
+        <div style="font-family:var(--mn);font-size:10px;color:var(--gd);letter-spacing:0.18em;margin-bottom:12px">APPEARANCE</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${THEMES.map(t=>{const on=_currentTheme()===t.id;return `<button onclick="setTheme('${t.id}')" style="flex:1;min-width:118px;display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;border:1px solid ${on?'var(--gd)':'var(--b4)'};background:${on?'var(--gdG)':'transparent'}">
+            <span style="width:22px;height:22px;border-radius:6px;flex-shrink:0;border:1px solid var(--b4);background:${t.swatch}"></span>
+            <span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.25">
+              <span style="font-family:var(--sn);font-size:12px;font-weight:700;color:${on?'var(--gd)':'var(--tx)'}">${t.label}</span>
+              <span style="font-family:var(--mn);font-size:9px;color:var(--t3)">${t.sub}</span>
+            </span>
+          </button>`;}).join('')}
+        </div>
+      </div>
 
       <!-- Panel Visibility -->
       <div>
