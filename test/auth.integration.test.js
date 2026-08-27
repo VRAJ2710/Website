@@ -296,6 +296,32 @@ test("persistent account, session, and one-time recovery flows", async t => {
       assert.match(approved.headers.get("content-type") || "", /application\/xml/);
     });
 
+    await t.test("serves only public assets, never server source, configs, or .git", async () => {
+      // Public assets must remain reachable.
+      for (const asset of ["/", "/index.html", "/app.js", "/styles.css"]) {
+        const ok = await fetch(`${running.baseUrl}${asset}`);
+        assert.equal(ok.status, 200, `expected ${asset} to be served`);
+      }
+      // Server source, configuration, tests, scripts, dependencies and the git
+      // repo must never be downloadable.
+      for (const secret of [
+        "/server.js",
+        "/stripeClient.js",
+        "/marketProxy.js",
+        "/rssFeeds.js",
+        "/package.json",
+        "/package-lock.json",
+        "/.replit",
+        "/replit.md",
+        "/.git/config",
+        "/test/auth.integration.test.js",
+        "/scripts/seed-stripe-products.js",
+      ]) {
+        const blocked = await fetch(`${running.baseUrl}${secret}`, { redirect: "manual" });
+        assert.equal(blocked.status, 404, `expected ${secret} to be blocked, got ${blocked.status}`);
+      }
+    });
+
     await t.test("creates an account without exposing its password hash", async () => {
       const response = await form(running.baseUrl, "/__auth/subscribe", {
         email,

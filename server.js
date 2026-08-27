@@ -538,11 +538,30 @@ async function twelveDataQuote(symbols) {
     return { configured: true, unavailable: true, quotes: {} };
   }
 }
+// Only these files are ever served statically. Previously serveStatic streamed
+// ANY file under the app root by extension, which publicly exposed server source
+// (server.js, stripeClient.js, marketProxy.js, …), configs (package.json, .replit),
+// the test suite, scripts/, node_modules/, and even .git/config — i.e. the entire
+// repository and history. An explicit allowlist is the only safe surface here.
+const PUBLIC_ASSETS = new Set([
+  "/index.html",
+  "/app.js",
+  "/styles.css",
+  "/logo-mark.svg",
+  "/og-card.svg",
+  "/manifest.json",
+  "/robots.txt",
+  "/sitemap.xml",
+]);
 function serveStatic(req, res, pathname) {
   const requested = pathname === "/" ? "/index.html" : pathname;
+  if (!PUBLIC_ASSETS.has(requested)) return false;
   const file = path.normalize(path.join(root, requested));
-  if (!file.startsWith(root) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return false;
-  const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".json": "application/json", ".txt": "text/plain" };
+  // Defense in depth: never escape the app root, never serve a directory. The
+  // check uses a path-separator boundary so a sibling dir (e.g. /workspaceX)
+  // cannot satisfy a bare startsWith(root).
+  if ((file !== root && !file.startsWith(root + path.sep)) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return false;
+  const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".json": "application/json", ".txt": "text/plain", ".xml": "application/xml" };
   res.writeHead(200, {
     "Content-Type": types[path.extname(file)] || "application/octet-stream",
     "Cache-Control": "no-store",
