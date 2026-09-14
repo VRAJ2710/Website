@@ -28,6 +28,7 @@ NEW_FETCH = '''async function fetchTwelveDataPrices() {
     if (!res.ok) return 0;
     const data = await res.json();
     if (data?.configured === false || data?.unavailable) return 0;
+    if (data?.provider && data.provider.id !== "twelve-data") return 0;
     const quotes = data?.quotes || {};
     const closedSymbols = new Set(data?.marketClosedSymbols || []);
     let hits = 0;
@@ -37,7 +38,9 @@ NEW_FETCH = '''async function fetchTwelveDataPrices() {
       const quote = {
         ...row,
         fetchedAt: row.ts ?? data.fetchedAt,
-        marketClosed: !!row.marketClosed || closedSymbols.has(symbol),
+        marketClosed: (ticker === "XAU" || ticker === "EURUSD" || ticker === "BTC" || ticker === "ETH")
+          ? false
+          : (!!row.marketClosed || closedSymbols.has(symbol)),
       };
       if (_applyLiveQuote(ticker, quote, "twelve-data")) hits++;
     });

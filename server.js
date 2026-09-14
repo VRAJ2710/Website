@@ -17,6 +17,9 @@ const {
   twelveDataQuoteCoverage,
   normalizeGoldApiQuote,
   synthesizeDxyFromUsdRates,
+  yahooChartUrl,
+  yahooDailyChartUrl,
+  normalizeYahooChartResult,
 } = require("./marketProxy");
 const { approvedRssFeedUrl } = require("./rssFeeds");
 const {
@@ -502,19 +505,18 @@ function normaliseGoldDesk(value, quotes) {
 async function yahooQuote(symbols) {
   const out = {};
   await Promise.all(symbols.slice(0, 60).map(async symbol => {
-    try {
-      const u = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d`;
-      const d = await (await upstream(u)).json();
-      const meta = d.chart?.result?.[0]?.meta;
-      if (!meta || typeof meta.regularMarketPrice !== "number") return;
-      const price = meta.regularMarketPrice;
-      const prev = meta.previousClose || meta.chartPreviousClose || price;
-      out[symbol] = {
-        p: price, c: prev ? ((price - prev) / prev) * 100 : 0, prev,
-        change: price - prev, currency: meta.currency, exchange: meta.exchangeName,
-        name: meta.longName || meta.shortName || symbol, ts: meta.regularMarketTime
-      };
-    } catch {}
+    const urls = [yahooChartUrl(symbol)];
+    if (urls[0] !== yahooDailyChartUrl(symbol)) urls.push(yahooDailyChartUrl(symbol));
+    for (const u of urls) {
+      try {
+        const d = await (await upstream(u)).json();
+        const quote = normalizeYahooChartResult(d.chart?.result?.[0]);
+        if (quote) {
+          out[symbol] = quote;
+          return;
+        }
+      } catch {}
+    }
   }));
   return out;
 }

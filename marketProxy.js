@@ -162,10 +162,25 @@ const TWELVE_DATA_ALLOWED_SYMBOLS = Object.freeze([
 const TWELVE_DATA_MAX_SYMBOLS = TWELVE_DATA_ALLOWED_SYMBOLS.length;
 const TWELVE_DATA_DAILY_CREDIT_LIMIT = 800;
 const TWELVE_DATA_MARKET_CLOSED_STATUSES = new Set(["closed", "market_closed", "not_open"]);
+// These trade nearly 24/7. Equity RTH flags must never mark them closed.
+const TWELVE_DATA_CONTINUOUS_SYMBOLS = Object.freeze(["XAU/USD", "EUR/USD", "BTC/USD", "ETH/USD"]);
+const CONTINUOUS_DESK_TICKERS = Object.freeze(["XAU", "EURUSD", "BTC", "ETH"]);
 const TWELVE_DATA_PROVIDER = Object.freeze({
   id: "twelve-data",
   name: "Twelve Data",
   url: "https://twelvedata.com/",
+});
+const YAHOO_EXTENDED_SESSIONS = Object.freeze(["post", "pre", "fullday", "otc"]);
+const YAHOO_SESSION_LABELS = Object.freeze({
+  post: { status: "extended", label: "AH", detail: "Yahoo after-hours / post-RTH print — delayed retail feed, not a live NASDAQ/NYSE tape" },
+  pre: { status: "extended", label: "PRE", detail: "Yahoo pre-market print — delayed retail feed, not a live NASDAQ/NYSE tape" },
+  fullday: { status: "extended", label: "EXT·HRS", detail: "Yahoo combined/extended-hours print — delayed retail feed, not exchange co-located" },
+  otc: { status: "extended", label: "OTC", detail: "Yahoo OTC / off-exchange print — delayed, not a listed RTH tape" },
+});
+const RTH_CLOSE_META = Object.freeze({
+  status: "rth-close",
+  label: "RTH CLOSE",
+  detail: "Regular US cash session closed — last RTH print retained. No extended/OTC print applied.",
 });
 const DXY_CONSTANT = 50.14348112;
 const DXY_WEIGHTS = Object.freeze({
@@ -217,7 +232,7 @@ function normalizeTwelveDataQuotes(payload, allowedSymbols = TWELVE_DATA_ALLOWED
     const change = Number(row.change);
     const timestamp = Number(row.last_quote_at || row.timestamp);
     if (!Number.isFinite(timestamp) || timestamp <= 0 || timestamp * 1000 > now + 60_000) continue;
-    const marketClosed = twelveDataMarketClosed(row);
+    const marketClosed = !TWELVE_DATA_CONTINUOUS_SYMBOLS.includes(symbol) && twelveDataMarketClosed(row);
     quotes[symbol] = {
       p: price,
       c: Number.isFinite(changePercent) ? changePercent : 0,
@@ -306,16 +321,310 @@ function synthesizeDxyFromUsdRates(rates, date, now = Date.now()) {
   };
 }
 
-function canReplaceLiveQuote({ ticker, currentSrc, currentTs, incomingSrc, now = Date.now(), windowMs = 16 * 60 * 1000 }) {
+function isContinuousDeskTicker(ticker) {
+  return CONTINUOUS_DESK_TICKERS.includes(String(ticker || ""));
+}
+
+function isContinuousTwelveDataSymbol(symbol) {
+  return TWELVE_DATA_CONTINUOUS_SYMBOLS.includes(String(symbol || ""));
+}
+
+function looksLikeUsListedEquity(symbol) {
+  return /^[A-Z][A-Z0-9.]{0,6}$/.test(String(symbol || "").trim());
+}
+
+function isOtcExchange(name) {
+  const value = String(name || "").trim().toLowerCase();
+  return value.includes("otc") || value === "pnk" || value === "oqb" || value === "other otc";
+}
+
+function isYahooExtendedSession(session) {
+  return YAHOO_EXTENDED_SESSIONS.includes(String(session || ""));
+}
+
+function yahooChartUrl(symbol) {
+  const encoded = encodeURIComponent(String(symbol || "").trim());
+  if (looksLikeUsListedEquity(symbol)) {
+    return `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?range=1d&interval=1m&includePrePost=true`;
+  }
+  return `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?range=5d&interval=1d&includePrePost=true`;
+}
+
+function yahooDailyChartUrl(symbol) {
+  const encoded = encodeURIComponent(String(symbol || "").trim());
+  return `https://query1.finance.yahoo.com/v8/finance/chart/${encoded}?range=5d&interval=1d&includePrePost=true`;
+}
+
+function finitePrice(value) {
+  const price = Number(value);
+  return Number.isFinite(price) && price > 0 ? price : null;
+}
+
+function finiteNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function inTradingPeriod(nowSec, period) {
+  const start = Number(period?.start);
+  const end = Number(period?.end);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return false;
+  return nowSec >= start && nowSec < end;
+}
+
+function lastYahooIntradayPrint(result) {
+  const timestamps = result?.timestamp;
+  const closes = result?.indicators?.quote?.[0]?.close;
+  if (!Array.isArray(timestamps) || !Array.isArray(closes)) return null;
+  for (let i = timestamps.length - 1; i >= 0; i -= 1) {
+    const price = finitePrice(closes[i]);
+    const ts = Number(timestamps[i]);
+    if (price != null && Number.isFinite(ts) && ts > 0) return { p: price, ts };
+  }
+  return null;
+}
+
+function sessionForTimestamp(ts, periods) {
+  const stamp = Number(ts);
+  if (!Number.isFinite(stamp) || stamp <= 0) return null;
+  if (inTradingPeriod(stamp, periods?.post)) return "post";
+  if (inTradingPeriod(stamp, periods?.pre)) return "pre";
+  if (inTradingPeriod(stamp, periods?.regular)) return "regular";
+  const regularEnd = Number(periods?.regular?.end);
+  const postEnd = Number(periods?.post?.end);
+  if (Number.isFinite(postEnd) && stamp >= postEnd) return "post";
+  if (Number.isFinite(regularEnd) && stamp >= regularEnd) return "post";
+  const regularStart = Number(periods?.regular?.start);
+  if (Number.isFinite(regularStart) && stamp < regularStart) return "pre";
+  return null;
+}
+
+function classicYahooPrint(meta, kind) {
+  if (kind === "post") {
+    const price = finitePrice(meta?.postMarketPrice);
+    if (price == null) return null;
+    return {
+      p: price,
+      c: finiteNumber(meta.postMarketChangePercent),
+      change: finiteNumber(meta.postMarketChange),
+      ts: Number(meta.postMarketTime) || null,
+      session: "post",
+    };
+  }
+  if (kind === "pre") {
+    const price = finitePrice(meta?.preMarketPrice);
+    if (price == null) return null;
+    return {
+      p: price,
+      c: finiteNumber(meta.preMarketChangePercent),
+      change: finiteNumber(meta.preMarketChange),
+      ts: Number(meta.preMarketTime) || null,
+      session: "pre",
+    };
+  }
+  if (kind === "fullday") {
+    const price = finitePrice(meta?.fulldayPrice);
+    if (price == null) return null;
+    return {
+      p: price,
+      c: finiteNumber(meta.fulldayChangePercent),
+      change: finiteNumber(meta.fulldayChange),
+      ts: Number(meta.fulldayTime || meta.regularMarketTime) || null,
+      session: "fullday",
+    };
+  }
+  const price = finitePrice(meta?.regularMarketPrice);
+  if (price == null) return null;
+  return {
+    p: price,
+    c: finiteNumber(meta.regularMarketChangePercent),
+    change: null,
+    ts: Number(meta.regularMarketTime) || null,
+    session: "regular",
+  };
+}
+
+function fulldayPrintIsConsistent(print, meta, regularPrice) {
+  if (!print?.p) return false;
+  if (regularPrice != null && Math.abs(print.p - regularPrice) / regularPrice < 0.00005) return false;
+  const previous = finitePrice(meta?.previousClose || meta?.chartPreviousClose);
+  const change = finiteNumber(meta?.fulldayChange);
+  if (previous != null && change != null) {
+    const expected = previous + change;
+    const rel = Math.abs(print.p - expected) / Math.max(print.p, Math.abs(expected), 1);
+    if (rel > 0.002) return false;
+  }
+  return true;
+}
+
+function finalizeYahooQuote(meta, print, { outsideRth, otc }) {
+  const previous = finitePrice(meta.previousClose || meta.chartPreviousClose) || print.p;
+  const price = print.p;
+  const change = print.change != null ? print.change : price - previous;
+  const changePercent = print.c != null ? print.c : (previous ? ((price - previous) / previous) * 100 : 0);
+  let session = print.session || "regular";
+  if (otc && session !== "regular") session = "otc";
+  const ts = Number(print.ts);
+  return {
+    p: price,
+    c: changePercent,
+    prev: previous,
+    change,
+    currency: meta.currency,
+    exchange: meta.exchangeName || meta.fullExchangeName || null,
+    name: meta.longName || meta.shortName || meta.symbol,
+    ts: Number.isFinite(ts) && ts > 0 ? ts : (Number(meta.regularMarketTime) || null),
+    session,
+    hasPrePostMarketData: meta.hasPrePostMarketData === true,
+    ...(outsideRth && session === "regular" ? { marketClosed: true } : {}),
+  };
+}
+
+function normalizeYahooChartResult(result, now = Date.now()) {
+  const meta = result?.meta;
+  const regularPrice = finitePrice(meta?.regularMarketPrice);
+  if (!meta || regularPrice == null) return null;
+
+  const nowSec = Math.floor(now / 1000);
+  const periods = meta.currentTradingPeriod || {};
+  const inRegular = inTradingPeriod(nowSec, periods.regular);
+  const usListed = looksLikeUsListedEquity(meta.symbol);
+  const otc = isOtcExchange(meta.exchangeName) || isOtcExchange(meta.fullExchangeName);
+  const outsideRth = usListed && !inRegular;
+  const lastTrade = lastYahooIntradayPrint(result);
+
+  if (inRegular) {
+    return finalizeYahooQuote(meta, classicYahooPrint(meta, "regular"), { outsideRth: false, otc: false });
+  }
+
+  if (outsideRth) {
+    const post = classicYahooPrint(meta, "post");
+    if (post) return finalizeYahooQuote(meta, post, { outsideRth, otc });
+    const pre = classicYahooPrint(meta, "pre");
+    if (pre) return finalizeYahooQuote(meta, pre, { outsideRth, otc });
+
+    if (lastTrade) {
+      const lastSession = sessionForTimestamp(lastTrade.ts, periods);
+      if (lastSession && lastSession !== "regular") {
+        return finalizeYahooQuote(meta, { ...lastTrade, session: lastSession, c: null, change: null }, { outsideRth, otc });
+      }
+    }
+
+    const fullday = classicYahooPrint(meta, "fullday");
+    if (fullday && (meta.hasPrePostMarketData === true) && fulldayPrintIsConsistent(fullday, meta, regularPrice)) {
+      return finalizeYahooQuote(meta, fullday, { outsideRth, otc });
+    }
+  }
+
+  return finalizeYahooQuote(meta, classicYahooPrint(meta, "regular"), { outsideRth, otc: false });
+}
+
+function canReplaceLiveQuote({
+  ticker,
+  currentSrc,
+  currentTs,
+  incomingSrc,
+  now = Date.now(),
+  windowMs = 16 * 60 * 1000,
+  currentMarketClosed = false,
+  incomingSession = null,
+}) {
   const current = String(currentSrc || "");
   const incoming = String(incomingSrc || "");
   const freshTwelveData = current === "twelve-data" && now - (currentTs || 0) <= windowMs;
-  if (freshTwelveData && incoming !== "twelve-data") return false;
+  const continuous = isContinuousDeskTicker(ticker);
+
+  if (freshTwelveData && incoming !== "twelve-data") {
+    if (continuous) return false;
+    // Last RTH from Twelve Data may be replaced by a Yahoo extended/OTC print.
+    if (currentMarketClosed && incoming === "yahoo") {
+      if (incomingSession == null) return true;
+      return isYahooExtendedSession(incomingSession);
+    }
+    return false;
+  }
   if (ticker === "XAU" && incoming === "yahoo" && current.startsWith("gold-api")) {
     return false;
   }
   if (ticker === "DXY" && incoming === "frankfurter-ecb" && current === "yahoo") return false;
   return true;
+}
+
+function quoteProvenance({
+  ticker,
+  src = "feed",
+  marketClosed = false,
+  session = null,
+  ageMs = null,
+  staleAfterMs = null,
+}) {
+  const continuous = isContinuousDeskTicker(ticker);
+  const source = String(src || "feed");
+  const sessionKey = continuous ? null : session;
+  const closed = !continuous && !!marketClosed;
+
+  let status = "delayed";
+  let label = "DELAYED";
+  let detail = "Free Yahoo/proxy feed — typically delayed, not exchange co-located";
+  let holdStale = false;
+
+  if (sessionKey && YAHOO_SESSION_LABELS[sessionKey]) {
+    ({ status, label, detail } = YAHOO_SESSION_LABELS[sessionKey]);
+    holdStale = true;
+  } else if (closed) {
+    ({ status, label, detail } = RTH_CLOSE_META);
+    holdStale = true;
+  } else if (source.startsWith("gold-api")) {
+    status = "proxy";
+    label = "SPOT PROXY";
+    detail = "Free gold-api spot proxy — not an exchange instrument, used only when Twelve Data XAU/USD is unavailable";
+  } else if (source === "frankfurter-ecb") {
+    status = "proxy";
+    label = "SYNTH·DXY";
+    detail = "Synthetic ICE-style dollar index from ECB/Frankfurter FX — not a live DXY print";
+  } else if (source === "coingecko") {
+    status = "live";
+    label = "LIVE·CG";
+    detail = "CoinGecko public API (near real-time crypto)";
+  } else if (source === "session-cache") {
+    status = "cached";
+    label = "CACHED";
+    detail = "Restored from this browser session — re-sync for a fresh tick";
+  } else if (source === "finnhub") {
+    status = "delayed";
+    label = "DELAYED·FH";
+    detail = "Finnhub free/proxy path — may be delayed or rate-limited";
+  } else if (source === "twelve-data") {
+    status = "live";
+    label = "LIVE·TD";
+    detail = "Twelve Data real-time source — shared free-plan core tape";
+  } else if (source === "yahoo") {
+    status = "delayed";
+    label = ticker === "XAU" ? "DELAYED · GC=F futures" : "DELAYED";
+    detail = ticker === "XAU"
+      ? "Yahoo COMEX gold futures (GC=F) — delayed futures fallback, not live spot"
+      : "Yahoo Finance via Dispatch proxy — free retail feed, not Bloomberg";
+  }
+
+  if (
+    ageMs != null
+    && staleAfterMs != null
+    && ageMs > staleAfterMs
+    && status !== "unavailable"
+    && !holdStale
+  ) {
+    const proxy = source.startsWith("gold-api") || source === "frankfurter-ecb";
+    status = "stale";
+    label = proxy ? "STALE·PROXY" : "STALE";
+    detail = `${proxy ? "Proxy value" : "Last feed tick"} is older than the freshness window — treat carefully`;
+  }
+
+  return {
+    status,
+    label,
+    detail,
+    trusted: status === "live" || status === "delayed" || status === "extended" || status === "rth-close",
+  };
 }
 
 function providerTimestampMs(value, now = Date.now()) {
@@ -335,6 +644,8 @@ module.exports = {
   TWELVE_DATA_MAX_SYMBOLS,
   TWELVE_DATA_DAILY_CREDIT_LIMIT,
   TWELVE_DATA_PROVIDER,
+  TWELVE_DATA_CONTINUOUS_SYMBOLS,
+  CONTINUOUS_DESK_TICKERS,
   canonicalTwelveDataSymbols,
   normalizeTwelveDataSymbols,
   normalizeTwelveDataQuotes,
@@ -343,4 +654,13 @@ module.exports = {
   synthesizeDxyFromUsdRates,
   canReplaceLiveQuote,
   providerTimestampMs,
+  isContinuousDeskTicker,
+  isContinuousTwelveDataSymbol,
+  looksLikeUsListedEquity,
+  yahooChartUrl,
+  yahooDailyChartUrl,
+  lastYahooIntradayPrint,
+  normalizeYahooChartResult,
+  quoteProvenance,
+  isYahooExtendedSession,
 };

@@ -15,6 +15,11 @@ const {
   synthesizeDxyFromUsdRates,
   canReplaceLiveQuote,
   providerTimestampMs,
+  looksLikeUsListedEquity,
+  yahooChartUrl,
+  normalizeYahooChartResult,
+  quoteProvenance,
+  isContinuousDeskTicker,
 } = require("../marketProxy");
 const { approvedRssFeedUrl } = require("../rssFeeds");
 
@@ -220,6 +225,218 @@ test("fresh Twelve Data quotes are not overwritten by Yahoo or CoinGecko inside 
     ticker: "DXY", currentSrc: "yahoo", currentTs: now,
     incomingSrc: "frankfurter-ecb", now, windowMs,
   }), false);
+});
+
+test("Twelve Data never marks gold, FX, or crypto market-closed from equity flags", () => {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const quotes = normalizeTwelveDataQuotes({
+    "XAU/USD": { close: "4300", previous_close: "4290", timestamp, is_market_open: false },
+    "BTC/USD": { close: "77000", previous_close: "76000", timestamp, status: "closed" },
+    "ETH/USD": { close: "4100", previous_close: "4000", timestamp, market_open: false },
+    "EUR/USD": { close: "1.16", previous_close: "1.15", timestamp, is_market_open: "false" },
+    AAPL: { close: "200", previous_close: "199", timestamp, is_market_open: false },
+  });
+  assert.equal(quotes["XAU/USD"].marketClosed, undefined);
+  assert.equal(quotes["BTC/USD"].marketClosed, undefined);
+  assert.equal(quotes["ETH/USD"].marketClosed, undefined);
+  assert.equal(quotes["EUR/USD"].marketClosed, undefined);
+  assert.equal(quotes.AAPL.marketClosed, true);
+});
+
+test("Yahoo chart URLs request pre/post and only use 1m bars for listed US names", () => {
+  assert.equal(looksLikeUsListedEquity("AAPL"), true);
+  assert.equal(looksLikeUsListedEquity("SPY"), true);
+  assert.equal(looksLikeUsListedEquity("BRK.B"), true);
+  assert.equal(looksLikeUsListedEquity("GC=F"), false);
+  assert.equal(looksLikeUsListedEquity("BTC-USD"), false);
+  assert.equal(looksLikeUsListedEquity("EURUSD=X"), false);
+  assert.equal(looksLikeUsListedEquity("^GSPC"), false);
+  assert.match(yahooChartUrl("AAPL"), /includePrePost=true/);
+  assert.match(yahooChartUrl("AAPL"), /interval=1m/);
+  assert.match(yahooChartUrl("GC=F"), /includePrePost=true/);
+  assert.match(yahooChartUrl("GC=F"), /interval=1d/);
+});
+
+test("Yahoo quote prefers post then pre then validated fullday then regular outside RTH", () => {
+  const now = 1_789_176_000_000; // after Friday post close
+  const periods = {
+    pre: { start: 1789113600, end: 1789133400 },
+    regular: { start: 1789133400, end: 1789156800 },
+    post: { start: 1789156800, end: 1789171200 },
+  };
+  const post = normalizeYahooChartResult({
+    meta: {
+      symbol: "AAPL",
+      regularMarketPrice: 332.27,
+      regularMarketTime: 1789156801,
+      regularMarketChangePercent: 1.74,
+      previousClose: 326.57,
+      chartPreviousClose: 326.57,
+      postMarketPrice: 332.55,
+      postMarketChange: 0.28,
+      postMarketChangePercent: 0.08,
+      postMarketTime: 1789171199,
+      hasPrePostMarketData: true,
+      currentTradingPeriod: periods,
+      currency: "USD",
+      exchangeName: "NMS",
+      longName: "Apple Inc.",
+    },
+  }, now);
+  assert.equal(post.session, "post");
+  assert.equal(post.p, 332.55);
+  assert.equal(post.marketClosed, undefined);
+
+  const pre = normalizeYahooChartResult({
+    meta: {
+      symbol: "AAPL",
+      regularMarketPrice: 332.27,
+      regularMarketTime: 1789156801,
+      previousClose: 326.57,
+      preMarketPrice: 333.10,
+      preMarketChange: 0.83,
+      preMarketChangePercent: 0.25,
+      preMarketTime: 1789130000,
+      hasPrePostMarketData: true,
+      currentTradingPeriod: periods,
+      currency: "USD",
+      exchangeName: "NMS",
+    },
+  }, now);
+  assert.equal(pre.session, "pre");
+  assert.equal(pre.p, 333.10);
+
+  const lastBar = normalizeYahooChartResult({
+    meta: {
+      symbol: "SPY",
+      regularMarketPrice: 764.29,
+      regularMarketTime: 1789156800,
+      previousClose: 757.83,
+      fulldayPrice: 760.82,
+      fulldayChange: 6.46,
+      fulldayChangePercent: 0.852,
+      hasPrePostMarketData: true,
+      currentTradingPeriod: periods,
+      currency: "USD",
+      exchangeName: "PCX",
+    },
+    timestamp: [1789156800, 1789171140],
+    indicators: { quote: [{ close: [764.29, 764.41] }] },
+  }, now);
+  assert.equal(lastBar.session, "post");
+  assert.equal(lastBar.p, 764.41);
+
+  const weekendFulldayQuirk = normalizeYahooChartResult({
+    meta: {
+      symbol: "AAPL",
+      regularMarketPrice: 332.27,
+      regularMarketTime: 1789156801,
+      previousClose: 326.57,
+      chartPreviousClose: 326.57,
+      fulldayPrice: 328.59,
+      fulldayChange: 5.7,
+      fulldayChangePercent: 1.745,
+      hasPrePostMarketData: true,
+      currentTradingPeriod: periods,
+      currency: "USD",
+      exchangeName: "NMS",
+    },
+  }, now);
+  assert.equal(weekendFulldayQuirk.session, "regular");
+  assert.equal(weekendFulldayQuirk.p, 332.27);
+  assert.equal(weekendFulldayQuirk.marketClosed, true);
+
+  const otc = normalizeYahooChartResult({
+    meta: {
+      symbol: "ABCD",
+      regularMarketPrice: 2.5,
+      regularMarketTime: 1789156800,
+      previousClose: 2.4,
+      postMarketPrice: 2.55,
+      postMarketTime: 1789160000,
+      hasPrePostMarketData: true,
+      currentTradingPeriod: periods,
+      currency: "USD",
+      exchangeName: "PNK",
+      fullExchangeName: "Other OTC",
+    },
+  }, now);
+  assert.equal(otc.session, "otc");
+  assert.equal(otc.p, 2.55);
+
+  const gold = normalizeYahooChartResult({
+    meta: {
+      symbol: "GC=F",
+      regularMarketPrice: 4376.9,
+      regularMarketTime: 1789356138,
+      previousClose: 4393.9,
+      fulldayPrice: 4376.9,
+      hasPrePostMarketData: false,
+      currency: "USD",
+      exchangeName: "CMX",
+    },
+  }, now);
+  assert.equal(gold.session, "regular");
+  assert.equal(gold.marketClosed, undefined);
+  assert.equal(gold.p, 4376.9);
+});
+
+test("Yahoo extended prints can replace a closed Twelve Data RTH quote, but not gold/crypto", () => {
+  const now = 1_789_353_976_700;
+  const windowMs = 16 * 60 * 1000;
+  assert.equal(canReplaceLiveQuote({
+    ticker: "AAPL", currentSrc: "twelve-data", currentTs: now - 60_000,
+    incomingSrc: "yahoo", currentMarketClosed: true, incomingSession: "post",
+    now, windowMs,
+  }), true);
+  assert.equal(canReplaceLiveQuote({
+    ticker: "SPY", currentSrc: "twelve-data", currentTs: now - 60_000,
+    incomingSrc: "yahoo", currentMarketClosed: true, incomingSession: "regular",
+    now, windowMs,
+  }), false);
+  assert.equal(canReplaceLiveQuote({
+    ticker: "AAPL", currentSrc: "twelve-data", currentTs: now - 60_000,
+    incomingSrc: "yahoo", currentMarketClosed: true, incomingSession: null,
+    now, windowMs,
+  }), true);
+  assert.equal(canReplaceLiveQuote({
+    ticker: "XAU", currentSrc: "twelve-data", currentTs: now - 60_000,
+    incomingSrc: "yahoo", currentMarketClosed: true, incomingSession: "post",
+    now, windowMs,
+  }), false);
+  assert.equal(canReplaceLiveQuote({
+    ticker: "BTC", currentSrc: "twelve-data", currentTs: now - 60_000,
+    incomingSrc: "coingecko", currentMarketClosed: true, incomingSession: "post",
+    now, windowMs,
+  }), false);
+  assert.equal(isContinuousDeskTicker("ETH"), true);
+  assert.equal(isContinuousDeskTicker("AAPL"), false);
+});
+
+test("quote provenance keeps a number on the tape with EXT·HRS or RTH CLOSE, never MARKET CLOSED", () => {
+  assert.deepEqual(quoteProvenance({
+    ticker: "AAPL", src: "yahoo", session: "post",
+  }), {
+    status: "extended",
+    label: "AH",
+    detail: "Yahoo after-hours / post-RTH print — delayed retail feed, not a live NASDAQ/NYSE tape",
+    trusted: true,
+  });
+  assert.equal(quoteProvenance({ ticker: "SPY", src: "yahoo", session: "fullday" }).label, "EXT·HRS");
+  assert.deepEqual(quoteProvenance({
+    ticker: "AAPL", src: "twelve-data", marketClosed: true, ageMs: 48 * 3600 * 1000, staleAfterMs: 16 * 60 * 1000,
+  }), {
+    status: "rth-close",
+    label: "RTH CLOSE",
+    detail: "Regular US cash session closed — last RTH print retained. No extended/OTC print applied.",
+    trusted: true,
+  });
+  const gold = quoteProvenance({
+    ticker: "XAU", src: "twelve-data", marketClosed: true, session: "post",
+  });
+  assert.equal(gold.status, "live");
+  assert.equal(gold.label, "LIVE·TD");
+  assert.notEqual(gold.label, "MARKET CLOSED");
 });
 
 test("Frankfurter USD rates synthesize an ICE-style DXY proxy", () => {
