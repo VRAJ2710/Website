@@ -221,11 +221,20 @@ def main():
   try:
     MP.write_bytes(urllib.request.urlopen(MERGED_MP_URL, timeout=60).read())
     print("downloaded merged marketProxy")
+  import subprocess
+  r=subprocess.run(["node","--check",str(MP)], capture_output=True, text=True)
+  if r.returncode!=0:
+    print(r.stderr); print("ERROR: merged marketProxy failed node --check"); return 1
+  print("marketProxy node --check OK")
   except Exception as e:
     alt = Path(__file__).resolve().parent / "marketProxy.health-merged.js"
     if alt.exists():
       MP.write_bytes(alt.read_bytes())
       print("copied merged marketProxy from scripts/")
+      import subprocess
+      r=subprocess.run(["node","--check",str(MP)], capture_output=True, text=True)
+      if r.returncode!=0:
+        print(r.stderr); print("ERROR: merged marketProxy failed node --check"); return 1
     else:
       print("ERROR: merged marketProxy missing", e); return 1
 

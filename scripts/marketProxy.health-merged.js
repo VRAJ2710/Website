@@ -168,8 +168,6 @@ function normalizeCoinGeckoPath(rawPath) {
   return pathname === "/global" && !searchParams.toString() ? "/global" : null;
 }
 
-
-
 // One shared Basic-plan tape. Twelve Data bills one credit per symbol, with
 // 8 credits/minute and 800/day. Eight symbols × a 15-minute shared cache
 // stays at 768 credits/day. Adding MSFT/TSLA/AMZN/GBPUSD/USDJPY on top of
@@ -631,7 +629,32 @@ function quoteProvenance({
     ageMs != null
     && staleAfterMs != null
     && ageMs > staleAfterMs
-    && status !== "unavailab
+    && status !== "unavailable"
+    && !holdStale
+  ) {
+    const proxy = source.startsWith("gold-api") || source === "frankfurter-ecb";
+    status = "stale";
+    label = proxy ? "STALE·PROXY" : "STALE";
+    detail = `${proxy ? "Proxy value" : "Last feed tick"} is older than the freshness window — treat carefully`;
+  }
+
+  return {
+    status,
+    label,
+    detail,
+    trusted: status === "live" || status === "delayed" || status === "extended" || status === "rth-close",
+  };
+}
+
+function providerTimestampMs(value, now = Date.now()) {
+  const raw = Number(value);
+  if (!Number.isFinite(raw) || raw <= 0) return null;
+  const ms = raw < 10_000_000_000 ? raw * 1000 : raw;
+  if (ms > now + 60_000) return null;
+  return ms;
+}
+
+
 const USGS_SOURCE = "USGS Earthquake Hazards Program";
 const GEO_CACHE_CONTROL = "public, max-age=60";
 const SECURITY_HEADERS = Object.freeze({
@@ -733,31 +756,6 @@ function attachSecurityHeaders(res) {
       : original.call(this, statusCode, reason, merged);
   };
   return res;
-}
-
-le"
-    && !holdStale
-  ) {
-    const proxy = source.startsWith("gold-api") || source === "frankfurter-ecb";
-    status = "stale";
-    label = proxy ? "STALE·PROXY" : "STALE";
-    detail = `${proxy ? "Proxy value" : "Last feed tick"} is older than the freshness window — treat carefully`;
-  }
-
-  return {
-    status,
-    label,
-    detail,
-    trusted: status === "live" || status === "delayed" || status === "extended" || status === "rth-close",
-  };
-}
-
-function providerTimestampMs(value, now = Date.now()) {
-  const raw = Number(value);
-  if (!Number.isFinite(raw) || raw <= 0) return null;
-  const ms = raw < 10_000_000_000 ? raw * 1000 : raw;
-  if (ms > now + 60_000) return null;
-  return ms;
 }
 
 module.exports = {
