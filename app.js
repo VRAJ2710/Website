@@ -5247,14 +5247,26 @@ function _showLoginGate(featureName){
 
 async function _startCheckout(btn){
   if(!btn)return;
-  const orig=btn.textContent;
   btn.textContent='Redirecting to payment…';btn.disabled=true;btn.style.opacity='0.7';
   try{
-    const r=await fetch('/api/create-checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
-    const d=await r.json();
-    if(d.url){window.location.href=d.url;}
-    else if(r.status===401){window.location.href="/__auth/subscribe";}
-    else{btn.textContent=d.error||'Something went wrong';btn.disabled=false;btn.style.opacity='1';}
+    const r=await fetch('/api/create-checkout',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({})});
+    const d=await r.json().catch(()=>({}));
+    if(d.url){window.location.href=d.url;return;}
+    if(r.status===401){
+      try{
+        const meRes=await fetch('/api/me',{credentials:'include'});
+        const me=meRes.ok?await meRes.json():null;
+        if(me?.checkoutSession?.url){window.location.href=me.checkoutSession.url;return;}
+        if(me?.id){
+          btn.textContent=d.error||'Unable to start checkout';
+          btn.disabled=false;btn.style.opacity='1';
+          return;
+        }
+      }catch{}
+      window.location.href="/__auth/subscribe";
+      return;
+    }
+    btn.textContent=d.error||'Something went wrong';btn.disabled=false;btn.style.opacity='1';
   }catch{btn.textContent='Network error — try again';btn.disabled=false;btn.style.opacity='1';}
 }
 
