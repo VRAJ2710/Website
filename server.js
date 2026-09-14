@@ -9,7 +9,13 @@ const {
   BoundedTtlCache,
   FixedWindowRateLimiter,
   FixedWindowCreditLimiter,
-  normalizeCoinGeckoPath,
+  composeCoinGeckoPath,
+  normalizeGeoQuery,
+  normalizeUsgsEarthquakes,
+  staticCacheControl,
+  attachSecurityHeaders,
+  GEO_CACHE_CONTROL,
+  USGS_SOURCE,
   TWELVE_DATA_DAILY_CREDIT_LIMIT,
   TWELVE_DATA_PROVIDER,
   canonicalTwelveDataSymbols,
@@ -37,6 +43,10 @@ const sql = process.env.DATABASE_URL ? neon(process.env.DATABASE_URL) : null;
 let databaseReady = false;
 const coinGeckoCache = new BoundedTtlCache({ maxEntries: 48, maxBytes: 1024 * 1024 });
 const coinGeckoRateLimiter = new FixedWindowRateLimiter({ limit: 30, windowMs: 60_000, maxKeys: 256 });
+const COINGECKO_CACHE_MS = 45_000;
+const COINGECKO_STALE_MS = 10 * 60 * 1000;
+const geoCache = new BoundedTtlCache({ maxEntries: 16, maxBytes: 512 * 1024 });
+const GEO_CACHE_MS = 60_000;
 const rssFeedCache = new BoundedTtlCache({ maxEntries: 30, maxBytes: 2 * 1024 * 1024 });
 const rssFeedRateLimiter = new FixedWindowRateLimiter({ limit: 30, windowMs: 60_000, maxKeys: 256 });
 const twelveDataCache = new BoundedTtlCache({ maxEntries: 8, maxBytes: 128 * 1024 });
@@ -198,32 +208,73 @@ async function upstream(url, options = {}) {
   if (!response.ok) throw new Error(`upstream ${response.status}`);
   return response;
 }
-async function coinGecko(req, res, rawPath) {
+function coinGeckoApiHeaders() {
+  const headers = {
+    Accept: "application/json",
+    "User-Agent": "DispatchMarkets/1.0",
+  };
+  const demoKey = process.env.COINGECKO_DEMO_API_KEY || process.env.COINGECKO_API_KEY;
+  const proKey = process.env.COINGECKO_PRO_API_KEY;
+  if (proKey) headers["x-cg-pro-api-key"] = proKey;
+  else if (demoKey) headers["x-cg-demo-api-key"] = demoKey;
+  return headers;
+}
+
+function coinGeckoUnavailable(res, peeked, status) {
+  if (peeked?.value) {
+    return json(res, 200, peeked.value, {
+      "Cache-Control": "public, max-age=15",
+      "X-Dispatch-Cache": "stale",
+      "X-Dispatch-Data-Status": status,
+    });
+  }
+  return json(res, 200, { unavailable: true }, { "X-Dispatch-Data-Status": status });
+}
+
+async function coinGecko(req, res, rawPath, searchParams) {
   // Only expose the small public market-data surface the terminal uses; this
   // is deliberately not a general-purpose fetch proxy.
-  const normalizedPath = normalizeCoinGeckoPath(rawPath);
+  const normalizedPath = composeCoinGeckoPath(rawPath, searchParams);
   if (!normalizedPath) {
     return json(res, 400, { error: "Unsupported crypto data request." });
   }
+  const peeked = coinGeckoCache.peek(normalizedPath);
+  if (peeked?.fresh) {
+    return json(res, 200, peeked.value, {
+      "Cache-Control": "public, max-age=30",
+      "X-Dispatch-Cache": "hit",
+    });
+  }
   const clientAddress = req.socket?.remoteAddress || "unknown";
   if (!coinGeckoRateLimiter.allow(clientAddress)) {
-    return json(res, 200, { unavailable: true }, { "X-Dispatch-Data-Status": "rate_limited" });
+    return coinGeckoUnavailable(res, peeked, "rate_limited");
   }
-  const cached = coinGeckoCache.get(normalizedPath);
-  if (cached) return json(res, 200, cached);
   try {
     const response = await fetch(`https://api.coingecko.com/api/v3${normalizedPath}`, {
-      headers: { "User-Agent": "DispatchMarkets/1.0" },
+      headers: coinGeckoApiHeaders(),
       signal: AbortSignal.timeout(8_000),
     });
+    if (response.status === 429) {
+      return coinGeckoUnavailable(res, peeked, "unavailable");
+    }
     if (!response.ok) throw new Error(`CoinGecko ${response.status}`);
     const data = await response.json();
-    coinGeckoCache.set(normalizedPath, data, 30_000);
-    return json(res, 200, data);
+    coinGeckoCache.set(normalizedPath, data, COINGECKO_CACHE_MS, Date.now(), { staleMs: COINGECKO_STALE_MS });
+    return json(res, 200, data, { "Cache-Control": "public, max-age=30", "X-Dispatch-Cache": "miss" });
   } catch {
     // Optional public data must not produce client-side 429/CORS failures.
-    return json(res, 200, { unavailable: true }, { "X-Dispatch-Data-Status": "unavailable" });
+    return coinGeckoUnavailable(res, peeked, "unavailable");
   }
+}
+
+async function geoEarthquakes(searchParams) {
+  const query = normalizeGeoQuery(searchParams);
+  const cached = geoCache.get(query.cacheKey);
+  if (cached) return { body: cached, cache: "hit" };
+  const response = await upstream(query.feedUrl, { signal: AbortSignal.timeout(8_000) });
+  const body = normalizeUsgsEarthquakes(await response.json(), query);
+  geoCache.set(query.cacheKey, body, GEO_CACHE_MS);
+  return { body, cache: "miss" };
 }
 async function readTextCapped(response, maxBytes) {
   if (!response.body) return "";
@@ -621,14 +672,21 @@ async function marketReferenceQuotes() {
   if (result.XAU || result.DXY) marketReferenceCache.set("reference", result, MARKET_REFERENCE_CACHE_MS);
   return result;
 }
-function serveStatic(req, res, pathname) {
+function serveStatic(req, res, pathname, searchParams) {
   const requested = pathname === "/" ? "/index.html" : pathname;
   const file = path.normalize(path.join(root, requested));
   if (!file.startsWith(root) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return false;
-  const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".json": "application/json", ".txt": "text/plain" };
+  const types = {
+    ".html": "text/html; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".svg": "image/svg+xml",
+    ".json": "application/json",
+    ".txt": "text/plain; charset=utf-8",
+  };
   res.writeHead(200, {
     "Content-Type": types[path.extname(file)] || "application/octet-stream",
-    "Cache-Control": "no-store",
+    "Cache-Control": staticCacheControl(pathname, searchParams),
   });
   fs.createReadStream(file).pipe(res);
   return true;
@@ -827,7 +885,7 @@ async function handle(req, res) {
     // terminal honest without turning an upstream blip into client-side noise.
     catch { return json(res, 200, { chart: { result: [], error: { description: "Market chart feed unavailable" } } }); }
   }
-  if (p === "/api/coingecko") return coinGecko(req, res, url.searchParams.get("path"));
+  if (p === "/api/coingecko") return coinGecko(req, res, url.searchParams.get("path"), url.searchParams);
   if (p === "/api/search") {
     try { return json(res, 200, await (await upstream(`https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(url.searchParams.get("q") || "")}&quotesCount=8&newsCount=0`)).json()); }
     catch { return json(res, 502, { quotes: [] }); }
@@ -844,7 +902,20 @@ async function handle(req, res) {
     return rssFeed(req, res, url.searchParams.get("feed"));
   }
   if (p === "/api/geo") {
-    try { return json(res, 200, await (await upstream("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_week.geojson")).json()); } catch { return json(res, 502, { events: [] }); }
+    try {
+      const { body, cache } = await geoEarthquakes(url.searchParams);
+      return json(res, 200, body, {
+        "Cache-Control": GEO_CACHE_CONTROL,
+        "X-Dispatch-Cache": cache,
+      });
+    } catch {
+      return json(res, 200, {
+        events: [],
+        source: USGS_SOURCE,
+        asOf: new Date().toISOString(),
+        status: "unavailable",
+      });
+    }
   }
   if (p === "/api/economics") return json(res, 200, { data: [] });
   if (["/api/financials", "/api/earnings", "/api/statements", "/api/holders"].includes(p)) return json(res, 200, { symbol: url.searchParams.get("symbol"), data: [], earnings: [], holders: [] });
@@ -1000,11 +1071,12 @@ async function handle(req, res) {
       return json(res, 502, { error: "Unable to open the Stripe billing portal." });
     }
   }
-  if (serveStatic(req, res, p)) return;
+  if (serveStatic(req, res, p, url.searchParams)) return;
   json(res, 404, { error: "Not found" });
 }
 
 const server = http.createServer((req, res) => {
+  attachSecurityHeaders(res);
   handle(req, res).catch(err => { console.error(err); if (!res.headersSent) json(res, 500, { error: "Server error" }); });
 });
 async function start() {
