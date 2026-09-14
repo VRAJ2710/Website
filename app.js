@@ -4296,7 +4296,8 @@ let priceFetchCount=0,priceErrorCount=0;
 let liveSymbols=new Set(); // symbols with confirmed feed data (never show seed as live)
 let liveQuoteTs={}; // tk -> epoch ms last successful quote
 let liveQuoteSrc={}; // tk -> yahoo | coingecko | finnhub | twelve-data | session-cache
-let liveQuoteMarketClosed={}; // tk -> provider reported the cash session closed
+let liveQuoteMarketClosed={}; // tk -> US cash RTH closed (never set for gold/FX/crypto)
+let liveQuoteSession={}; // tk -> regular | pre | post | fullday | otc
 let _priceFetchAttempted=false;
 let _stripeMode=null; // null | "test" | "live" | "unknown"
 const PRICE_CACHE_KEY="td_price_cache_v2";
@@ -4328,12 +4329,27 @@ function _providerTimestampMs(q) {
   return ms;
 }
 
-function _canReplaceQuote(tk, source) {
+const CONTINUOUS_TAPE_TICKERS = Object.freeze(["XAU", "EURUSD", "BTC", "ETH"]);
+function _isContinuousTapeTicker(tk) {
+  return CONTINUOUS_TAPE_TICKERS.includes(tk);
+}
+function _isYahooExtendedSession(session) {
+  return session === "post" || session === "pre" || session === "fullday" || session === "otc";
+}
+function _canReplaceQuote(tk, source, incomingQuote) {
   const incoming = String(source || "");
   const current = liveQuoteSrc[tk] || "";
   const freshTwelveData = current === "twelve-data"
     && Date.now() - (liveQuoteTs[tk] || 0) <= TWELVE_DATA_CACHE_WINDOW_MS;
-  if (freshTwelveData && incoming !== "twelve-data") return false;
+  if (freshTwelveData && incoming !== "twelve-data") {
+    if (_isContinuousTapeTicker(tk)) return false;
+    // Closed RTH from Twelve Data may be replaced by a Yahoo extended/OTC print.
+    if (liveQuoteMarketClosed[tk] && incoming === "yahoo") {
+      if (!incomingQuote || incomingQuote.session == null) return true;
+      return _isYahooExtendedSession(incomingQuote.session);
+    }
+    return false;
+  }
   if (tk === "XAU" && incoming === "yahoo" && current.startsWith("gold-api")) {
     return false;
   }
@@ -4350,6 +4366,8 @@ function _savePriceCache(){
       live:[...liveSymbols],
       quoteTs:Object.fromEntries([...liveSymbols].map(tk=>[tk,liveQuoteTs[tk]||Date.now()])),
       quoteSrc:Object.fromEntries([...liveSymbols].map(tk=>[tk,liveQuoteSrc[tk]||"session-cache"])),
+      quoteSession:Object.fromEntries([...liveSymbols].map(tk=>[tk,liveQuoteSession[tk]||null])),
+      quoteMarketClosed:Object.fromEntries([...liveSymbols].map(tk=>[tk,!!liveQuoteMarketClosed[tk]])),
     };
     sessionStorage.setItem(PRICE_CACHE_KEY,JSON.stringify(payload));
   }catch(e){}
@@ -4373,6 +4391,8 @@ function _loadPriceCache(){
       // Restored session quotes are cached — never pretend they just hit the wire
       liveQuoteTs[tk]=data.quoteTs?.[tk]||data.ts;
       liveQuoteSrc[tk]=data.quoteSrc?.[tk]||"session-cache";
+      liveQuoteSession[tk]=data.quoteSession?.[tk]||null;
+      liveQuoteMarketClosed[tk]=!!data.quoteMarketClosed?.[tk] && !_isContinuousTapeTicker(tk);
       n++;
     });
     if(!n)return false;
@@ -4390,7 +4410,7 @@ function _newsLink(n){
 function _applyLiveQuote(tk, q, source) {
   if (!tk || !q || typeof q.p !== "number" || !isFinite(q.p) || q.p <= 0) return false;
   const incoming = q.source || source || "yahoo";
-  if (!_canReplaceQuote(tk, incoming)) return false;
+  if (!_canReplaceQuote(tk, incoming, q)) return false;
   const hasProviderTs = q.ts != null || q.fetchedAt != null;
   const sourceFetchedAt = _providerTimestampMs(q);
   if (hasProviderTs && sourceFetchedAt == null) return false;
@@ -4407,7 +4427,8 @@ function _applyLiveQuote(tk, q, source) {
   // or freshly live when it is hours old.
   liveQuoteTs[tk] = sourceFetchedAt != null ? sourceFetchedAt : Date.now();
   liveQuoteSrc[tk] = incoming;
-  liveQuoteMarketClosed[tk] = !!q.marketClosed;
+  liveQuoteMarketClosed[tk] = _isContinuousTapeTicker(tk) ? false : !!q.marketClosed;
+  liveQuoteSession[tk] = _isContinuousTapeTicker(tk) ? null : (q.session || null);
   return true;
 }
 /** Raw numeric price only when feed-confirmed — never seed */
@@ -4439,13 +4460,27 @@ function _quoteMeta(tk) {
   const ageMs = ts != null ? Date.now() - ts : null;
   const src = liveQuoteSrc[tk] || "feed";
   const proxy = src.startsWith("gold-api") || src === "frankfurter-ecb";
+  const session = _isContinuousTapeTicker(tk) ? null : liveQuoteSession[tk];
+  const cashClosed = !_isContinuousTapeTicker(tk) && !!liveQuoteMarketClosed[tk];
   let status = "delayed";
   let label = "DELAYED";
   let detail = "Free Yahoo/proxy feed — typically delayed, not exchange co-located";
-  if (liveQuoteMarketClosed[tk] && src === "twelve-data") {
-    status = "closed";
-    label = "MARKET CLOSED";
-    detail = "Twelve Data reports the cash session closed — last print retained, not a live tick";
+  let holdSessionLabel = false;
+  if (session === "post") {
+    status = "extended"; label = "AH"; holdSessionLabel = true;
+    detail = "Yahoo after-hours / post-RTH print — delayed retail feed, not a live NASDAQ/NYSE tape";
+  } else if (session === "pre") {
+    status = "extended"; label = "PRE"; holdSessionLabel = true;
+    detail = "Yahoo pre-market print — delayed retail feed, not a live NASDAQ/NYSE tape";
+  } else if (session === "otc") {
+    status = "extended"; label = "OTC"; holdSessionLabel = true;
+    detail = "Yahoo OTC / off-exchange print — delayed, not a listed RTH tape";
+  } else if (session === "fullday") {
+    status = "extended"; label = "EXT·HRS"; holdSessionLabel = true;
+    detail = "Yahoo combined/extended-hours print — delayed retail feed, not exchange co-located";
+  } else if (cashClosed) {
+    status = "rth-close"; label = "RTH CLOSE"; holdSessionLabel = true;
+    detail = "Regular US cash session closed — last RTH print retained. No extended/OTC print applied.";
   } else if (proxy) {
     status = "proxy";
     label = src.startsWith("gold-api") ? "SPOT PROXY" : "SYNTH·DXY";
@@ -4483,7 +4518,7 @@ function _quoteMeta(tk) {
     : src.startsWith("gold-api") ? 30 * 60 * 1000
     : src === "frankfurter-ecb" ? 36 * 60 * 60 * 1000
     : PRICE_STALE_MS;
-  if (ageMs != null && ageMs > staleAfterMs && status !== "unavailable" && status !== "closed") {
+  if (ageMs != null && ageMs > staleAfterMs && status !== "unavailable" && !holdSessionLabel) {
     status = "stale";
     label = proxy ? "STALE·PROXY" : "STALE";
     detail = `${proxy ? "Proxy value" : "Last feed tick"} ${_fmtAge(ts)} ago — treat carefully`;
@@ -4495,7 +4530,7 @@ function _quoteMeta(tk) {
     ageMs,
     asOf: ts,
     src,
-    trusted: status === "live" || status === "delayed"
+    trusted: status === "live" || status === "delayed" || status === "extended" || status === "rth-close"
   };
 }
 
@@ -4526,9 +4561,9 @@ async function _initStripeMode() {
 
 function _renderTrustBar() {
   const nLive = [...liveSymbols].filter(tk => _quoteMeta(tk).status === "live").length;
-  const nDel = [...liveSymbols].filter(tk => {
+    const nDel = [...liveSymbols].filter(tk => {
     const s = _quoteMeta(tk).status;
-    return s === "delayed" || s === "stale" || s === "cached";
+    return s === "delayed" || s === "stale" || s === "cached" || s === "extended" || s === "rth-close";
   }).length;
   const asOf = priceLastFetch ? _fmtAsOf(priceLastFetch.getTime()) : "—";
   const age = priceLastFetch ? _fmtAge(priceLastFetch.getTime()) : "never";
@@ -4743,7 +4778,9 @@ async function fetchTwelveDataPrices() {
       const quote = {
         ...row,
         fetchedAt: row.ts ?? data.fetchedAt,
-        marketClosed: !!row.marketClosed || closedSymbols.has(symbol),
+        marketClosed: _isContinuousTapeTicker(ticker)
+          ? false
+          : (!!row.marketClosed || closedSymbols.has(symbol)),
       };
       if (_applyLiveQuote(ticker, quote, "twelve-data")) hits++;
     });
@@ -5096,15 +5133,27 @@ function spark(tk,w=90,h=22,_skipLazy){
   const pts=d.map((v,i)=>`${(i/(d.length-1))*w},${h-((v-mn)/rng)*h*0.8-h*0.08}`).join(" ");
   return `<svg role="img" aria-label="${tk} intraday sparkline" width="${w}" height="${h}" style="display:block"><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.3"/></svg>`;
 }
-// Compact status pill — LIVE / DELAYED / STALE / CACHED / NO SYNC
+function _feedStatusLabel(d) {
+  if (!d || d.status === "unavailable") return "NO SYNC";
+  if (d.status === "extended" || d.status === "rth-close" || d.status === "closed") return d.label || (d.status === "extended" ? "EXT·HRS" : "RTH CLOSE");
+  if (d.status === "live") return d.label || "LIVE";
+  if (d.status === "stale") return "STALE";
+  if (d.status === "cached") return "CACHED";
+  if (d.status === "proxy") return d.label || "PROXY";
+  return d.label || "DELAYED";
+}
+// Compact status pill — LIVE / DELAYED / STALE / CACHED / EXT / RTH CLOSE / NO SYNC
 function stat(tk){
   const d=fp(tk);
   const s=d.status||"unavailable";
   const title=_escAttr(`${d.label||s}${d.asOf?` · as of ${_fmtAsOf(d.asOf)} (${d.age})`:""}${d.detail?` · ${d.detail}`:""}`);
   if(s==="live")return `<span class="bd trust-stat trust-stat-live" title="${title}" style="background:var(--gnG);color:var(--gn);font-size:7.5px">${_esc(d.label||"LIVE")}</span>`;
-  if(s==="delayed")return `<span class="bd trust-stat trust-stat-delayed" title="${title}" style="background:var(--blG);color:var(--bl);font-size:7.5px">DELAYED</span>`;
+  if(s==="extended")return `<span class="bd trust-stat trust-stat-ext" title="${title}" style="background:var(--gdG);color:var(--gd);font-size:7.5px">${_esc(d.label||"EXT·HRS")}</span>`;
+  if(s==="rth-close"||s==="closed")return `<span class="bd trust-stat trust-stat-rth" title="${title}" style="background:var(--b3);color:var(--t2);font-size:7.5px">${_esc(d.label||"RTH CLOSE")}</span>`;
+  if(s==="delayed")return `<span class="bd trust-stat trust-stat-delayed" title="${title}" style="background:var(--blG);color:var(--bl);font-size:7.5px">${_esc(d.label||"DELAYED")}</span>`;
   if(s==="stale")return `<span class="bd trust-stat trust-stat-stale" title="${title}" style="background:var(--gdG);color:var(--gd);font-size:7.5px">STALE</span>`;
   if(s==="cached")return `<span class="bd trust-stat trust-stat-cached" title="${title}" style="background:var(--puG);color:var(--pu);font-size:7.5px">CACHED</span>`;
+  if(s==="proxy")return `<span class="bd trust-stat trust-stat-delayed" title="${title}" style="background:var(--blG);color:var(--bl);font-size:7.5px">${_esc(d.label||"PROXY")}</span>`;
   return `<span class="bd trust-stat trust-stat-na" title="${title}" style="background:var(--b3);color:var(--t3);font-size:7.5px">NO SYNC</span>`;
 }
 function asOfTag(tk){
@@ -7303,7 +7352,7 @@ function renderP2() {
     const sign = ch != null && ch >= 0 ? '+' : '';
     const arrow = ch == null || ch === 0 ? '' : (ch > 0 ? '↑' : '↓');
     const isLive = liveSymbols.has(a.tk);
-    const feedLbl = na ? 'NO SYNC' : (d.status === 'live' ? 'LIVE' : d.status === 'stale' ? 'STALE' : d.status === 'cached' ? 'CACHED' : 'DELAYED');
+    const feedLbl = _feedStatusLabel(d);
     const scoreCol = a.sc >= 75 ? 'var(--gn)' : a.sc >= 50 ? 'var(--bl)' : a.sc >= 35 ? 'var(--gd)' : 'var(--rd)';
     const money = a.cat === 'Stock' || a.cat === 'Crypto' || a.cat === 'Commodity';
 
@@ -8908,7 +8957,7 @@ function _patchP2LiveHeader(){
   const sign=chN!=null&&chN>=0?"+":"";
   const arrow=chN==null||chN===0?"":(chN>0?"↑":"↓");
   const money=a.cat==="Stock"||a.cat==="Crypto"||a.cat==="Commodity";
-  const feedLbl=na?"NO SYNC":(d.status==="live"?"LIVE":d.status==="stale"?"STALE":d.status==="cached"?"CACHED":"DELAYED");
+  const feedLbl=_feedStatusLabel(d);
   const priceEl=document.querySelector('#p2body .ap-price');
   const chgEl=document.querySelector('#p2body .ap-chg');
   if(priceEl){
@@ -9089,7 +9138,9 @@ function renderTape(){
     const cat=TICKER_CATS[k]||'idx';
     const catCol=CAT_COLORS[cat]||'var(--t2)';
     const badge=d.status==="live"?'<span class="htec-live-dot" title="Near real-time"></span>'
-      :d.status==="delayed"?'<span class="tape-badge tape-del" title="Delayed free feed">D</span>'
+      :d.status==="extended"?`<span class="tape-badge tape-ext" title="${_escAttr(d.label||"Extended hours")}">${d.label==="AH"?"AH":d.label==="PRE"?"PRE":d.label==="OTC"?"OTC":"EXT"}</span>`
+      :d.status==="rth-close"||d.status==="closed"?`<span class="tape-badge tape-rth" title="${_escAttr(d.label||"RTH close")}">RTH</span>`
+      :d.status==="delayed"||d.status==="proxy"?'<span class="tape-badge tape-del" title="Delayed free feed">D</span>'
       :d.status==="stale"?'<span class="tape-badge tape-stale" title="Stale tick">S</span>'
       :d.status==="cached"?'<span class="tape-badge tape-cache" title="Session cache">C</span>'
       :'<span style="opacity:0.35;font-size:7px">○</span>';
@@ -10075,7 +10126,7 @@ function _renderGoldSurface(mode) {
   const chgCls = chg == null ? "px-flat" : chg >= 0 ? "px-up" : "px-dn";
   const goldMeta = typeof _quoteMeta === "function" ? _quoteMeta("XAU") : null;
   const goldKicker = goldMeta?.src === "twelve-data"
-    ? (goldMeta.status === "closed" ? "XAU · spot XAU/USD · MARKET CLOSED" : "XAU · spot XAU/USD · LIVE·TD")
+    ? "XAU · spot XAU/USD · LIVE·TD"
     : String(goldMeta?.src || "").startsWith("gold-api")
       ? "XAU · spot proxy · not exchange live"
       : "XAU · COMEX proxy GC=F · delayed";

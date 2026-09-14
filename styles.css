@@ -1507,6 +1507,8 @@ kbd {
 .brief-player-stop { background: var(--neg-wash); border: 1px solid var(--neg-wash); border-radius: 8px; color: var(--rd); font-family: var(--mn); font-size: 9px; font-weight: 700; padding: 6px 10px; cursor: pointer; flex-shrink: 0; }
 .tape-badge { display: inline-block;margin-left: 3px;font-size: 7px;font-weight: 800;padding: 0 3px;border-radius: 3px;vertical-align: super;line-height: 1.2; }
 .tape-del { background: var(--blG);color: var(--bl); }
+.tape-ext { background: var(--gdG);color: var(--gd); }
+.tape-rth { background: var(--b3);color: var(--t2); }
 .tape-stale { background: var(--gdG);color: var(--gd); }
 .tape-cache { background: var(--puG);color: var(--pu); }
 .start-here-card { background: linear-gradient(135deg,var(--gold-wash),var(--gold-wash));border: 1px solid var(--gold-line);border-radius: 14px;padding: 16px;margin-bottom: 14px; }

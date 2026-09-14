@@ -107,6 +107,25 @@ function hasOnly(params, allowed) {
   return true;
 }
 
+function composeCoinGeckoPath(rawPath, searchParams) {
+  if (typeof rawPath !== "string") return null;
+  let path = rawPath.trim();
+  if (path.startsWith("/api/v3/")) path = path.slice("/api/v3".length);
+  else if (path === "/api/v3") path = "/";
+  if (path && !path.startsWith("/")) path = `/${path}`;
+
+  const extra = new URLSearchParams();
+  if (searchParams && typeof searchParams.entries === "function") {
+    for (const [key, value] of searchParams.entries()) {
+      if (key === "path") continue;
+      extra.append(key, value);
+    }
+  }
+  const extraQuery = extra.toString();
+  if (extraQuery) path += (path.includes("?") ? "&" : "?") + extraQuery;
+  return normalizeCoinGeckoPath(path);
+}
+
 function normalizeCoinGeckoPath(rawPath) {
   if (typeof rawPath !== "string" || !rawPath.startsWith("/") || rawPath.length > 600) return null;
   let input;
@@ -635,6 +654,110 @@ function providerTimestampMs(value, now = Date.now()) {
   return ms;
 }
 
+
+const USGS_SOURCE = "USGS Earthquake Hazards Program";
+const GEO_CACHE_CONTROL = "public, max-age=60";
+const SECURITY_HEADERS = Object.freeze({
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "X-Frame-Options": "DENY",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+});
+const LONG_CACHE_EXTENSIONS = new Set([".js", ".css", ".svg", ".woff", ".woff2"]);
+
+function normalizeGeoQuery(searchParams) {
+  const read = key => {
+    if (!searchParams) return null;
+    if (typeof searchParams.get === "function") return searchParams.get(key);
+    return searchParams[key];
+  };
+  const mag = Number(read("minmag"));
+  const days = Number(read("days"));
+  const minmag = Number.isFinite(mag) ? Math.min(8, Math.max(0, mag)) : 4.5;
+  const windowDays = Number.isFinite(days) ? Math.min(30, Math.max(1, Math.round(days))) : 7;
+  const magBucket = minmag >= 4.5 ? "4.5" : minmag >= 2.5 ? "2.5" : minmag >= 1 ? "1.0" : "all";
+  const period = windowDays <= 1 ? "day" : windowDays <= 7 ? "week" : "month";
+  return {
+    minmag,
+    days: windowDays,
+    cacheKey: `geo:${magBucket}:${period}:${minmag}:${windowDays}`,
+    feedUrl: `https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/${magBucket}_${period}.geojson`,
+  };
+}
+
+function normalizeUsgsEarthquakes(payload, { minmag = 4.5, days = 7 } = {}, now = Date.now()) {
+  const cutoff = now - days * 24 * 60 * 60 * 1000;
+  const features = Array.isArray(payload?.features) ? payload.features : [];
+  const events = [];
+  for (const feature of features) {
+    const props = feature?.properties || {};
+    const mag = Number(props.mag);
+    const time = Number(props.time);
+    if (!Number.isFinite(mag) || mag < minmag) continue;
+    if (!Number.isFinite(time) || time < cutoff) continue;
+    const coords = Array.isArray(feature?.geometry?.coordinates) ? feature.geometry.coordinates : [];
+    events.push({
+      id: typeof feature.id === "string" ? feature.id : null,
+      mag,
+      place: typeof props.place === "string" ? props.place : "",
+      time: new Date(time).toISOString(),
+      url: typeof props.url === "string" ? props.url : null,
+      coordinates: {
+        longitude: Number(coords[0]),
+        latitude: Number(coords[1]),
+        depthKm: Number(coords[2]),
+      },
+    });
+  }
+  events.sort((a, b) => Date.parse(b.time) - Date.parse(a.time));
+  return {
+    events,
+    source: USGS_SOURCE,
+    asOf: new Date(now).toISOString(),
+    status: "available",
+  };
+}
+
+function staticCacheControl(pathname, searchParams) {
+  const ext = pathExtension(pathname);
+  const versioned = Boolean(
+    searchParams && (typeof searchParams.get === "function" ? searchParams.get("v") : searchParams.v),
+  );
+  if (ext === ".html" || pathname === "/" || pathname === "/index.html") return "no-store";
+  if (versioned && LONG_CACHE_EXTENSIONS.has(ext)) return "public, max-age=31536000, immutable";
+  if (ext === ".js" || ext === ".css") return "public, max-age=300";
+  return "no-store";
+}
+
+function pathExtension(pathname) {
+  const base = String(pathname || "").split("?")[0];
+  const slash = base.lastIndexOf("/");
+  const name = slash >= 0 ? base.slice(slash + 1) : base;
+  const dot = name.lastIndexOf(".");
+  return dot >= 0 ? name.slice(dot).toLowerCase() : "";
+}
+
+function attachSecurityHeaders(res) {
+  const original = res.writeHead;
+  if (typeof original !== "function" || res.__dispatchSecurityHeaders) return res;
+  res.__dispatchSecurityHeaders = true;
+  res.writeHead = function writeHeadWithSecurity(statusCode, ...rest) {
+    let reason;
+    let headers = {};
+    if (typeof rest[0] === "string") {
+      reason = rest[0];
+      headers = rest[1] || {};
+    } else if (rest[0] && typeof rest[0] === "object") {
+      headers = rest[0];
+    }
+    const merged = { ...SECURITY_HEADERS, ...headers };
+    return reason === undefined
+      ? original.call(this, statusCode, merged)
+      : original.call(this, statusCode, reason, merged);
+  };
+  return res;
+}
+
 module.exports = {
   BoundedTtlCache,
   FixedWindowRateLimiter,
@@ -663,4 +786,12 @@ module.exports = {
   normalizeYahooChartResult,
   quoteProvenance,
   isYahooExtendedSession,
+  composeCoinGeckoPath,
+  normalizeGeoQuery,
+  normalizeUsgsEarthquakes,
+  staticCacheControl,
+  attachSecurityHeaders,
+  SECURITY_HEADERS,
+  GEO_CACHE_CONTROL,
+  USGS_SOURCE,
 };

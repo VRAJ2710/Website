@@ -39,7 +39,9 @@ NEW_FETCH = '''async function fetchTwelveDataPrices() {
         ...row,
         ts: fetchedAt,
         fetchedAt,
-        marketClosed: !!row.marketClosed || closedSymbols.has(symbol),
+        marketClosed: (ticker === "XAU" || ticker === "EURUSD" || ticker === "BTC" || ticker === "ETH")
+          ? false
+          : (!!row.marketClosed || closedSymbols.has(symbol)),
       };
       if (_applyLiveQuote(ticker, quote, "twelve-data")) hits++;
     });
