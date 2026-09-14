@@ -1085,7 +1085,11 @@ async function start() {
   await initializeStripe();
   server.listen(PORT, "0.0.0.0", () => console.log(`Dispatch Markets preview listening on ${PORT}`));
 }
-start().catch(error => {
-  console.error("Application startup failed:", error);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  start().catch(error => {
+    console.error("Application startup failed:", error);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { handle, server, start };
