@@ -8,9 +8,15 @@ const { runMigrations } = require("stripe-replit-sync");
 const {
   BoundedTtlCache,
   FixedWindowRateLimiter,
+  FixedWindowCreditLimiter,
   normalizeCoinGeckoPath,
-  normalizeTwelveDataSymbols,
+  TWELVE_DATA_DAILY_CREDIT_LIMIT,
+  TWELVE_DATA_PROVIDER,
+  canonicalTwelveDataSymbols,
   normalizeTwelveDataQuotes,
+  twelveDataQuoteCoverage,
+  normalizeGoldApiQuote,
+  synthesizeDxyFromUsdRates,
 } = require("./marketProxy");
 const { approvedRssFeedUrl } = require("./rssFeeds");
 const {
@@ -35,9 +41,18 @@ const rssFeedCache = new BoundedTtlCache({ maxEntries: 30, maxBytes: 2 * 1024 * 
 const rssFeedRateLimiter = new FixedWindowRateLimiter({ limit: 30, windowMs: 60_000, maxKeys: 256 });
 const twelveDataCache = new BoundedTtlCache({ maxEntries: 8, maxBytes: 128 * 1024 });
 const TWELVE_DATA_CACHE_MS = 15 * 60 * 1000;
-// The Basic plan permits eight credits/minute and 800/day. Our eight-symbol
-// allowlist plus a 15-minute shared cache caps normal refreshes at 768 credits/day.
-const twelveDataDailyRateLimiter = new FixedWindowRateLimiter({ limit: 90, windowMs: 24 * 60 * 60 * 1000, maxKeys: 1 });
+const TWELVE_DATA_CACHE_KEY = "core-tape";
+// The Basic plan permits eight credits/minute and 800/day. One canonical
+// eight-symbol quote plus a 15-minute shared cache caps refreshes at 768/day.
+const twelveDataMinuteCreditLimiter = new FixedWindowCreditLimiter({ limit: 8, windowMs: 60_000, maxKeys: 1 });
+const twelveDataDailyCreditLimiter = new FixedWindowCreditLimiter({
+  limit: TWELVE_DATA_DAILY_CREDIT_LIMIT,
+  windowMs: 24 * 60 * 60 * 1000,
+  maxKeys: 1,
+});
+const marketReferenceCache = new BoundedTtlCache({ maxEntries: 4, maxBytes: 16 * 1024 });
+const MARKET_REFERENCE_CACHE_MS = 15 * 60 * 1000;
+const FRANKFURTER_CACHE_MS = 12 * 60 * 60 * 1000;
 
 class AiRequestError extends Error {
   constructor(status, message, code) {
@@ -503,17 +518,38 @@ async function yahooQuote(symbols) {
   }));
   return out;
 }
-async function twelveDataQuote(symbols) {
-  const apiKey = process.env.TWELVE_DATA_API_KEY;
-  const requested = normalizeTwelveDataSymbols(symbols);
-  if (!apiKey) return { configured: false, quotes: {} };
-  if (!requested.length) return { configured: true, quotes: {} };
+function twelveDataEmptyResult(configured, extra = {}) {
+  const requestedSymbols = canonicalTwelveDataSymbols();
+  return {
+    configured,
+    quotes: {},
+    provider: TWELVE_DATA_PROVIDER,
+    fetchedAt: null,
+    directIndices: {},
+    requestedSymbols,
+    returnedSymbols: [],
+    marketClosedSymbols: [],
+    ...extra,
+  };
+}
 
-  const cacheKey = requested.join(",");
-  const cached = twelveDataCache.get(cacheKey);
-  if (cached) return { configured: true, cached: true, ...cached };
-  if (!twelveDataDailyRateLimiter.allow("core-tape")) {
-    return { configured: true, unavailable: true, reason: "daily_limit", quotes: {} };
+async function twelveDataQuote(_symbols) {
+  const apiKey = process.env.TWELVE_DATA_API_KEY;
+  // Always fetch the same eight-symbol core so rotated public subsets share
+  // one cache key and cannot multiply the Basic-plan credit cost.
+  const requested = canonicalTwelveDataSymbols();
+  if (!apiKey) return twelveDataEmptyResult(false);
+  if (!requested.length) return twelveDataEmptyResult(true);
+
+  const cached = twelveDataCache.get(TWELVE_DATA_CACHE_KEY);
+  if (cached) return { configured: true, cached: true, provider: TWELVE_DATA_PROVIDER, ...cached };
+
+  const creditCost = requested.length;
+  if (!twelveDataMinuteCreditLimiter.allow(TWELVE_DATA_CACHE_KEY, creditCost)) {
+    return twelveDataEmptyResult(true, { unavailable: true, reason: "minute_limit" });
+  }
+  if (!twelveDataDailyCreditLimiter.allow(TWELVE_DATA_CACHE_KEY, creditCost)) {
+    return twelveDataEmptyResult(true, { unavailable: true, reason: "daily_limit" });
   }
 
   try {
@@ -528,15 +564,62 @@ async function twelveDataQuote(symbols) {
       },
     );
     if (!response.ok) throw new Error(`Twelve Data ${response.status}`);
-    const quotes = normalizeTwelveDataQuotes(await response.json());
+    const payload = await response.json();
+    const quotes = normalizeTwelveDataQuotes(payload);
+    const coverage = twelveDataQuoteCoverage(payload);
     if (!Object.keys(quotes).length) throw new Error("Twelve Data returned no usable quotes");
-    const result = { quotes, fetchedAt: Date.now() };
-    twelveDataCache.set(cacheKey, result, TWELVE_DATA_CACHE_MS);
-    return { configured: true, ...result };
+    const result = {
+      quotes,
+      fetchedAt: Date.now(),
+      directIndices: {},
+      requestedSymbols: coverage.requestedSymbols,
+      returnedSymbols: coverage.returnedSymbols,
+      marketClosedSymbols: coverage.marketClosedSymbols,
+    };
+    twelveDataCache.set(TWELVE_DATA_CACHE_KEY, result, TWELVE_DATA_CACHE_MS);
+    return { configured: true, provider: TWELVE_DATA_PROVIDER, ...result };
   } catch {
     // The caller falls back to Yahoo's explicitly delayed feed for this cycle.
-    return { configured: true, unavailable: true, quotes: {} };
+    return twelveDataEmptyResult(true, { unavailable: true });
   }
+}
+
+async function marketReferenceQuotes() {
+  const cached = marketReferenceCache.get("reference");
+  if (cached) return { ...cached, cached: true };
+
+  const [goldResult, dxyResult] = await Promise.allSettled([
+    (async () => {
+      const goldCached = marketReferenceCache.get("gold");
+      if (goldCached) return { ...goldCached, cached: true };
+      const response = await upstream("https://api.gold-api.com/price/XAU", {
+        signal: AbortSignal.timeout(8_000),
+      });
+      const quote = normalizeGoldApiQuote(await response.json());
+      if (!quote) throw new Error("Gold reference unavailable");
+      marketReferenceCache.set("gold", quote, MARKET_REFERENCE_CACHE_MS);
+      return quote;
+    })(),
+    (async () => {
+      const dxyCached = marketReferenceCache.get("dxy");
+      if (dxyCached) return { ...dxyCached, cached: true };
+      const response = await upstream(
+        "https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR,GBP,JPY,CAD,SEK,CHF",
+        { signal: AbortSignal.timeout(8_000) },
+      );
+      const payload = await response.json();
+      const quote = synthesizeDxyFromUsdRates(payload?.rates, payload?.date);
+      if (!quote) throw new Error("Dollar reference unavailable");
+      marketReferenceCache.set("dxy", quote, FRANKFURTER_CACHE_MS);
+      return quote;
+    })(),
+  ]);
+
+  const result = { fetchedAt: Date.now() };
+  if (goldResult.status === "fulfilled") result.XAU = goldResult.value;
+  if (dxyResult.status === "fulfilled") result.DXY = dxyResult.value;
+  if (result.XAU || result.DXY) marketReferenceCache.set("reference", result, MARKET_REFERENCE_CACHE_MS);
+  return result;
 }
 function serveStatic(req, res, pathname) {
   const requested = pathname === "/" ? "/index.html" : pathname;
@@ -734,6 +817,9 @@ async function handle(req, res) {
   if (p === "/api/yahoo-quote") return json(res, 200, await yahooQuote((url.searchParams.get("symbols") || "").split(",").map(s => s.trim()).filter(Boolean)));
   if (p === "/api/twelve-data-quote") {
     return json(res, 200, await twelveDataQuote((url.searchParams.get("symbols") || "").split(",").map(s => s.trim()).filter(Boolean)));
+  }
+  if (p === "/api/market-reference-quotes") {
+    return json(res, 200, await marketReferenceQuotes());
   }
   if (p === "/api/yahoo-chart") {
     try { const symbol = url.searchParams.get("symbol"); const range = url.searchParams.get("range") || "5d"; const interval = url.searchParams.get("interval") || "15m"; return json(res, 200, await (await upstream(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`)).json()); }

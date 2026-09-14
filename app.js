@@ -4295,7 +4295,8 @@ const SEED_ANCHORS = {SPX:15.0, DJIA:107.0, IXIC:50.0};
 let priceFetchCount=0,priceErrorCount=0;
 let liveSymbols=new Set(); // symbols with confirmed feed data (never show seed as live)
 let liveQuoteTs={}; // tk -> epoch ms last successful quote
-let liveQuoteSrc={}; // tk -> yahoo | coingecko | finnhub | session-cache
+let liveQuoteSrc={}; // tk -> yahoo | coingecko | finnhub | twelve-data | session-cache
+let liveQuoteMarketClosed={}; // tk -> provider reported the cash session closed
 let _priceFetchAttempted=false;
 let _stripeMode=null; // null | "test" | "live" | "unknown"
 const PRICE_CACHE_KEY="td_price_cache_v2";
@@ -4307,13 +4308,38 @@ const PRICE_PRIORITY=[
   "BTC","ETH","SOL","XAU","WTI","BRENT","NG","COPPER","SLV","EURUSD","USDJPY",
   "JPM","GS","XOM","COIN","MSTR","FTSE","DAX","N225","HSI","NSEI",
 ];
-// Core quotes from Twelve Data's free plan. Keep this compact: a shared
-// server-side cache protects the account-wide daily allowance for all visitors.
+// Cross-asset core from Twelve Data's Basic plan. Eight symbols is the
+// per-minute credit ceiling; the server always fetches this same set
+// through one 15-minute shared cache (768 credits/day). MSFT/TSLA/AMZN
+// and extra FX stay on delayed Yahoo so gold/crypto/ETFs can be live.
 const TWELVE_DATA_SYMBOLS = Object.freeze({
-  AAPL: "AAPL", NVDA: "NVDA", MSFT: "MSFT", TSLA: "TSLA", AMZN: "AMZN",
-  EURUSD: "EUR/USD", GBPUSD: "GBP/USD", USDJPY: "USD/JPY",
+  AAPL: "AAPL", NVDA: "NVDA",
+  SPY: "SPY", QQQ: "QQQ",
+  XAU: "XAU/USD", EURUSD: "EUR/USD",
+  BTC: "BTC/USD", ETH: "ETH/USD",
 });
 const TWELVE_DATA_CACHE_WINDOW_MS = 16 * 60 * 1000;
+
+function _providerTimestampMs(q) {
+  const raw = Number(q?.ts ?? q?.fetchedAt);
+  if (!Number.isFinite(raw) || raw <= 0) return null;
+  const ms = raw < 10_000_000_000 ? raw * 1000 : raw;
+  if (ms > Date.now() + 60_000) return null;
+  return ms;
+}
+
+function _canReplaceQuote(tk, source) {
+  const incoming = String(source || "");
+  const current = liveQuoteSrc[tk] || "";
+  const freshTwelveData = current === "twelve-data"
+    && Date.now() - (liveQuoteTs[tk] || 0) <= TWELVE_DATA_CACHE_WINDOW_MS;
+  if (freshTwelveData && incoming !== "twelve-data") return false;
+  if (tk === "XAU" && incoming === "yahoo" && current.startsWith("gold-api")) {
+    return false;
+  }
+  if (tk === "DXY" && incoming === "frankfurter-ecb" && current === "yahoo") return false;
+  return true;
+}
 
 function _savePriceCache(){
   try{
@@ -4363,6 +4389,11 @@ function _newsLink(n){
 
 function _applyLiveQuote(tk, q, source) {
   if (!tk || !q || typeof q.p !== "number" || !isFinite(q.p) || q.p <= 0) return false;
+  const incoming = q.source || source || "yahoo";
+  if (!_canReplaceQuote(tk, incoming)) return false;
+  const hasProviderTs = q.ts != null || q.fetchedAt != null;
+  const sourceFetchedAt = _providerTimestampMs(q);
+  if (hasProviderTs && sourceFetchedAt == null) return false;
   const c = typeof q.c === "number" && isFinite(q.c) ? q.c : 0;
   const prev = typeof q.prev === "number" && q.prev > 0 ? q.prev : q.p / (1 + c / 100);
   P[tk] = { p: q.p, c: +c.toFixed(2) };
@@ -4371,11 +4402,12 @@ function _applyLiveQuote(tk, q, source) {
   HIST[tk].push(q.p);
   if (HIST[tk].length > 120) HIST[tk].shift();
   liveSymbols.add(tk);
-  const sourceFetchedAt = Number(q.fetchedAt);
-  liveQuoteTs[tk] = Number.isFinite(sourceFetchedAt) && sourceFetchedAt > 0 && sourceFetchedAt <= Date.now()
-    ? sourceFetchedAt
-    : Date.now();
-  liveQuoteSrc[tk] = source || "yahoo";
+  // Provider timestamps are seconds for Yahoo/Twelve Data. Convert so a
+  // seconds-since-epoch value cannot look ancient (and get overwritten)
+  // or freshly live when it is hours old.
+  liveQuoteTs[tk] = sourceFetchedAt != null ? sourceFetchedAt : Date.now();
+  liveQuoteSrc[tk] = incoming;
+  liveQuoteMarketClosed[tk] = !!q.marketClosed;
   return true;
 }
 /** Raw numeric price only when feed-confirmed — never seed */
@@ -4406,10 +4438,21 @@ function _quoteMeta(tk) {
   const ts = liveQuoteTs[tk] || (priceLastFetch ? priceLastFetch.getTime() : null);
   const ageMs = ts != null ? Date.now() - ts : null;
   const src = liveQuoteSrc[tk] || "feed";
+  const proxy = src.startsWith("gold-api") || src === "frankfurter-ecb";
   let status = "delayed";
   let label = "DELAYED";
   let detail = "Free Yahoo/proxy feed — typically delayed, not exchange co-located";
-  if (src === "coingecko") {
+  if (liveQuoteMarketClosed[tk] && src === "twelve-data") {
+    status = "closed";
+    label = "MARKET CLOSED";
+    detail = "Twelve Data reports the cash session closed — last print retained, not a live tick";
+  } else if (proxy) {
+    status = "proxy";
+    label = src.startsWith("gold-api") ? "SPOT PROXY" : "SYNTH·DXY";
+    detail = src.startsWith("gold-api")
+      ? "Free gold-api spot proxy — not an exchange instrument, used only when Twelve Data XAU/USD is unavailable"
+      : "Synthetic ICE-style dollar index from ECB/Frankfurter FX — not a live DXY print";
+  } else if (src === "coingecko") {
     status = "live";
     label = "LIVE·CG";
     detail = "CoinGecko public API (near real-time crypto)";
@@ -4427,13 +4470,23 @@ function _quoteMeta(tk) {
     detail = "Twelve Data real-time source — shared free-plan core tape";
   } else if (src === "yahoo") {
     status = "delayed";
-    label = "DELAYED";
-    detail = "Yahoo Finance via Dispatch proxy — free retail feed, not Bloomberg";
+    label = tk === "XAU"
+      ? "DELAYED · GC=F futures"
+      : "DELAYED";
+    detail = tk === "XAU"
+      ? "Yahoo COMEX gold futures (GC=F) — delayed futures fallback, not live spot"
+      : "Yahoo Finance via Dispatch proxy — free retail feed, not Bloomberg";
   }
-  if (ageMs != null && ageMs > PRICE_STALE_MS && status !== "unavailable") {
+  const staleAfterMs = src === "twelve-data" ? TWELVE_DATA_CACHE_WINDOW_MS
+    : src === "coingecko" ? 10 * 60 * 1000
+    : src === "yahoo" || src === "yahoo-screener" ? 30 * 60 * 1000
+    : src.startsWith("gold-api") ? 30 * 60 * 1000
+    : src === "frankfurter-ecb" ? 36 * 60 * 60 * 1000
+    : PRICE_STALE_MS;
+  if (ageMs != null && ageMs > staleAfterMs && status !== "unavailable" && status !== "closed") {
     status = "stale";
-    label = "STALE";
-    detail = `Last feed tick ${_fmtAge(ts)} ago — treat carefully`;
+    label = proxy ? "STALE·PROXY" : "STALE";
+    detail = `${proxy ? "Proxy value" : "Last feed tick"} ${_fmtAge(ts)} ago — treat carefully`;
   }
   return {
     status,
@@ -4497,7 +4550,7 @@ function _renderTrustBar() {
     </div>
     <div class="trust-pills">
       ${feed}
-      ${hasTwelveData ? `<span class="trust-pill trust-ok">TWELVE DATA · CORE EQUITIES & FX · SHARED 15M CACHE</span>` : ""}
+      ${hasTwelveData ? `<span class="trust-pill trust-ok">TWELVE DATA · GOLD/CRYPTO/ETF/FX CORE · SHARED 15M CACHE</span>` : ""}
       <span class="trust-pill">YAHOO DELAYED · NOT BLOOMBERG</span>
       <span class="trust-pill">FEED ONLY - NO SEED PRICES</span>
       <span class="trust-pill trust-model">REGIME / LAB = MODEL</span>
@@ -4654,10 +4707,7 @@ async function _fetchYahooPriceChunk(chunk) {
   const filtered = chunk.filter(tk => {
     if (!cgPrimary.has(tk)) return true;
     return typeof YAHOO_CRYPTO_OK !== "undefined" && YAHOO_CRYPTO_OK.has(tk);
-  }).filter(tk => {
-    // Do not replace a fresh real-time Twelve Data core quote with delayed Yahoo.
-    return liveQuoteSrc[tk] !== "twelve-data" || Date.now() - (liveQuoteTs[tk] || 0) > TWELVE_DATA_CACHE_WINDOW_MS;
-  });
+  }).filter(tk => _canReplaceQuote(tk, "yahoo"));
   const yhSyms = [...new Set(filtered.map(tk => YAHOO_SYMBOLS[tk]).filter(Boolean))];
   if (!yhSyms.length) return 0;
   let hits = 0;
@@ -4682,12 +4732,37 @@ async function fetchTwelveDataPrices() {
     });
     if (!res.ok) return 0;
     const data = await res.json();
+    if (data?.configured === false || data?.unavailable) return 0;
+    if (data?.provider && data.provider.id !== "twelve-data") return 0;
     const quotes = data?.quotes || {};
+    const closedSymbols = new Set(data?.marketClosedSymbols || []);
     let hits = 0;
     Object.entries(TWELVE_DATA_SYMBOLS).forEach(([ticker, symbol]) => {
-      const quote = quotes[symbol] ? { ...quotes[symbol], fetchedAt: data.fetchedAt } : null;
+      const row = quotes[symbol];
+      if (!row) return;
+      const quote = {
+        ...row,
+        fetchedAt: row.ts ?? data.fetchedAt,
+        marketClosed: !!row.marketClosed || closedSymbols.has(symbol),
+      };
       if (_applyLiveQuote(ticker, quote, "twelve-data")) hits++;
     });
+    return hits;
+  } catch (e) {
+    return 0;
+  }
+}
+
+async function fetchReferencePrices() {
+  try {
+    const res = await fetch("/api/market-reference-quotes", { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) return 0;
+    const data = await res.json();
+    let hits = 0;
+    // Twelve Data XAU/USD wins when present; gold-api is an honest spot proxy only.
+    if (data.XAU && _applyLiveQuote("XAU", data.XAU, data.XAU.source || "gold-api-spot-proxy")) hits++;
+    // Delayed Yahoo DXY (ICE) beats this synthetic; apply only as a labeled fallback.
+    if (data.DXY && _applyLiveQuote("DXY", data.DXY, data.DXY.source || "frankfurter-ecb")) hits++;
     return hits;
   } catch (e) {
     return 0;
@@ -4701,7 +4776,9 @@ async function fetchLivePrices(){
   renderStatus();
   let successCount=0;
 
-  // Real-time core US equity + FX tape, cached centrally to protect the free plan.
+  // Labeled free proxies first; Twelve Data overwrites XAU when the core tape hits.
+  successCount += await fetchReferencePrices();
+  // Real-time core gold / crypto / ETF / FX tape, cached centrally to protect the free plan.
   successCount += await fetchTwelveDataPrices();
   // Priority bootstrap — headline tickers land in one round-trip
   const priHits=await _fetchYahooPriceChunk(PRICE_PRIORITY.filter(tk=>YAHOO_SYMBOLS[tk]));
@@ -9996,11 +10073,17 @@ function _renderGoldSurface(mode) {
   const px = livePxN != null ? livePxN : g.price;
   const chg = g.changePct;
   const chgCls = chg == null ? "px-flat" : chg >= 0 ? "px-up" : "px-dn";
+  const goldMeta = typeof _quoteMeta === "function" ? _quoteMeta("XAU") : null;
+  const goldKicker = goldMeta?.src === "twelve-data"
+    ? (goldMeta.status === "closed" ? "XAU · spot XAU/USD · MARKET CLOSED" : "XAU · spot XAU/USD · LIVE·TD")
+    : String(goldMeta?.src || "").startsWith("gold-api")
+      ? "XAU · spot proxy · not exchange live"
+      : "XAU · COMEX proxy GC=F · delayed";
 
   h += `<div class="gd-hero gc">
     <div class="gd-hero-top">
       <div>
-        <div class="gd-kicker">XAU · COMEX proxy GC=F · delayed</div>
+        <div class="gd-kicker">${goldKicker}</div>
         <div class="gd-px">$${_gdPx(px)} <span class="gd-chg ${chgCls}">${_gdChg(chg)}</span></div>
         <div class="gd-sub">${_escHtml(d.structure?.regime || "—")} · vol ${d.volatility?.condition || "—"} (ATR $${_gdPx(d.volatility?.atr14)})</div>
       </div>
