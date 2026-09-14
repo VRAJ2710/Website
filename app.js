@@ -4605,7 +4605,8 @@ function cgFetch(url, opts) {
         : url;
       const res = await fetch(proxyUrl, opts);
       // A real 429 does reach us when CORS headers happen to be present.
-      if (res.status === 429 || res.headers.get("X-Dispatch-Data-Status") === "unavailable") {
+      const dataStatus = res.headers.get("X-Dispatch-Data-Status");
+      if (res.status === 429 || dataStatus === "unavailable" || dataStatus === "rate_limited") {
         _cgBackoffUntil = Date.now() + 90000;
       }
       return res;
@@ -4629,6 +4630,7 @@ async function fetchCrypto(){
     if(res.status===429){_cgBackoffUntil=Date.now()+90000;return null;} // back off 90s
     if(!res.ok)return null;
     const d=await res.json();
+    if(d?.unavailable){_cgBackoffUntil=Date.now()+90000;return null;}
     const out={};
     // polygon-ecosystem-token last wins over empty matic-network when both present
     Object.entries(CG_MAP).forEach(([cgId, tk]) => {

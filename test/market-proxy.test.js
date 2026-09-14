@@ -4,7 +4,15 @@ const {
   BoundedTtlCache,
   FixedWindowRateLimiter,
   FixedWindowCreditLimiter,
+  composeCoinGeckoPath,
   normalizeCoinGeckoPath,
+  normalizeGeoQuery,
+  normalizeUsgsEarthquakes,
+  staticCacheControl,
+  attachSecurityHeaders,
+  SECURITY_HEADERS,
+  GEO_CACHE_CONTROL,
+  USGS_SOURCE,
   TWELVE_DATA_ALLOWED_SYMBOLS,
   TWELVE_DATA_DAILY_CREDIT_LIMIT,
   canonicalTwelveDataSymbols,
@@ -17,6 +25,39 @@ const {
   providerTimestampMs,
 } = require("../marketProxy");
 const { approvedRssFeedUrl } = require("../rssFeeds");
+
+test("composes unencoded CoinGecko sibling query params and strips /api/v3", () => {
+  const encoded = composeCoinGeckoPath(
+    "/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true",
+  );
+  assert.equal(
+    encoded,
+    "/simple/price?ids=bitcoin%2Cethereum&vs_currencies=usd&include_24hr_change=true",
+  );
+  const sibling = composeCoinGeckoPath(
+    "/simple/price",
+    new URLSearchParams("ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true"),
+  );
+  assert.equal(sibling, encoded);
+  const splitQuery = composeCoinGeckoPath(
+    "/simple/price?ids=bitcoin,ethereum",
+    new URLSearchParams("path=/simple/price?ids=bitcoin,ethereum&vs_currencies=usd&include_24hr_change=true"),
+  );
+  assert.equal(splitQuery, encoded);
+  assert.equal(
+    composeCoinGeckoPath(
+      "/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true",
+    ),
+    "/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true",
+  );
+  const deskIds = "bitcoin,ethereum,solana,ripple,dogecoin,cardano,avalanche-2,chainlink,polkadot,litecoin,uniswap,polygon-ecosystem-token,matic-network,near,algorand,hedera-hashgraph,the-open-network,bitcoin-cash,stellar,filecoin,aptos,sui,shiba-inu,pepe,cosmos,injective-protocol";
+  assert.match(
+    composeCoinGeckoPath(`/simple/price?ids=${deskIds}&vs_currencies=usd&include_24hr_change=true`),
+    /^\/simple\/price\?ids=/,
+  );
+  assert.equal(composeCoinGeckoPath("/simple/price"), null);
+  assert.equal(composeCoinGeckoPath("https://untrusted.example/path"), null);
+});
 
 test("normalizes only the CoinGecko request shapes used by the terminal", () => {
   assert.equal(
@@ -47,6 +88,14 @@ test("cache expires entries and remains bounded by LRU entry and byte limits", (
   assert.equal(cache.set("too-large", { value: "x".repeat(100) }, 60, 10), false);
   assert.ok(cache.entries.size <= 2);
   assert.ok(cache.bytes <= 40);
+});
+
+test("cache peek serves stale values inside the grace window", () => {
+  const cache = new BoundedTtlCache({ maxEntries: 4, maxBytes: 1024 });
+  cache.set("quote", { bitcoin: { usd: 1 } }, 5, 0, { staleMs: 20 });
+  assert.deepEqual(cache.peek("quote", 4), { value: { bitcoin: { usd: 1 } }, fresh: true });
+  assert.deepEqual(cache.peek("quote", 10), { value: { bitcoin: { usd: 1 } }, fresh: false });
+  assert.equal(cache.peek("quote", 26), undefined);
 });
 
 test("rate limiter caps request volume and bounds tracked clients", () => {
@@ -220,6 +269,87 @@ test("fresh Twelve Data quotes are not overwritten by Yahoo or CoinGecko inside 
     ticker: "DXY", currentSrc: "yahoo", currentTs: now,
     incomingSrc: "frankfurter-ecb", now, windowMs,
   }), false);
+});
+
+test("USGS geo queries pick the magnitude-period feed and shape events", () => {
+  const query = normalizeGeoQuery(new URLSearchParams("minmag=4.5&days=7"));
+  assert.equal(query.minmag, 4.5);
+  assert.equal(query.days, 7);
+  assert.equal(query.feedUrl, "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/4.5_week.geojson");
+  assert.equal(GEO_CACHE_CONTROL, "public, max-age=60");
+  assert.equal(
+    normalizeGeoQuery(new URLSearchParams("minmag=2.5&days=1")).feedUrl,
+    "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson",
+  );
+  const now = Date.parse("2026-09-14T03:00:00.000Z");
+  const payload = {
+    features: [
+      {
+        id: "us7000keep",
+        properties: {
+          mag: 4.8,
+          place: "119 km S of Dampit, Indonesia",
+          time: now - 3600_000,
+          url: "https://earthquake.usgs.gov/earthquakes/eventpage/us7000keep",
+        },
+        geometry: { coordinates: [112.9014, -9.2825, 33.378] },
+      },
+      {
+        id: "us-too-small",
+        properties: { mag: 3.1, place: "skip", time: now - 1000 },
+        geometry: { coordinates: [0, 0, 0] },
+      },
+      {
+        id: "us-too-old",
+        properties: { mag: 5.1, place: "old", time: now - 10 * 24 * 60 * 60 * 1000 },
+        geometry: { coordinates: [1, 2, 3] },
+      },
+    ],
+  };
+  const body = normalizeUsgsEarthquakes(payload, query, now);
+  assert.equal(body.source, USGS_SOURCE);
+  assert.equal(body.status, "available");
+  assert.equal(body.events.length, 1);
+  assert.deepEqual(body.events[0], {
+    id: "us7000keep",
+    mag: 4.8,
+    place: "119 km S of Dampit, Indonesia",
+    time: "2026-09-14T02:00:00.000Z",
+    url: "https://earthquake.usgs.gov/earthquakes/eventpage/us7000keep",
+    coordinates: { longitude: 112.9014, latitude: -9.2825, depthKm: 33.378 },
+  });
+});
+
+test("versioned static assets get a long immutable cache; HTML stays no-store", () => {
+  assert.equal(staticCacheControl("/index.html"), "no-store");
+  assert.equal(staticCacheControl("/", new URLSearchParams("v=1")), "no-store");
+  assert.equal(
+    staticCacheControl("/app.js", new URLSearchParams("v=1789358000")),
+    "public, max-age=31536000, immutable",
+  );
+  assert.equal(
+    staticCacheControl("/styles.css", new URLSearchParams("v=1789358000")),
+    "public, max-age=31536000, immutable",
+  );
+  assert.equal(staticCacheControl("/app.js"), "public, max-age=300");
+});
+
+test("security headers wrap writeHead without clobbering caller values", () => {
+  const recorded = [];
+  const res = {
+    writeHead(status, headers) {
+      recorded.push({ status, headers });
+    },
+  };
+  attachSecurityHeaders(res);
+  res.writeHead(200, { "Cache-Control": "public, max-age=60" });
+  assert.equal(recorded[0].status, 200);
+  assert.equal(recorded[0].headers["Cache-Control"], "public, max-age=60");
+  assert.equal(recorded[0].headers["X-Content-Type-Options"], SECURITY_HEADERS["X-Content-Type-Options"]);
+  assert.equal(recorded[0].headers["Referrer-Policy"], "strict-origin-when-cross-origin");
+  assert.equal(recorded[0].headers["X-Frame-Options"], "DENY");
+  assert.match(recorded[0].headers["Permissions-Policy"], /camera=\(\)/);
+  assert.equal(recorded[0].headers["Content-Security-Policy"], undefined);
 });
 
 test("Frankfurter USD rates synthesize an ICE-style DXY proxy", () => {
