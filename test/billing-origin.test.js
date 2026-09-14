@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const {
@@ -12,6 +13,7 @@ const {
   resolveStaticFile,
   sessionCookieHeader,
   webhookBaseUrl,
+  writeCanonicalRedirect,
 } = require("../billingOrigin");
 const { startCheckout } = require("../startCheckout");
 
@@ -51,6 +53,22 @@ test("308s www to apex while preserving path and query", () => {
   );
   assert.equal(canonicalRedirectLocation(req("thedispatch.uk", "/?checkout=1")), null);
   assert.equal(canonicalRedirectLocation(req("localhost:5000", "/")), null);
+
+  const headers = {};
+  let status;
+  let ended = false;
+  const res = {
+    writeHead(code, next) { status = code; Object.assign(headers, next); },
+    end() { ended = true; },
+  };
+  assert.equal(writeCanonicalRedirect(req("www.thedispatch.uk", "/__auth/subscribe"), res), true);
+  assert.equal(status, 308);
+  assert.equal(headers.Location, "https://thedispatch.uk/__auth/subscribe");
+  assert.equal(ended, true);
+  assert.equal(writeCanonicalRedirect(req("thedispatch.uk", "/"), {
+    writeHead() { throw new Error("apex must not redirect"); },
+    end() {},
+  }), false);
 });
 
 test("sets Secure and Domain cookies on production hosts only", () => {
@@ -142,6 +160,18 @@ test("startCheckout does not bounce a signed-in member to subscribe", async () =
   assert.equal(result.ok, false);
   assert.equal(result.signedIn, true);
   assert.deepEqual(assigned, []);
+});
+
+test("app.js _startCheckout includes credentials and reuses /api/me.checkoutSession", () => {
+  const src = fs.readFileSync(path.join(__dirname, "..", "app.js"), "utf8");
+  const start = src.indexOf("async function _startCheckout");
+  const end = src.indexOf("async function runPortfolioAI");
+  assert.ok(start >= 0 && end > start, "expected _startCheckout in app.js");
+  const fn = src.slice(start, end);
+  assert.match(fn, /credentials:\s*['"]include['"]/);
+  assert.match(fn, /\/api\/me/);
+  assert.match(fn, /checkoutSession/);
+  assert.match(fn, /me\?\.id/);
 });
 
 test("startCheckout sends guests to subscribe only when /api/me has no account", async () => {
