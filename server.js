@@ -19,6 +19,15 @@ const {
   getStripeSync,
   getUncachableStripeClient,
 } = require("./stripeClient");
+const {
+  clearSessionCookieHeader,
+  isStripeWebhookPath,
+  publicUrl,
+  resolveStaticFile,
+  sessionCookieHeader,
+  webhookBaseUrl,
+  writeCanonicalRedirect,
+} = require("./billingOrigin");
 
 const root = __dirname;
 const checkoutLocks = new Map();
@@ -83,12 +92,12 @@ async function currentUser(req) {
     WHERE s.token_hash=${tokenHash(token)} AND s.expires_at > NOW() LIMIT 1) uq`;
   return result[0]?.data?.[0] || null;
 }
-async function setSession(res, user, oldToken = null) {
+async function setSession(req, res, user, oldToken = null) {
   const token = crypto.randomBytes(32).toString("hex");
   await sql`INSERT INTO dispatch_sessions (token_hash, user_id, expires_at)
     VALUES (${tokenHash(token)}, ${user.id}, NOW() + INTERVAL '30 days')`;
   if (oldToken) await sql`DELETE FROM dispatch_sessions WHERE token_hash=${tokenHash(oldToken)}`;
-  res.setHeader("Set-Cookie", `dispatch_session=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`);
+  res.setHeader("Set-Cookie", sessionCookieHeader(token, req));
 }
 function passwordHash(password, salt = crypto.randomBytes(16).toString("hex")) {
   const hash = crypto.scryptSync(String(password), salt, 64).toString("hex");
@@ -539,24 +548,15 @@ async function twelveDataQuote(symbols) {
   }
 }
 function serveStatic(req, res, pathname) {
-  const requested = pathname === "/" ? "/index.html" : pathname;
-  const file = path.normalize(path.join(root, requested));
-  if (!file.startsWith(root) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return false;
-  const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".json": "application/json", ".txt": "text/plain" };
+  const file = resolveStaticFile(root, pathname);
+  if (!file || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return false;
+  const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".json": "application/json", ".txt": "text/plain", ".xml": "application/xml" };
   res.writeHead(200, {
     "Content-Type": types[path.extname(file)] || "application/octet-stream",
     "Cache-Control": "no-store",
   });
   fs.createReadStream(file).pipe(res);
   return true;
-}
-
-function publicUrl(req) {
-  const domain = process.env.REPLIT_DOMAINS?.split(",")[0];
-  if (domain) return `https://${domain}`;
-  const forwardedProtocol = String(req.headers["x-forwarded-proto"] || "").split(",")[0];
-  const protocol = forwardedProtocol === "https" ? "https" : "http";
-  return `${protocol}://${req.headers.host || `localhost:${PORT}`}`;
 }
 function premiumFromSubscription(subscription) {
   return ["active", "trialing"].includes(subscription?.status);
@@ -610,9 +610,9 @@ async function initializeStripe() {
     if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is unavailable.");
     await runMigrations({ databaseUrl: process.env.DATABASE_URL });
     const sync = await getStripeSync();
-    const domain = process.env.REPLIT_DOMAINS?.split(",")[0];
-    if (!domain) throw new Error("REPLIT_DOMAINS is unavailable for managed Stripe webhooks.");
-    await sync.findOrCreateManagedWebhook(`https://${domain}/api/stripe/webhook`, {
+    const webhookOrigin = webhookBaseUrl();
+    if (!webhookOrigin) throw new Error("DISPATCH_PUBLIC_ORIGIN or REPLIT_DOMAINS is required for managed Stripe webhooks.");
+    await sync.findOrCreateManagedWebhook(`${webhookOrigin}/api/stripe/webhook`, {
       enabled_events: [
         "checkout.session.completed",
         "customer.subscription.created",
@@ -644,6 +644,7 @@ function assertTestDatabaseIsolation() {
 }
 
 async function handle(req, res) {
+  if (writeCanonicalRedirect(req, res)) return;
   const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const p = url.pathname;
   if (p === "/__auth/login" && req.method === "GET") return page(res, "Sign in · The Dispatch", `<h1>THE DISPATCH</h1><p>Sign in to your market intelligence workspace.</p><form method="post"><label>Email</label><input name="email" type="email" required><label>Password</label><input name="password" type="password" minlength="8" required><button>Sign in</button></form><p class="muted"><a href="/__auth/recover">Forgot your password?</a></p><p class="muted">New here? Start your Premium checkout to create a Dispatch sign-in.</p>`);
@@ -680,7 +681,7 @@ async function handle(req, res) {
     if (!user || !validAccountInput(email, password) || !validPassword(password, user.passwordHash)) {
       return page(res, "Sign in", "<h1>Sign in failed</h1><p>Check your email and password, or start Premium to create an account.</p><a href='/__auth/login'>Try again</a>");
     }
-    await setSession(res, user, cookieValue(req, "dispatch_session")); res.writeHead(302, { Location: "/" }); return res.end();
+    await setSession(req, res, user, cookieValue(req, "dispatch_session")); res.writeHead(302, { Location: "/" }); return res.end();
   }
   if (p === "/__auth/subscribe" && req.method === "GET") {
     const user = await currentUser(req);
@@ -703,11 +704,11 @@ async function handle(req, res) {
         user = { id: crypto.randomUUID(), email, passwordHash: passwordHash(password), tier: "free", billingPortal: false };
         await sql`INSERT INTO dispatch_users (id, email, password_hash) VALUES (${user.id}, ${user.email}, ${user.passwordHash})`;
       }
-      await setSession(res, user, cookieValue(req, "dispatch_session"));
+      await setSession(req, res, user, cookieValue(req, "dispatch_session"));
     }
     res.writeHead(302, { Location: "/?checkout=1" }); return res.end();
   }
-  if (p === "/__auth/logout") { const token = cookieValue(req, "dispatch_session"); if (token) await sql`DELETE FROM dispatch_sessions WHERE token_hash=${tokenHash(token)}`; res.setHeader("Set-Cookie", "dispatch_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"); res.writeHead(302, { Location: "/" }); return res.end(); }
+  if (p === "/__auth/logout") { const token = cookieValue(req, "dispatch_session"); if (token) await sql`DELETE FROM dispatch_sessions WHERE token_hash=${tokenHash(token)}`; res.setHeader("Set-Cookie", clearSessionCookieHeader(req)); res.writeHead(302, { Location: "/" }); return res.end(); }
 
   if (p === "/api/me") return json(res, 200, publicUser(await currentUser(req)));
   if (p === "/api/stripe-status") return json(res, 200, {
@@ -715,7 +716,7 @@ async function handle(req, res) {
     configured: stripeState.ready,
     mode: stripeState.mode,
   });
-  if (p === "/api/stripe/webhook" && req.method === "POST") {
+  if (isStripeWebhookPath(p) && req.method === "POST") {
     const signature = req.headers["stripe-signature"];
     if (!signature || Array.isArray(signature)) return json(res, 400, { error: "Missing stripe-signature" });
     try {
