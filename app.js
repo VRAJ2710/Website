@@ -5133,7 +5133,16 @@ function spark(tk,w=90,h=22,_skipLazy){
   const pts=d.map((v,i)=>`${(i/(d.length-1))*w},${h-((v-mn)/rng)*h*0.8-h*0.08}`).join(" ");
   return `<svg role="img" aria-label="${tk} intraday sparkline" width="${w}" height="${h}" style="display:block"><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.3"/></svg>`;
 }
-// Compact status pill — LIVE / DELAYED / STALE / CACHED / NO SYNC
+function _feedStatusLabel(d) {
+  if (!d || d.status === "unavailable") return "NO SYNC";
+  if (d.status === "extended" || d.status === "rth-close" || d.status === "closed") return d.label || (d.status === "extended" ? "EXT·HRS" : "RTH CLOSE");
+  if (d.status === "live") return d.label || "LIVE";
+  if (d.status === "stale") return "STALE";
+  if (d.status === "cached") return "CACHED";
+  if (d.status === "proxy") return d.label || "PROXY";
+  return d.label || "DELAYED";
+}
+// Compact status pill — LIVE / DELAYED / STALE / CACHED / EXT / RTH CLOSE / NO SYNC
 function stat(tk){
   const d=fp(tk);
   const s=d.status||"unavailable";
@@ -7343,7 +7352,7 @@ function renderP2() {
     const sign = ch != null && ch >= 0 ? '+' : '';
     const arrow = ch == null || ch === 0 ? '' : (ch > 0 ? '↑' : '↓');
     const isLive = liveSymbols.has(a.tk);
-    const feedLbl = na ? 'NO SYNC' : (d.status === 'live' ? 'LIVE' : d.status === 'stale' ? 'STALE' : d.status === 'cached' ? 'CACHED' : 'DELAYED');
+    const feedLbl = _feedStatusLabel(d);
     const scoreCol = a.sc >= 75 ? 'var(--gn)' : a.sc >= 50 ? 'var(--bl)' : a.sc >= 35 ? 'var(--gd)' : 'var(--rd)';
     const money = a.cat === 'Stock' || a.cat === 'Crypto' || a.cat === 'Commodity';
 
@@ -8948,7 +8957,7 @@ function _patchP2LiveHeader(){
   const sign=chN!=null&&chN>=0?"+":"";
   const arrow=chN==null||chN===0?"":(chN>0?"↑":"↓");
   const money=a.cat==="Stock"||a.cat==="Crypto"||a.cat==="Commodity";
-  const feedLbl=na?"NO SYNC":(d.status==="live"?"LIVE":d.status==="stale"?"STALE":d.status==="cached"?"CACHED":"DELAYED");
+  const feedLbl=_feedStatusLabel(d);
   const priceEl=document.querySelector('#p2body .ap-price');
   const chgEl=document.querySelector('#p2body .ap-chg');
   if(priceEl){
