@@ -1071,13 +1071,13 @@ function _renderCompare() {
     <thead><tr style="border-bottom:2px solid var(--gb)"><th style="text-align:left;padding:8px;font-size:9px;color:var(--t3)">METRIC</th>${rows.map(r => `<th style="text-align:right;padding:8px;color:var(--gd)">${r.tk}</th>`).join("")}</tr></thead><tbody>`;
   h += `<tr style="border-bottom:1px solid var(--gb)"><td style="padding:8px;color:var(--t3)">Price</td>${rows.map(r => {
     const d = fp(r.tk);
-    const na = d.status === "unavailable";
-    return `<td style="text-align:right;padding:8px;font-weight:700;color:${na?"var(--t3)":"var(--tx)"}">${na?"—":"$"+d.p}</td>`;
+    const na = !hasSyncedQuote(r.tk);
+    return `<td style="text-align:right;padding:8px;font-weight:700;color:${na?"var(--t3)":"var(--tx)"}">${na?"NO LIVE SYNC":"$"+d.p}<div>${asOfTag(r.tk)}</div></td>`;
   }).join("")}</tr>`;
   h += `<tr style="border-bottom:1px solid var(--gb)"><td style="padding:8px;color:var(--t3)">Day %</td>${rows.map(r => {
     const d = fp(r.tk);
-    const na = d.status === "unavailable";
-    const ch = liveChg(r.tk);
+    const na = !hasSyncedQuote(r.tk);
+    const ch = liveChg(r.tk) ?? (na ? null : (typeof P[r.tk]?.c === "number" ? P[r.tk].c : null));
     const c = na || ch == null ? "var(--t3)" : ch > 0 ? "var(--gn)" : ch < 0 ? "var(--rd)" : "var(--t3)";
     return `<td style="text-align:right;padding:8px;color:${c}">${na||ch==null?"—":d.c+"%"}</td>`;
   }).join("")}</tr>`;
@@ -1317,8 +1317,8 @@ const DESK_SPINE = [
 function _renderDeskSpine() {
   const cells = DESK_SPINE.map(s => {
     const d = fp(s.tk);
-    const synced = d.status !== "unavailable";
-    const chN = liveChg(s.tk);
+    const synced = hasSyncedQuote(s.tk);
+    const chN = liveChg(s.tk) ?? (synced && typeof P[s.tk]?.c === "number" ? P[s.tk].c : null);
     const col = !synced || chN == null ? "var(--t3)" : chN > 0 ? "var(--gn)" : chN < 0 ? "var(--rd)" : "var(--t3)";
     const chg = !synced || chN == null ? "—" : `${chN >= 0 ? "+" : ""}${d.c}%`;
     const title = _escAttr(`${s.lbl} · ${d.label || "NO SYNC"}${d.asOf ? ` · as of ${_fmtAsOf(d.asOf)}` : ""} · ${d.detail || "tap for Lab"}`);
@@ -3307,21 +3307,24 @@ function _renderGeoMacroTiles() {
 }
 
 function _geoEnergyRow(label, tk, fallbackTk) {
-  // Prefer live primary; optional live fallback (never invent % from "—")
+  // Prefer the requested symbol; optional fallback. Retained values remain
+  // useful context, but their status is kept visible instead of erased.
   let d = null, used = tk, via = "";
-  if (liveSymbols.has(tk)) d = fp(tk);
-  if ((!d || d.status === "unavailable") && fallbackTk && liveSymbols.has(fallbackTk)) {
+  if (hasSyncedQuote(tk)) d = fp(tk);
+  if ((!d || !hasSyncedQuote(used)) && fallbackTk && hasSyncedQuote(fallbackTk)) {
     d = fp(fallbackTk);
     used = fallbackTk;
     via = " · via " + fallbackTk;
   }
-  if (!d || d.status === "unavailable") {
-    return `<div class="geo-energy-row"><span>${label}</span><span style="color:var(--t3)">—</span></div>`;
+  if (!d || !hasSyncedQuote(used)) {
+    const context = fp(used);
+    return `<div class="geo-energy-row"><span>${label}${via}</span><span style="color:var(--t3)">NO LIVE SYNC${context.status !== "unavailable" ? ` · ${context.label}` : ""}</span></div>`;
   }
-  const chN = liveChg(used);
+  const chN = liveChg(used) ?? (typeof P[used]?.c === "number" ? P[used].c : null);
   const col = chN == null ? "var(--t3)" : chN > 0 ? "var(--gn)" : chN < 0 ? "var(--rd)" : "var(--t3)";
   const sign = chN != null && chN >= 0 ? "+" : "";
-  return `<div class="geo-energy-row"><span>${label}${via}</span><span style="color:${col}">${d.p} (${chN != null ? sign + Number(chN).toFixed(2) : d.c}%)</span></div>`;
+  const statusNote = _quoteMeta(used).status === "live" ? "" : ` · ${_quoteMeta(used).label}`;
+  return `<div class="geo-energy-row"><span>${label}${via}</span><span style="color:${col}">${d.p}${chN != null ? ` (${sign}${Number(chN).toFixed(2)}%)` : ""}${statusNote}</span></div>`;
 }
 
 function _renderEnergyShockPanel() {
@@ -4296,6 +4299,11 @@ let priceFetchCount=0,priceErrorCount=0;
 let liveSymbols=new Set(); // symbols with confirmed feed data (never show seed as live)
 let liveQuoteTs={}; // tk -> epoch ms last successful quote
 let liveQuoteSrc={}; // tk -> yahoo | coingecko | finnhub | session-cache
+let liveQuoteMarketClosed={}; // tk -> provider explicitly reported a closed session
+const CONTINUOUS_TAPE_TICKERS = Object.freeze(["XAU", "EURUSD", "BTC", "ETH"]);
+function _isContinuousTapeTicker(tk) {
+  return CONTINUOUS_TAPE_TICKERS.includes(tk);
+}
 let _priceFetchAttempted=false;
 let _stripeMode=null; // null | "test" | "live" | "unknown"
 const PRICE_CACHE_KEY="td_price_cache_v2";
@@ -4324,6 +4332,7 @@ function _savePriceCache(){
       live:[...liveSymbols],
       quoteTs:Object.fromEntries([...liveSymbols].map(tk=>[tk,liveQuoteTs[tk]||Date.now()])),
       quoteSrc:Object.fromEntries([...liveSymbols].map(tk=>[tk,liveQuoteSrc[tk]||"session-cache"])),
+      quoteClosed:Object.fromEntries([...liveSymbols].map(tk=>[tk,!!liveQuoteMarketClosed[tk]])),
     };
     sessionStorage.setItem(PRICE_CACHE_KEY,JSON.stringify(payload));
   }catch(e){}
@@ -4347,6 +4356,7 @@ function _loadPriceCache(){
       // Restored session quotes are cached — never pretend they just hit the wire
       liveQuoteTs[tk]=data.quoteTs?.[tk]||data.ts;
       liveQuoteSrc[tk]=data.quoteSrc?.[tk]||"session-cache";
+      liveQuoteMarketClosed[tk]=_isContinuousTapeTicker(tk)?false:!!data.quoteClosed?.[tk];
       n++;
     });
     if(!n)return false;
@@ -4376,6 +4386,8 @@ function _applyLiveQuote(tk, q, source) {
     ? sourceFetchedAt
     : Date.now();
   liveQuoteSrc[tk] = source || "yahoo";
+  // Continuous names (metals/FX/crypto) never inherit a cash-session close flag.
+  liveQuoteMarketClosed[tk] = _isContinuousTapeTicker(tk) ? false : !!q.marketClosed;
   return true;
 }
 /** Raw numeric price only when feed-confirmed — never seed */
@@ -4388,6 +4400,31 @@ function liveChg(tk) {
   if (!liveSymbols.has(tk)) return null;
   const c = P[tk]?.c;
   return typeof c === "number" && isFinite(c) ? c : null;
+}
+/** Twelve Data / CoinGecko primaries only. Do not widen this to delayed. */
+function isPrimaryLiveQuote(tk) {
+  return _quoteMeta(tk).status === "live";
+}
+/** Finite print that is not unavailable — includes Yahoo/Finnhub delayed and rth-close. */
+function hasSyncedQuote(tk) {
+  const p = P[tk]?.p;
+  return typeof p === "number" && isFinite(p) && p > 0 && _quoteMeta(tk).status !== "unavailable";
+}
+function quoteStatusCounts(tickers = (typeof A !== "undefined" ? A.map(a => a.tk) : [])) {
+  const counts = { live: 0, closed: 0, "rth-close": 0, cached: 0, delayed: 0, stale: 0, proxy: 0, unavailable: 0 };
+  [...new Set((tickers || []).filter(Boolean))].forEach(tk => {
+    const status = _quoteMeta(tk).status;
+    counts[Object.prototype.hasOwnProperty.call(counts, status) ? status : "unavailable"] += 1;
+  });
+  return counts;
+}
+function quoteStatusSummary(tickers, options) {
+  const includeUnavailable = options?.includeUnavailable === true;
+  const counts = quoteStatusCounts(tickers);
+  return ["live", "closed", "rth-close", "cached", "delayed", "stale", "proxy", ...(includeUnavailable ? ["unavailable"] : [])]
+    .filter(status => counts[status] > 0)
+    .map(status => `${counts[status]} ${status.toUpperCase()}`)
+    .join(" · ") || "AWAITING FEED";
 }
 
 /** Honest provenance for a quote — seed is never “live” */
@@ -4430,7 +4467,13 @@ function _quoteMeta(tk) {
     label = "DELAYED";
     detail = "Yahoo Finance via Dispatch proxy — free retail feed, not Bloomberg";
   }
-  if (ageMs != null && ageMs > PRICE_STALE_MS && status !== "unavailable") {
+  const cashClosed = !_isContinuousTapeTicker(tk) && !!liveQuoteMarketClosed[tk];
+  if (cashClosed) {
+    status = "rth-close";
+    label = "RTH CLOSE";
+    detail = "Regular US cash session closed — last RTH print retained";
+  }
+  if (ageMs != null && ageMs > PRICE_STALE_MS && status !== "unavailable" && status !== "cached" && status !== "closed" && status !== "rth-close") {
     status = "stale";
     label = "STALE";
     detail = `Last feed tick ${_fmtAge(ts)} ago — treat carefully`;
@@ -4472,11 +4515,9 @@ async function _initStripeMode() {
 }
 
 function _renderTrustBar() {
-  const nLive = [...liveSymbols].filter(tk => _quoteMeta(tk).status === "live").length;
-  const nDel = [...liveSymbols].filter(tk => {
-    const s = _quoteMeta(tk).status;
-    return s === "delayed" || s === "stale" || s === "cached";
-  }).length;
+  const feedCounts = quoteStatusCounts([...liveSymbols]);
+  const nLive = feedCounts.live;
+  const nDel = feedCounts.delayed + feedCounts.stale + feedCounts.cached + feedCounts.closed + feedCounts["rth-close"] + feedCounts.proxy;
   const asOf = priceLastFetch ? _fmtAsOf(priceLastFetch.getTime()) : "—";
   const age = priceLastFetch ? _fmtAge(priceLastFetch.getTime()) : "never";
   const hasTwelveData = [...liveSymbols].some(tk => liveQuoteSrc[tk] === "twelve-data");
@@ -4514,8 +4555,14 @@ async function fetchFinnhubQuote(symbol){
     const res=await fetch(`/api/finnhub?endpoint=quote&symbol=${encodeURIComponent(symbol)}`,{signal:AbortSignal.timeout(10000)});
     if(!res.ok)return null;
     const d=await res.json();
-    if(!d||typeof d.c!=="number"||d.c===0)return null;
-    return {p:d.c,c:d.dp||0,prev:d.pc||d.c,change:d.d||0};
+    if(!d||typeof d!=="object")return null;
+    // Server /api/finnhub quote is Yahoo-backed ({p,c,prev}). Native Finnhub is {c,dp,pc}.
+    // Prefer d.p so a Yahoo percent in d.c is never treated as the last price.
+    if(typeof d.p==="number"&&isFinite(d.p)&&d.p>0)
+      return {p:d.p,c:typeof d.c==="number"?d.c:0,prev:typeof d.prev==="number"&&d.prev>0?d.prev:d.p,change:typeof d.change==="number"?d.change:0};
+    if(typeof d.c==="number"&&d.c!==0)
+      return {p:d.c,c:d.dp||0,prev:d.pc||d.c,change:d.d||0};
+    return null;
   }catch(e){return null;}
 }
 
@@ -4647,6 +4694,21 @@ async function fetchOneTicker(ticker){
   return {p:q.p, c:q.c, prev:q.prev, source:"finnhub"};
 }
 
+async function _fetchFinnhubPriceFallback(symbols) {
+  let hits = 0;
+  const eligible = (symbols || []).filter(tk => tk && !["XAU","DXY","^TNX","^VIX"].includes(tk) && /^[A-Z][A-Z0-9.-]{0,9}$/.test(tk));
+  await Promise.all(eligible.map(async tk => {
+    try {
+      const symbol = (typeof YAHOO_SYMBOLS !== "undefined" && YAHOO_SYMBOLS[tk]) || tk;
+      const r = await fetch(`/api/finnhub?endpoint=quote&symbol=${encodeURIComponent(symbol)}`, { signal: AbortSignal.timeout(10000) });
+      if (!r.ok) return;
+      const q = await r.json();
+      if (_applyLiveQuote(tk, q, "finnhub")) hits++;
+    } catch {}
+  }));
+  return hits;
+}
+
 async function _fetchYahooPriceChunk(chunk) {
   // CoinGecko-primary crypto: skip Yahoo first pass (UNI/APT/SUI/TON Yahoo pairs are often junk)
   // Majors in YAHOO_CRYPTO_OK still fill from Yahoo so tape works if CG is 429'd
@@ -4661,17 +4723,23 @@ async function _fetchYahooPriceChunk(chunk) {
   const yhSyms = [...new Set(filtered.map(tk => YAHOO_SYMBOLS[tk]).filter(Boolean))];
   if (!yhSyms.length) return 0;
   let hits = 0;
+  const missing = [];
   try {
     const res = await fetch(`/api/yahoo-quote?symbols=${encodeURIComponent(yhSyms.join(","))}`, { signal: AbortSignal.timeout(35000) });
-    if (!res.ok) return 0;
+    if (!res.ok) return await _fetchFinnhubPriceFallback(filtered);
     const yahooData = await res.json();
     filtered.forEach(tk => {
       const yhSym = YAHOO_SYMBOLS[tk];
       // Response may be keyed by desk alias (BTC) or wire (BTC-USD) depending on request
       const q = (yhSym && yahooData[yhSym]) || yahooData[tk];
       if (_applyLiveQuote(tk, q, "yahoo")) hits++;
+      else missing.push(tk);
     });
-  } catch (e) { /* retry next cycle */ }
+  } catch (e) {
+    return await _fetchFinnhubPriceFallback(filtered);
+  }
+  // Partial Yahoo fills previously had no per-symbol fallback for the misses.
+  if (missing.length) hits += await _fetchFinnhubPriceFallback(missing);
   return hits;
 }
 async function fetchTwelveDataPrices() {
@@ -5026,6 +5094,8 @@ function stat(tk){
   const title=_escAttr(`${d.label||s}${d.asOf?` · as of ${_fmtAsOf(d.asOf)} (${d.age})`:""}${d.detail?` · ${d.detail}`:""}`);
   if(s==="live")return `<span class="bd trust-stat trust-stat-live" title="${title}" style="background:var(--gnG);color:var(--gn);font-size:7.5px">${_esc(d.label||"LIVE")}</span>`;
   if(s==="delayed")return `<span class="bd trust-stat trust-stat-delayed" title="${title}" style="background:var(--blG);color:var(--bl);font-size:7.5px">DELAYED</span>`;
+  if(s==="rth-close")return `<span class="bd trust-stat trust-stat-cached" title="${title}" style="background:var(--puG);color:var(--pu);font-size:7.5px">RTH CLOSE</span>`;
+  if(s==="closed")return `<span class="bd trust-stat trust-stat-cached" title="${title}" style="background:var(--puG);color:var(--pu);font-size:7.5px">CLOSED</span>`;
   if(s==="stale")return `<span class="bd trust-stat trust-stat-stale" title="${title}" style="background:var(--gdG);color:var(--gd);font-size:7.5px">STALE</span>`;
   if(s==="cached")return `<span class="bd trust-stat trust-stat-cached" title="${title}" style="background:var(--puG);color:var(--pu);font-size:7.5px">CACHED</span>`;
   return `<span class="bd trust-stat trust-stat-na" title="${title}" style="background:var(--b3);color:var(--t3);font-size:7.5px">NO SYNC</span>`;
@@ -5045,7 +5115,7 @@ let _userBilling=false;
 
 async function _initUserTier(){
   try{
-    const res=await fetch("/api/me",{credentials:"include"});
+    const res=await fetch("/api/me",{credentials:"include",signal:AbortSignal.timeout(12000)});
     if(res.ok){
       const d=await res.json();
       _userTier=d.tier==="premium"?"premium":"free";
