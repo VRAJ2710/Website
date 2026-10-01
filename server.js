@@ -488,9 +488,10 @@ function normaliseGoldDesk(value, quotes) {
 }
 async function yahooQuote(symbols) {
   const out = {};
-  const list = (symbols || []).slice(0, 60).filter(Boolean);
-  // Isolated per symbol: one hung or empty upstream must not drop the rest,
-  // and each request has its own deadline so the batch cannot stall the desk.
+  const requested = (symbols || []).map(symbol => String(symbol || "").trim()).filter(Boolean);
+  // Isolated per symbol, in waves of 40. A longer list must not 400 the desk.
+  for (let i = 0; i < requested.length; i += 40) {
+  const list = requested.slice(i, i + 40);
   await Promise.allSettled(list.map(async symbol => {
     try {
       const u = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d&includePrePost=true`;
@@ -517,6 +518,7 @@ async function yahooQuote(symbols) {
       console.warn(`yahoo-quote failed for ${symbol}:`, error.message || error);
     }
   }));
+  }
   return out;
 }
 async function twelveDataQuote(symbols) {

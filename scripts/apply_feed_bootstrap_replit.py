@@ -13,34 +13,42 @@ import os
 import re
 import sys
 
-CACHE_TOKEN = "pricefix8"
+CACHE_TOKEN = "pricefix9"
 
 YAHOO_CHUNK = """async function _fetchYahooPriceChunk(chunk) {
   const list = (chunk || []).filter(Boolean);
   const wire = tk => (typeof YAHOO_SYMBOLS !== "undefined" && YAHOO_SYMBOLS[tk]) || tk;
-  const yhSyms = [...new Set(list.flatMap(tk => {
-    const primary = wire(tk);
-    return tk === "LUMBER" ? [primary, "WOOD"] : [primary];
-  }).filter(Boolean))];
+  const yhSyms = [...new Set(list.map(wire).filter(Boolean))];
   if (!yhSyms.length) return 0;
   let hits = 0;
+  const data = {};
   const missing = [];
   try {
-    const res = await fetch(`/api/yahoo-quote?symbols=${encodeURIComponent(yhSyms.join(","))}`, { signal: AbortSignal.timeout(12000) });
-    if (!res.ok) return typeof _fetchFinnhubPriceFallback === "function" ? await _fetchFinnhubPriceFallback(list) : 0;
-    const data = await res.json();
+    for (let i = 0; i < yhSyms.length; i += 40) {
+      const batch = yhSyms.slice(i, i + 40);
+      const res = await fetch(`/api/yahoo-quote?symbols=${encodeURIComponent(batch.join(","))}`, { signal: AbortSignal.timeout(12000) });
+      if (!res.ok) continue;
+      Object.assign(data, await res.json());
+    }
     for (const tk of list) {
       const yhSym = YAHOO_SYMBOLS[tk] || tk;
-      const primary = data && (data[yhSym] || data[tk]);
-      const lumberEtf = tk === "LUMBER" && !(primary && primary.p > 0) && data && data.WOOD && data.WOOD.p > 0
-        ? { ...data.WOOD, name: data.WOOD.name || "Lumber ETF proxy (WOOD)" }
-        : null;
-      const q = (primary && primary.p > 0) ? primary : lumberEtf;
-      if (q && _applyLiveQuote(tk, q, "yahoo")) hits++;
+      const q = data && (data[yhSym] || data[tk]);
+      if (q && q.p > 0 && _applyLiveQuote(tk, q, "yahoo")) hits++;
       else missing.push(tk);
     }
+    if (missing.includes("LUMBER")) {
+      const woodRes = await fetch(`/api/yahoo-quote?symbols=${encodeURIComponent("WOOD")}`, { signal: AbortSignal.timeout(12000) });
+      if (woodRes.ok) {
+        const woodData = await woodRes.json();
+        const wood = woodData && woodData.WOOD;
+        if (wood && wood.p > 0 && _applyLiveQuote("LUMBER", { ...wood, name: wood.name || "Lumber ETF proxy (WOOD)" }, "yahoo")) {
+          hits++;
+          missing.splice(missing.indexOf("LUMBER"), 1);
+        }
+      }
+    }
   } catch (e) {
-    return typeof _fetchFinnhubPriceFallback === "function" ? await _fetchFinnhubPriceFallback(list) : 0;
+    return typeof _fetchFinnhubPriceFallback === "function" ? await _fetchFinnhubPriceFallback(list) : hits;
   }
   if (missing.length && typeof _fetchFinnhubPriceFallback === "function") {
     hits += await _fetchFinnhubPriceFallback(missing);
@@ -153,18 +161,6 @@ def patch_rss(src: str, url_to_id: dict[str, str]) -> tuple[str, bool]:
     return src[:start] + block2 + src[tag:], changed
 
 
-LUMBER_Q_PROD = """      const yhSym = YAHOO_SYMBOLS[tk] || tk;
-      const primary = data && (data[yhSym] || data[tk]);
-      const lumberEtf = tk === "LUMBER" && !(primary && primary.p > 0) && data && data.WOOD && data.WOOD.p > 0
-        ? { ...data.WOOD, name: data.WOOD.name || "Lumber ETF proxy (WOOD)" }
-        : null;
-      const q = (primary && primary.p > 0) ? primary : lumberEtf;
-      if (q && _applyLiveQuote(tk, q, "yahoo")) hits++;"""
-
-LUMBER_Q_PROD_OLD = """      const yhSym = YAHOO_SYMBOLS[tk] || tk;
-      const q = data && (data[yhSym] || data[tk]);
-      if (q && _applyLiveQuote(tk, q, "yahoo")) hits++;"""
-
 REFERENCE_PX_OLD = (
     'if (!retained || (!["live", "proxy"].includes(meta.status) || '
     '(meta.proxy && ["cached", "stale", "delayed", "proxy"].includes(meta.status)))) return null;\n'
@@ -190,24 +186,13 @@ def patch_lumber_and_dxy(src: str) -> tuple[str, list[str]]:
     if '!["XAU","DXY"].includes(tk)' in src:
         src = src.replace('!["XAU","DXY"].includes(tk)', 'tk!=="XAU"')
         notes.append("DXY included in Yahoo chunks")
-    compact_req = 'const wire=(chunk||[]).map(tk=>(typeof YAHOO_SYMBOLS!=="undefined"&&YAHOO_SYMBOLS[tk])?YAHOO_SYMBOLS[tk]:tk);'
-    compact_req_new = 'const wire=(chunk||[]).flatMap(tk=>{const primary=(typeof YAHOO_SYMBOLS!=="undefined"&&YAHOO_SYMBOLS[tk])?YAHOO_SYMBOLS[tk]:tk;return tk==="LUMBER"?[primary,"WOOD"]:[primary];});'
-    compact_loop = 'for(const tk of chunk){const ysym=(typeof YAHOO_SYMBOLS!=="undefined"&&YAHOO_SYMBOLS[tk])?YAHOO_SYMBOLS[tk]:tk;const q=data&&(data[ysym]||data[tk]);if(q&&_applyLiveQuote(tk,q,\'yahoo\'))hits++}'
-    compact_loop_new = 'for(const tk of chunk){const ysym=(typeof YAHOO_SYMBOLS!=="undefined"&&YAHOO_SYMBOLS[tk])?YAHOO_SYMBOLS[tk]:tk;const primary=data&&(data[ysym]||data[tk]);const lumberEtf=tk==="LUMBER"&&!(primary&&primary.p>0)&&data&&data.WOOD&&data.WOOD.p>0?{...data.WOOD,name:data.WOOD.name||"Lumber ETF proxy (WOOD)"}:null;const q=(primary&&primary.p>0)?primary:lumberEtf;if(q&&_applyLiveQuote(tk,q,\'yahoo\'))hits++}'
-    if compact_loop in src and "Lumber ETF proxy (WOOD)" not in src:
-        src = src.replace(compact_req, compact_req_new, 1).replace(compact_loop, compact_loop_new, 1)
-        notes.append("lumber WOOD fallback")
-    if "Lumber ETF proxy (WOOD)" not in src and LUMBER_Q_PROD_OLD in src:
-        src = src.replace(LUMBER_Q_PROD_OLD, LUMBER_Q_PROD, 1)
-        src = src.replace(
-            "const yhSyms = [...new Set(list.map(wire).filter(Boolean))];",
-            """const yhSyms = [...new Set(list.flatMap(tk => {
-    const primary = wire(tk);
-    return tk === "LUMBER" ? [primary, "WOOD"] : [primary];
-  }).filter(Boolean))];""",
-            1,
-        )
-        notes.append("lumber WOOD fallback")
+    start, end, body = function_span(src, "_fetchYahooPriceChunk")
+    wood_in_batch = '?[primary,"WOOD"]' in body or '? [primary, "WOOD"]' in body
+    capped = "i + 40" in body
+    separate_wood = 'encodeURIComponent("WOOD")' in body
+    if wood_in_batch or not capped or not separate_wood:
+        src = src[:start] + YAHOO_CHUNK + src[end:]
+        notes.append("yahoo batches of 40; WOOD is a follow-up")
     if REFERENCE_PX_OLD in src:
         src = src.replace(REFERENCE_PX_OLD, REFERENCE_PX_NEW, 1)
         notes.append("front door keeps a fresh DXY print")
@@ -250,6 +235,25 @@ def patch_server(root: str) -> list[str]:
     if n:
         src = replaced
         notes.append("rss redirects followed")
+    capped, n_cap = re.subn(
+        r"if\s*\([^;\n]{0,160}\.length\s*>\s*40\s*\)\s*return\s+json\(\s*res\s*,\s*400\s*,\s*\{\s*error:\s*[\"']Too many Yahoo symbols requested\.[\"']\s*\}\s*\)\s*;",
+        "/* Yahoo quotes are fetched in batches of 40; a longer list must not 400 the chunk. */",
+        src,
+        count=1,
+    )
+    if n_cap == 0 and "Too many Yahoo symbols requested" in src:
+        capped, n_cap = re.subn(
+            r"if\s*\([^)]{0,160}\.length\s*>\s*40\s*\)\s*\{[^}]*Too many Yahoo symbols requested[^}]*\}",
+            "/* Yahoo quotes are fetched in batches of 40; a longer list must not 400 the chunk. */",
+            src,
+            count=1,
+            flags=re.S,
+        )
+    if n_cap:
+        src = capped
+        notes.append("yahoo symbol cap no longer 400s")
+    elif "Too many Yahoo symbols requested" in src:
+        fail("yahoo symbol cap still returns HTTP 400")
     elif 'redirect: "error"' in src or "redirect: 'error'" in src:
         fail('server.js still refuses RSS redirects')
     if src != original:

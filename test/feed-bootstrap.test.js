@@ -29,6 +29,27 @@ test("lumber uses a live Yahoo contract and DXY stays on the Yahoo tape", () => 
   assert.match(prices, /PRICE_PRIORITY\.filter\(tk=>YAHOO_SYMBOLS\[tk\]\)/);
 });
 
+test("a full lumber chunk stays at 40 Yahoo symbols and applies LBR=F", () => {
+  const fn = sliceFn(APP, "_fetchYahooPriceChunk");
+  assert.match(fn, /slice\(i, i \+ 40\)/);
+  assert.match(fn, /encodeURIComponent\("WOOD"\)/);
+  assert.doesNotMatch(fn, /\?\s*\[primary,\s*"WOOD"\]/);
+  const tickers = Array.from({ length: 39 }, (_, i) => `T${i}`);
+  tickers.push("LUMBER");
+  const map = Object.fromEntries(tickers.map(tk => [tk, tk === "LUMBER" ? "LBR=F" : tk]));
+  const symbols = [...new Set(tickers.map(tk => map[tk] || tk).filter(Boolean))];
+  assert.equal(symbols.length, 40);
+  assert.equal(symbols.includes("LBR=F"), true);
+  assert.equal(symbols.includes("WOOD"), false);
+  for (let i = 0; i < symbols.length; i += 40) {
+    assert.ok(symbols.slice(i, i + 40).length <= 40);
+  }
+  const payload = { "LBR=F": { p: 531, c: 0.4, prev: 529 }, WOOD: { p: 67.22, c: 0.1, prev: 67 } };
+  const primary = payload["LBR=F"] || payload.LUMBER;
+  assert.equal(primary.p, 531);
+  assert.ok(primary.p > 0);
+});
+
 test("RSS_FEEDS literals carry allowlist ids f0..f25", () => {
   const start = APP.indexOf("const RSS_FEEDS = [");
   const end = APP.indexOf("const TAG_RULES", start);
@@ -96,7 +117,8 @@ async function after(){}
   const out = fs.readFileSync(path.join(dir, "app.js"), "utf8");
   const fn = sliceFn(out, "_fetchYahooPriceChunk");
   assert.doesNotMatch(fn, /chunk\.join/);
-  assert.match(fn, /yhSyms\.join/);
+  assert.match(fn, /batch\.join/);
+  assert.match(fn, /i \+ 40/);
   assert.match(fn, /const yhSym = YAHOO_SYMBOLS\[tk\] \|\| tk/);
   assert.match(fn, /data\[yhSym\] \|\| data\[tk\]/);
   assert.match(fn, /_applyLiveQuote\(tk, q, "yahoo"\)/);
@@ -106,8 +128,8 @@ async function after(){}
   assert.match(out, /\{id:"f1",url:"https:\/\/www\.cnbc\.com\/id\/100003114\/device\/rss\/rss\.html"/);
   assert.match(out, /id:feed\.id\|\|`f\$\{id\}`/);
   const html = fs.readFileSync(path.join(dir, "index.html"), "utf8");
-  assert.match(html, /app\.js\?v=pricefix8/);
-  assert.match(html, /var V='TD-pricefix8'/);
+  assert.match(html, /app\.js\?v=pricefix9/);
+  assert.match(html, /var V='TD-pricefix9'/);
   const again = spawnSync("python3", [script, dir], { encoding: "utf8" });
   assert.equal(again.status, 0, again.stderr || again.stdout);
   assert.equal(fs.readFileSync(path.join(dir, "app.js"), "utf8"), out);
@@ -122,11 +144,11 @@ const TAG_RULES = {};
 LUMBER:"LBS=F",
 async function _fetchYahooPriceChunk(chunk) {
  try {
-  const wire=(chunk||[]).map(tk=>(typeof YAHOO_SYMBOLS!=="undefined"&&YAHOO_SYMBOLS[tk])?YAHOO_SYMBOLS[tk]:tk);
+  const wire=(chunk||[]).flatMap(tk=>{const primary=(typeof YAHOO_SYMBOLS!=="undefined"&&YAHOO_SYMBOLS[tk])?YAHOO_SYMBOLS[tk]:tk;return tk==="LUMBER"?[primary,"WOOD"]:[primary];});
   const res=await fetch(\`/api/yahoo-quote?symbols=\${encodeURIComponent(wire.join(','))}\`,{signal:AbortSignal.timeout(12000)});
   if(!res.ok){await _fetchFinnhubPriceFallback(chunk);return 0}
   const data=await res.json();let hits=0;
-  for(const tk of chunk){const ysym=(typeof YAHOO_SYMBOLS!=="undefined"&&YAHOO_SYMBOLS[tk])?YAHOO_SYMBOLS[tk]:tk;const q=data&&(data[ysym]||data[tk]);if(q&&_applyLiveQuote(tk,q,'yahoo'))hits++}
+  for(const tk of chunk){const ysym=(typeof YAHOO_SYMBOLS!=="undefined"&&YAHOO_SYMBOLS[tk])?YAHOO_SYMBOLS[tk]:tk;const primary=data&&(data[ysym]||data[tk]);const lumberEtf=tk==="LUMBER"&&!(primary&&primary.p>0)&&data&&data.WOOD&&data.WOOD.p>0?{...data.WOOD,name:data.WOOD.name||"Lumber ETF proxy (WOOD)"}:null;const q=(primary&&primary.p>0)?primary:lumberEtf;if(q&&_applyLiveQuote(tk,q,'yahoo'))hits++}
   if(!hits)hits+=await _fetchFinnhubPriceFallback(chunk);return hits;
  }catch{return await _fetchFinnhubPriceFallback(chunk)}
 }
@@ -148,6 +170,7 @@ async function after(){}
 `);
   fs.writeFileSync(path.join(dir, "server.js"), `const { approvedRssFeedUrl } = require("./rssFeeds");
 async function rssFeed(){
+  if (symbols.length > 40) return json(res, 400, { error: "Too many Yahoo symbols requested." });
   try {
     const response = await fetch(feedUrl, {
       headers: { "User-Agent": "DispatchMarkets/1.0" },
@@ -169,7 +192,10 @@ async function rssFeed(){
   assert.doesNotMatch(out, /LBS=F/);
   assert.match(out, /LUMBER:"LBR=F"/);
   assert.match(out, /Lumber ETF proxy \(WOOD\)/);
-  assert.match(out, /"WOOD"/);
+  assert.match(out, /encodeURIComponent\("WOOD"\)/);
+  assert.match(out, /i \+ 40/);
+  assert.doesNotMatch(out, /\?\[primary,"WOOD"\]/);
+  assert.match(out, /data\[yhSym\] \|\| data\[tk\]/);
   assert.doesNotMatch(out, /!\["XAU","DXY"\]/);
   assert.match(out, /tk!=="XAU"/);
   assert.match(out, /meta\.status === "stale"/);
@@ -177,5 +203,6 @@ async function rssFeed(){
   const server = fs.readFileSync(path.join(dir, "server.js"), "utf8");
   assert.match(server, /fetchRssDocument\(feedUrl/);
   assert.doesNotMatch(server, /redirect:\s*"error"/);
+  assert.doesNotMatch(server, /Too many Yahoo symbols requested/);
   assert.equal(fs.existsSync(path.join(dir, "rssFetch.js")), true);
 });

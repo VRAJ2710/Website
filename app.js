@@ -4660,25 +4660,34 @@ async function _fetchYahooPriceChunk(chunk) {
     // Do not replace a fresh real-time Twelve Data core quote with delayed Yahoo.
     return liveQuoteSrc[tk] !== "twelve-data" || Date.now() - (liveQuoteTs[tk] || 0) > TWELVE_DATA_CACHE_WINDOW_MS;
   });
-  const yhSyms = [...new Set(filtered.flatMap(tk => {
-    const primary = YAHOO_SYMBOLS[tk] || tk;
-    return tk === "LUMBER" ? [primary, "WOOD"] : [primary];
-  }).filter(Boolean))];
+  const yhSyms = [...new Set(filtered.map(tk => YAHOO_SYMBOLS[tk] || tk).filter(Boolean))];
   if (!yhSyms.length) return 0;
   let hits = 0;
+  const yahooData = {};
   try {
-    const res = await fetch(`/api/yahoo-quote?symbols=${encodeURIComponent(yhSyms.join(","))}`, { signal: AbortSignal.timeout(35000) });
-    if (!res.ok) return 0;
-    const yahooData = await res.json();
+    // The quote route rejects more than 40 symbols with HTTP 400, which used
+    // to drop the whole chunk (including LUMBER) when WOOD was appended.
+    for (let i = 0; i < yhSyms.length; i += 40) {
+      const batch = yhSyms.slice(i, i + 40);
+      const res = await fetch(`/api/yahoo-quote?symbols=${encodeURIComponent(batch.join(","))}`, { signal: AbortSignal.timeout(35000) });
+      if (!res.ok) continue;
+      Object.assign(yahooData, await res.json());
+    }
+    let lumberNeedsEtf = false;
     filtered.forEach(tk => {
       const yhSym = YAHOO_SYMBOLS[tk] || tk;
-      const primary = (yahooData && (yahooData[yhSym] || yahooData[tk])) || null;
-      const lumberEtf = tk === "LUMBER" && !(primary && primary.p > 0) && yahooData && yahooData.WOOD && yahooData.WOOD.p > 0
-        ? { ...yahooData.WOOD, name: yahooData.WOOD.name || "Lumber ETF proxy (WOOD)" }
-        : null;
-      const q = (primary && primary.p > 0) ? primary : lumberEtf;
-      if (_applyLiveQuote(tk, q, "yahoo")) hits++;
+      const q = (yahooData && (yahooData[yhSym] || yahooData[tk])) || null;
+      if (q && q.p > 0 && _applyLiveQuote(tk, q, "yahoo")) hits++;
+      else if (tk === "LUMBER") lumberNeedsEtf = true;
     });
+    if (lumberNeedsEtf) {
+      const woodRes = await fetch(`/api/yahoo-quote?symbols=${encodeURIComponent("WOOD")}`, { signal: AbortSignal.timeout(12000) });
+      if (woodRes.ok) {
+        const woodData = await woodRes.json();
+        const wood = woodData && woodData.WOOD;
+        if (wood && wood.p > 0 && _applyLiveQuote("LUMBER", { ...wood, name: wood.name || "Lumber ETF proxy (WOOD)" }, "yahoo")) hits++;
+      }
+    }
   } catch (e) { /* retry next cycle */ }
   return hits;
 }

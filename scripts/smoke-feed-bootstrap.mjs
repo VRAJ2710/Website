@@ -74,6 +74,7 @@ function startMock() {
     if (url.pathname === "/api/yahoo-quote") {
       const symbols = (url.searchParams.get("symbols") || "").split(",").map(s => s.trim()).filter(Boolean);
       seen.yahoo.push(symbols);
+      if (symbols.length > 40) return send(400, JSON.stringify({ error: "Too many Yahoo symbols requested." }));
       const bad = symbols.filter(s => DESK_ALIASES.has(s));
       if (bad.length) seen.badYahoo.push(bad);
       const out = {};
@@ -201,6 +202,7 @@ async function main() {
         if (!flat.includes(need)) failures.push(`yahoo request missing ${need}`);
       }
       if (flat.includes("LBS=F")) failures.push("yahoo still requested delisted LBS=F");
+      if (mock.seen.yahoo.some(batch => batch.length > 40)) failures.push("yahoo request exceeded 40 symbols");
       if (mock.seen.badYahoo.length) failures.push("yahoo requested desk tickers " + JSON.stringify(mock.seen.badYahoo.slice(0, 4)));
       if (mock.seen.badRss.length) failures.push("rss feed ids " + JSON.stringify(mock.seen.badRss.slice(0, 8)));
       if (!mock.seen.rss.includes("f0")) failures.push("rss never requested f0");
