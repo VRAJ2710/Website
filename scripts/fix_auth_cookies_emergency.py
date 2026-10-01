@@ -4,12 +4,27 @@ from __future__ import annotations
 import re, shutil, subprocess, sys
 from pathlib import Path
 
-HELPERS = r'''
-const CANONICAL_HOST = "thedispatch.uk";
-const CANONICAL_ORIGIN = "https://thedispatch.uk";
-const REPLIT_PRODUCTION_HOST = "the-dispatch.replit.app";
-const PUBLIC_HOSTS = new Set(["thedispatch.uk", "www.thedispatch.uk"]);
+DELETE_PRESENTED = r"""
+async function deletePresentedSessions(req, extraToken = null) {
+  try {
+    const header = req && req.headers ? req.headers.cookie : "";
+    const tokens = new Set(dispatchSessionTokens(header));
+    if (extraToken) tokens.add(extraToken);
+    for (const token of tokens) {
+      if (!token) continue;
+      try {
+        await sql`DELETE FROM dispatch_sessions WHERE token_hash=${tokenHash(token)}`;
+      } catch (e) {
+        console.error("deletePresentedSessions token", e && e.message);
+      }
+    }
+  } catch (e) {
+    console.error("deletePresentedSessions", e && e.message);
+  }
+}
+""".lstrip()
 
+FUNCTIONS = r"""
 function hostnameOf(host) {
   return String(host || "").split(":")[0].trim().toLowerCase();
 }
@@ -64,40 +79,20 @@ function dispatchSessionTokens(cookieHeader) {
   }
   return values;
 }
-'''.lstrip()
+""".lstrip()
 
-DELETE_PRESENTED = r'''
-async function deletePresentedSessions(req, extraToken = null) {
-  try {
-    if (typeof sql !== "function" && typeof sql !== "object") return;
-    const header = req && req.headers ? req.headers.cookie : "";
-    const tokens = new Set(dispatchSessionTokens(header));
-    if (extraToken) tokens.add(extraToken);
-    for (const token of tokens) {
-      if (!token) continue;
-      try {
-        await sql`DELETE FROM dispatch_sessions WHERE token_hash=${tokenHash(token)}`;
-      } catch (e) {
-        console.error("deletePresentedSessions token", e && e.message);
-      }
-    }
-  } catch (e) {
-    console.error("deletePresentedSessions", e && e.message);
-  }
-}
-'''.lstrip()
 
 def strip_fn(src: str, name: str) -> str:
     m = re.search(rf"^(?:async\s+)?function {re.escape(name)}\s*\(", src, flags=re.M)
     if not m:
         return src
     start = m.start()
-    # find body end
     paren = m.end() - 1
     depth = 0
     params_end = None
     for i in range(paren, len(src)):
-        if src[i] == "(": depth += 1
+        if src[i] == "(":
+            depth += 1
         elif src[i] == ")":
             depth -= 1
             if depth == 0:
@@ -107,7 +102,8 @@ def strip_fn(src: str, name: str) -> str:
     depth = 0
     end = None
     for i in range(brace, len(src)):
-        if src[i] == "{": depth += 1
+        if src[i] == "{":
+            depth += 1
         elif src[i] == "}":
             depth -= 1
             if depth == 0:
@@ -117,21 +113,17 @@ def strip_fn(src: str, name: str) -> str:
         raise SystemExit(f"unclosed {name}")
     return src[:start] + src[end:].lstrip("\n")
 
-def upsert_const(src: str, name: str, line: str) -> str:
+
+def ensure_const(src: str, name: str, expr: str) -> str:
     if re.search(rf"^const {re.escape(name)}\s*=", src, flags=re.M):
-        return re.sub(rf"^const {re.escape(name)}\s*=.*$", line.rstrip(), src, count=1, flags=re.M)
-    # after first require block
-    m = re.search(r"^const .+ = require\(.+\);\n", src, flags=re.M)
-    if not m:
-        return line + "\n" + src
-    # insert after consecutive requires
-    pos = 0
+        return src
     last = 0
     for m in re.finditer(r"^const .+ = require\(.+\);\n", src, flags=re.M):
         last = m.end()
-    return src[:last] + line + "\n" + src[last:]
+    return src[:last] + f"const {name} = {expr};\n" + src[last:]
 
-def main():
+
+def main() -> None:
     root = Path(sys.argv[1] if len(sys.argv) > 1 else ".")
     server = root / "server.js"
     if not server.exists():
@@ -141,44 +133,37 @@ def main():
     if not bak.exists():
         shutil.copy2(server, bak)
 
-    # Remove broken/partial helper defs we will replace
     for name in [
-        "clearSessionCookieHeader","sessionCookieHeader","cookieFlags","shouldPinSessionDomain",
-        "useSecureCookie","dispatchSessionTokens","deletePresentedSessions","isPublicDispatchHost",
-        "hostnameOf","requestHost","requestProtocol",
+        "clearSessionCookieHeader", "sessionCookieHeader", "cookieFlags", "shouldPinSessionDomain",
+        "useSecureCookie", "dispatchSessionTokens", "deletePresentedSessions", "isPublicDispatchHost",
+        "hostnameOf", "requestHost", "requestProtocol",
     ]:
-        # only strip if present; careful with hostnameOf if shared - still ok to redefine once
         text = strip_fn(text, name)
 
-    # Drop duplicate consts if present then inject helpers before first async function currentUser or setSession
-    anchor = None
-    for a in ["async function deletePresentedSessions", "async function setSession", "async function currentUser"]:
-        if a in text:
-            anchor = a
-            break
-    if anchor is None:
-        raise SystemExit("no setSession/currentUser anchor")
+    text = ensure_const(text, "CANONICAL_HOST", '"thedispatch.uk"')
+    text = ensure_const(text, "CANONICAL_ORIGIN", '"https://thedispatch.uk"')
+    text = ensure_const(text, "REPLIT_PRODUCTION_HOST", '"the-dispatch.replit.app"')
+    text = ensure_const(text, "PUBLIC_HOSTS", 'new Set(["thedispatch.uk", "www.thedispatch.uk"])')
 
-    # Ensure consts exist (may duplicate CANONICAL_HOST - strip old simple ones near helpers zone)
-    # Insert HELPERS + DELETE just before setSession if delete was stripped
     insert_at = text.find("async function setSession")
     if insert_at < 0:
         insert_at = text.find("async function currentUser")
-    block = HELPERS + "\n" + DELETE_PRESENTED + "\n"
-    text = text[:insert_at] + block + text[insert_at:]
+    if insert_at < 0:
+        raise SystemExit("no setSession/currentUser anchor")
+    text = text[:insert_at] + FUNCTIONS + "\n" + DELETE_PRESENTED + "\n" + text[insert_at:]
 
-    # Fix setSession signature and body cookie call
     text = text.replace(
         "async function setSession(res, user, oldToken = null)",
         "async function setSession(req, res, user, oldToken = null)",
     )
     text = text.replace("await setSession(res,", "await setSession(req, res,")
-    # Ensure deletePresentedSessions + sessionCookieHeader used in setSession
-    if "res.setHeader(\"Set-Cookie\", sessionCookieHeader(token, req))" not in text:
-        text = re.sub(
+    idx = text.find("async function setSession")
+    chunk = text[idx:idx + 900]
+    if "sessionCookieHeader(token, req)" not in chunk:
+        text = text[:idx] + re.sub(
             r'res\.setHeader\(\s*"Set-Cookie"\s*,\s*[^)]+\)',
             'res.setHeader("Set-Cookie", sessionCookieHeader(token, req))',
-            text,
+            text[idx:],
             count=1,
         )
     if "await deletePresentedSessions(req, oldToken)" not in text:
@@ -187,37 +172,34 @@ def main():
             "await deletePresentedSessions(req, oldToken);",
         )
 
-    # currentUser multi-token
     old_cu = (
-        'async function currentUser(req) {\n'
+        "async function currentUser(req) {\n"
         '  const token = cookieValue(req, "dispatch_session");\n'
-        '  if (!databaseReady || !token) return null;\n'
+        "  if (!databaseReady || !token) return null;\n"
     )
-    if old_cu in text and "currentUserForToken" not in text:
-        # wrap: rename body into ForToken - fragile; instead patch lookup loop
-        text = text.replace(old_cu,
-            'async function currentUser(req) {\n'
-            '  if (!databaseReady) return null;\n'
-            '  const tokens = dispatchSessionTokens(req.headers && req.headers.cookie);\n'
-            '  for (const token of tokens) {\n'
-            '    const user = await currentUserForToken(token);\n'
-            '    if (user) return user;\n'
-            '  }\n'
-            '  return null;\n'
-            '}\n'
-            'async function currentUserForToken(token) {\n'
-            '  if (!token) return null;\n'
-        , 1)
+    if old_cu in text and "async function currentUserForToken" not in text:
+        text = text.replace(
+            old_cu,
+            "async function currentUser(req) {\n"
+            "  if (!databaseReady) return null;\n"
+            "  const tokens = dispatchSessionTokens(req.headers && req.headers.cookie);\n"
+            "  for (const token of tokens) {\n"
+            "    const user = await currentUserForToken(token);\n"
+            "    if (user) return user;\n"
+            "  }\n"
+            "  return null;\n"
+            "}\n"
+            "async function currentUserForToken(token) {\n"
+            "  if (!token) return null;\n",
+            1,
+        )
 
-    # logout: dual clear + safe delete
     text = re.sub(
         r'if \(p === "/__auth/logout"\) \{[^}]+\}',
         'if (p === "/__auth/logout") { await deletePresentedSessions(req); res.setHeader("Set-Cookie", clearSessionCookieHeader(req)); res.writeHead(302, { Location: "/" }); return res.end(); }',
         text,
         count=1,
     )
-
-    # replit.app redirect
     text = text.replace(
         'if (host !== "www.thedispatch.uk") return false;',
         'if (host !== "www.thedispatch.uk" && host !== "the-dispatch.replit.app") return false;',
@@ -234,6 +216,7 @@ def main():
         print(r.stderr)
         raise SystemExit("node --check failed; restored backup")
     print("AUTH_EMERGENCY_OK")
+
 
 if __name__ == "__main__":
     main()
