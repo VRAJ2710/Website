@@ -21,6 +21,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -34,7 +35,7 @@ def die(message: str) -> None:
 
 
 def replace_function(src: str, name: str, replacement: str) -> str:
-    match = re.search(rf"^function {re.escape(name)}\s*\(", src, flags=re.M)
+    match = re.search(rf"^(?:async\s+)?function {re.escape(name)}\s*\(", src, flags=re.M)
     if not match:
         raise PatchError(f"could not find function {name}()")
     start = match.start()
@@ -70,8 +71,12 @@ def replace_function(src: str, name: str, replacement: str) -> str:
     raise PatchError(f"function {name}() is unclosed")
 
 
+def has_function(src: str, name: str) -> bool:
+    return re.search(rf"^(?:async\s+)?function {re.escape(name)}\s*\(", src, flags=re.M) is not None
+
+
 def upsert_function(src: str, name: str, replacement: str, anchor: str) -> str:
-    if re.search(rf"^function {re.escape(name)}\s*\(", src, flags=re.M):
+    if has_function(src, name):
         return replace_function(src, name, replacement)
     index = src.find(anchor)
     if index < 0:
@@ -149,14 +154,63 @@ SESSION_COOKIE = """function sessionCookieHeader(token, req) {
 }"""
 
 DELETE_PRESENTED = """async function deletePresentedSessions(req, extraToken = null) {
-  const header = req && req.headers ? req.headers.cookie : "";
-  const tokens = new Set(dispatchSessionTokens(header));
-  if (extraToken) tokens.add(extraToken);
-  for (const token of tokens) {
-    await sql`DELETE FROM dispatch_sessions WHERE token_hash=${tokenHash(token)}`;
+  try {
+    const header = req && req.headers ? req.headers.cookie : "";
+    const tokens = new Set(dispatchSessionTokens(header));
+    if (extraToken) tokens.add(extraToken);
+    for (const token of tokens) {
+      await sql`DELETE FROM dispatch_sessions WHERE token_hash=${tokenHash(token)}`;
+    }
+  } catch (error) {
+    console.error("dispatch session clear failed:", error && error.message ? error.message : error);
   }
-}
-"""
+}"""
+
+WRITE_CANONICAL = """function writeCanonicalRedirect(req, res, publicOrigin = CANONICAL_ORIGIN) {
+  const location = canonicalRedirectLocation(req, publicOrigin);
+  if (!location) return false;
+  res.writeHead(308, { Location: location, "Cache-Control": "no-store" });
+  res.end();
+  return true;
+}"""
+
+HOST_HELPERS = [
+    ("headerFirst", """function headerFirst(value) {
+  return String(value || "").split(",")[0].trim();
+}"""),
+    ("requestHost", """function requestHost(req) {
+  const headers = req && req.headers ? req.headers : {};
+  return headerFirst(headers["x-forwarded-host"]) || headerFirst(headers.host);
+}"""),
+    ("requestProtocol", """function requestProtocol(req) {
+  const headers = req && req.headers ? req.headers : {};
+  const forwarded = headerFirst(headers["x-forwarded-proto"]);
+  if (forwarded === "https" || forwarded === "http") return forwarded;
+  return "http";
+}"""),
+    ("hostnameOf", """function hostnameOf(host) {
+  return String(host || "").split(":")[0].toLowerCase();
+}"""),
+    ("isPublicDispatchHost", """function isPublicDispatchHost(host) {
+  return PUBLIC_HOSTS.has(hostnameOf(host));
+}"""),
+]
+
+INLINE_CONSTS = [
+    'const CANONICAL_ORIGIN = "https://thedispatch.uk";',
+    'const CANONICAL_HOST = "thedispatch.uk";',
+    'const REPLIT_PRODUCTION_HOST = "the-dispatch.replit.app";',
+    'const PUBLIC_HOSTS = new Set(["thedispatch.uk", "www.thedispatch.uk"]);',
+]
+
+COOKIE_HELPERS = [
+    ("useSecureCookie", USE_SECURE),
+    ("shouldPinSessionDomain", SHOULD_PIN),
+    ("cookieFlags", COOKIE_FLAGS),
+    ("dispatchSessionTokens", DISPATCH_TOKENS),
+    ("clearSessionCookieHeader", CLEAR_COOKIE),
+    ("sessionCookieHeader", SESSION_COOKIE),
+]
 
 CURRENT_USER_OLD = (
     "async function currentUser(req) {\n"
@@ -209,16 +263,20 @@ def patch_billing_origin(src: str) -> str:
     return src
 
 
+def billing_import_block(src: str) -> re.Match[str] | None:
+    return re.search(r"const \{([\s\S]*?)\} = require\(\"./billingOrigin\"\);", src)
+
+
+def import_binds(src: str, name: str) -> bool:
+    match = billing_import_block(src)
+    return bool(match and re.search(rf"\b{re.escape(name)}\b", match.group(1)))
+
+
 def ensure_billing_import(src: str) -> str:
-    match = re.search(r"const \{([\s\S]*?)\} = require\(\"./billingOrigin\"\);", src)
+    match = billing_import_block(src)
     if not match:
-        if "function dispatchSessionTokens" not in src:
-            anchor = "async function currentUser"
-            if anchor not in src:
-                raise PatchError("server.js has neither billingOrigin.js nor currentUser()")
-            src = src.replace(anchor, DISPATCH_TOKENS + "\n" + anchor, 1)
         return src
-    if "dispatchSessionTokens" in match.group(1):
+    if "dispatchSessionTokens" in match.group(1) or has_function(src, "dispatchSessionTokens"):
         return src
     block = match.group(0)
     if "  clearSessionCookieHeader,\n" in block:
@@ -232,8 +290,88 @@ def ensure_billing_import(src: str) -> str:
     return src.replace(block, updated, 1)
 
 
-def patch_server(src: str) -> str:
-    src = ensure_billing_import(src)
+def drop_cookie_imports(src: str) -> str:
+    """Drop cookie bindings that would load a missing billingOrigin.js."""
+    match = billing_import_block(src)
+    if not match:
+        return src
+    body = match.group(1)
+    for name in (
+        "clearSessionCookieHeader",
+        "sessionCookieHeader",
+        "dispatchSessionTokens",
+        "cookieFlags",
+        "useSecureCookie",
+        "shouldPinSessionDomain",
+        "canonicalRedirectLocation",
+        "writeCanonicalRedirect",
+    ):
+        body = re.sub(rf"\n[ \t]*{name},", "\n", body)
+        body = re.sub(rf"\b{name},[ \t]*", "", body)
+    if not re.search(r"[A-Za-z_]", body):
+        return src.replace(match.group(0), "", 1)
+    return src.replace(match.group(0), "const {" + body + "} = require(\"./billingOrigin\");", 1)
+
+
+def install_inline_cookie_helpers(src: str) -> str:
+    """Define every session-cookie helper inside server.js."""
+    anchor = "async function currentUser("
+    if anchor not in src:
+        anchor = "async function setSession("
+    if anchor not in src:
+        anchor = "function setSession("
+    if anchor not in src:
+        raise PatchError("server.js has no currentUser() or setSession() to anchor inline helpers")
+
+    pieces: list[str] = []
+    for line in INLINE_CONSTS:
+        const_name = line.split("=", 1)[0].replace("const", "").strip()
+        if not re.search(rf"^const {re.escape(const_name)}\b", src, flags=re.M):
+            pieces.append(line)
+
+    helpers = list(HOST_HELPERS) + list(COOKIE_HELPERS)
+    redirect_imported = import_binds(src, "writeCanonicalRedirect") or import_binds(src, "canonicalRedirectLocation")
+    if not redirect_imported:
+        helpers.extend([
+            ("canonicalRedirectLocation", CANONICAL_REDIRECT),
+            ("writeCanonicalRedirect", WRITE_CANONICAL),
+        ])
+
+    for name, body in helpers:
+        if import_binds(src, name):
+            continue
+        if has_function(src, name):
+            src = replace_function(src, name, body)
+        else:
+            pieces.append(body.strip())
+
+    if pieces:
+        src = src.replace(anchor, "\n\n".join(pieces) + "\n\n" + anchor, 1)
+
+    handle = re.search(r"(?:async\s+)?function handle\(req,\s*res\) \{\n", src)
+    if handle and not import_binds(src, "writeCanonicalRedirect") and has_function(src, "writeCanonicalRedirect"):
+        window = src[handle.end():handle.end() + 500]
+        if "writeCanonicalRedirect(req, res)" not in window:
+            src = src[:handle.end()] + "  if (writeCanonicalRedirect(req, res)) return;\n" + src[handle.end():]
+
+    src = src.replace(
+        'if (host !== "www.thedispatch.uk") return false;',
+        'if (host !== "www.thedispatch.uk" && host !== "the-dispatch.replit.app") return false;',
+    )
+    src = src.replace(
+        'if (hostnameOf(requestHost(req)) !== "www.thedispatch.uk") return null;',
+        'if (hostnameOf(requestHost(req)) !== "www.thedispatch.uk" && hostnameOf(requestHost(req)) !== "the-dispatch.replit.app") return null;',
+    )
+    return src
+
+
+def patch_server(src: str, billing_present: bool = False) -> str:
+    if billing_present and import_binds(src, "sessionCookieHeader") and import_binds(src, "clearSessionCookieHeader"):
+        src = ensure_billing_import(src)
+    else:
+        if not billing_present:
+            src = drop_cookie_imports(src)
+        src = install_inline_cookie_helpers(src)
     if "async function setSession(res, user, oldToken = null)" in src:
         src = src.replace(
             "async function setSession(res, user, oldToken = null)",
@@ -245,12 +383,16 @@ def patch_server(src: str) -> str:
         src = src.replace(CURRENT_USER_OLD, CURRENT_USER_NEW, 1)
     elif "async function currentUserForToken" not in src:
         raise PatchError("could not find currentUser() dispatch_session lookup")
-    if "async function deletePresentedSessions" not in src:
+    if has_function(src, "deletePresentedSessions"):
+        src = replace_function(src, "deletePresentedSessions", DELETE_PRESENTED)
+    else:
         anchor = "async function setSession("
+        if anchor not in src:
+            anchor = "function setSession("
         index = src.find(anchor)
         if index < 0:
             raise PatchError("could not find setSession()")
-        src = src[:index] + DELETE_PRESENTED + src[index:]
+        src = src[:index] + DELETE_PRESENTED.strip() + "\n\n" + src[index:]
     old_delete = "if (oldToken) await sql`DELETE FROM dispatch_sessions WHERE token_hash=${tokenHash(oldToken)}`;"
     new_delete = "await deletePresentedSessions(req, oldToken);"
     if old_delete in src:
@@ -433,23 +575,7 @@ def apply_tree(root: Path) -> None:
             print("billingOrigin.js: not present; cookie helpers patched in server.js when found")
 
         if server.exists():
-            updated = patch_server(server.read_text())
-            if not billing.exists():
-                for name, body in (
-                    ("canonicalRedirectLocation", CANONICAL_REDIRECT),
-                    ("useSecureCookie", USE_SECURE),
-                    ("cookieFlags", COOKIE_FLAGS),
-                    ("clearSessionCookieHeader", CLEAR_COOKIE),
-                    ("sessionCookieHeader", SESSION_COOKIE),
-                ):
-                    if re.search(rf"^function {name}\s*\(", updated, flags=re.M):
-                        updated = replace_function(updated, name, body)
-                if "const REPLIT_PRODUCTION_HOST" not in updated and "function shouldPinSessionDomain" not in updated:
-                    updated = updated.replace(
-                        "function cookieFlags",
-                        'const REPLIT_PRODUCTION_HOST = "the-dispatch.replit.app";\n' + SHOULD_PIN + "\n" + "function cookieFlags",
-                        1,
-                    )
+            updated = patch_server(server.read_text(), billing_present=billing.exists())
             if write_if_changed(server, updated, backups):
                 changed.append(server)
                 print("server.js: session lookup tries every dispatch_session; logout clears both cookies")
@@ -593,14 +719,119 @@ async function setSession(req, res, user, oldToken = null) {
 }
 if (p === "/__auth/logout") { const token = cookieValue(req, "dispatch_session"); if (token) await sql`DELETE FROM dispatch_sessions WHERE token_hash=${tokenHash(token)}`; res.end(); }
 '''
-    patched_server = patch_server(server)
-    patched_server_again = patch_server(patched_server)
+    patched_server = patch_server(server, billing_present=True)
+    patched_server_again = patch_server(patched_server, billing_present=True)
     if patched_server != patched_server_again:
         raise SystemExit("server patch is not idempotent")
     if "currentUserForToken" not in patched_server or "deletePresentedSessions" not in patched_server:
         raise SystemExit("server patch missed session helpers")
     if "cookieValue(req, \"dispatch_session\")" in patched_server.split("async function currentUser", 1)[-1].split("async function setSession", 1)[0]:
         raise SystemExit("currentUser still reads only the first cookie")
+
+    # Live Replit has no billingOrigin.js. A previous apply left the auth
+    # routes calling helpers that were never defined, which 500s login.
+    broken = r'''function cookieValue(req, name) {
+  const raw = (req.headers && req.headers.cookie) || "";
+  const found = raw.split(";").map(v => v.trim()).find(v => v.startsWith(name + "="));
+  return found ? decodeURIComponent(found.slice(name.length + 1)) : null;
+}
+function tokenHash(token) { return String(token || ""); }
+async function currentUser(req) {
+  if (!databaseReady) return null;
+  const tokens = dispatchSessionTokens(req.headers && req.headers.cookie);
+  for (const token of tokens) {
+    const user = await currentUserForToken(token);
+    if (user) return user;
+  }
+  return null;
+}
+async function currentUserForToken(token) {
+  if (!token) return null;
+  return null;
+}
+async function deletePresentedSessions(req, extraToken = null) {
+  const header = req && req.headers ? req.headers.cookie : "";
+  const tokens = new Set(dispatchSessionTokens(header));
+  if (extraToken) tokens.add(extraToken);
+  for (const token of tokens) {
+    await sql`DELETE FROM dispatch_sessions WHERE token_hash=${tokenHash(token)}`;
+  }
+}
+async function setSession(req, res, user, oldToken = null) {
+  const token = "tok";
+  await deletePresentedSessions(req, oldToken);
+  res.setHeader("Set-Cookie", sessionCookieHeader(token, req));
+}
+async function handle(req, res) {
+  if (p === "/__auth/login" && req.method === "POST") await setSession(req, res, user, null);
+  if (p === "/__auth/register" && req.method === "POST") await setSession(req, res, user, null);
+  if (p === "/__auth/logout") { await deletePresentedSessions(req); res.setHeader("Set-Cookie", clearSessionCookieHeader(req)); }
+}
+'''
+    healed = patch_server(broken, billing_present=False)
+    healed_again = patch_server(healed, billing_present=False)
+    if healed != healed_again:
+        raise SystemExit("standalone server patch is not idempotent")
+    required = [
+        "const CANONICAL_HOST",
+        "const REPLIT_PRODUCTION_HOST",
+        "function shouldPinSessionDomain",
+        "function cookieFlags",
+        "function useSecureCookie",
+        "function clearSessionCookieHeader",
+        "function sessionCookieHeader",
+        "function dispatchSessionTokens",
+        "async function deletePresentedSessions",
+        "async function setSession(req, res, user, oldToken = null)",
+        "function canonicalRedirectLocation",
+        "function writeCanonicalRedirect",
+        "the-dispatch.replit.app",
+    ]
+    missing = [name for name in required if name not in healed]
+    if missing:
+        raise SystemExit("standalone heal missed: " + ", ".join(missing))
+    if 'require("./billingOrigin")' in healed:
+        raise SystemExit("standalone heal must not require the missing billingOrigin.js")
+    if "try {" not in healed.split("async function deletePresentedSessions", 1)[1].split("async function setSession", 1)[0]:
+        raise SystemExit("deletePresentedSessions has no try/catch")
+    if "isPrimaryLiveQuote" in healed:
+        raise SystemExit("server heal touched a desk gate")
+    harness = r'''
+const req = { headers: { host: "thedispatch.uk", "x-forwarded-proto": "https" }, url: "/__auth/login?next=1" };
+const cleared = clearSessionCookieHeader(req);
+if (!Array.isArray(cleared) || cleared.length !== 2) throw new Error("clearSessionCookieHeader must return both clears");
+if (!/Max-Age=0/.test(cleared[0]) || /Domain=/.test(cleared[0])) throw new Error("host-only clear missing: " + cleared[0]);
+if (!/Domain=thedispatch\.uk/.test(cleared[1]) || !/Max-Age=0/.test(cleared[1])) throw new Error("domain clear missing: " + cleared[1]);
+const set = sessionCookieHeader("tok", req);
+if (!Array.isArray(set) || set.length !== 3) throw new Error("sessionCookieHeader must dual-clear then set");
+if (!/dispatch_session=tok/.test(set[2]) || !/Domain=thedispatch\.uk/.test(set[2]) || /Max-Age=0/.test(set[2])) throw new Error("domain session missing: " + set[2]);
+const tokens = dispatchSessionTokens("dispatch_session=dead; other=1; dispatch_session=valid");
+if (tokens.join(",") !== "dead,valid") throw new Error("tokens " + tokens.join(","));
+const loc = canonicalRedirectLocation({ headers: { host: "the-dispatch.replit.app" }, url: "/__auth/login?next=1" });
+if (loc !== "https://thedispatch.uk/__auth/login?next=1") throw new Error("replit redirect " + loc);
+if (canonicalRedirectLocation({ headers: { host: "thedispatch.uk" }, url: "/" }) !== null) throw new Error("apex must stay");
+let hit = false;
+function sql() { hit = true; throw new Error("db down"); }
+deletePresentedSessions({ headers: { cookie: "dispatch_session=dead" } }, "dead").then(() => {
+  if (!hit) throw new Error("deletePresentedSessions did not attempt the delete");
+  console.log("replit-fixture-ok");
+}).catch((error) => { console.error(error); process.exit(1); });
+'''
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "server.js"
+        path.write_text(healed + "\n" + harness)
+        subprocess.check_call(["node", "--check", str(path)])
+        subprocess.check_call(["node", str(path)])
+
+    imported = (
+        'const {\n  clearSessionCookieHeader,\n  sessionCookieHeader,\n} = require("./billingOrigin");\n'
+        + broken
+    )
+    stripped = patch_server(imported, billing_present=False)
+    if 'require("./billingOrigin")' in stripped or "function sessionCookieHeader" not in stripped:
+        raise SystemExit("heal left a require of the missing billingOrigin.js")
+    if patch_server(stripped, billing_present=False) != stripped:
+        raise SystemExit("import-stripping heal is not idempotent")
     print("apply_pricefix12 self-test ok")
 
 

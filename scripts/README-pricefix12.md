@@ -13,8 +13,8 @@ Then republish the Autoscale deployment (`node server.js`).
 
 ## What it changes
 
-- `billingOrigin.js`: on set and clear, emit a host-only `Max-Age=0` cookie and a `Domain=thedispatch.uk` `Max-Age=0` cookie, then set one `Domain=thedispatch.uk` session cookie on apex, www, and `the-dispatch.replit.app`. `the-dispatch.replit.app` 308s to `https://thedispatch.uk` the same way www does. Preview hosts are left alone.
-- `server.js`: `/api/me` tries each `dispatch_session` in the Cookie header until one matches a live row. Logout and login delete every presented token, not only the first.
+- `billingOrigin.js`, when that file is in the tree: on set and clear, emit a host-only `Max-Age=0` cookie and a `Domain=thedispatch.uk` `Max-Age=0` cookie, then set one `Domain=thedispatch.uk` session cookie on apex, www, and `the-dispatch.replit.app`. `the-dispatch.replit.app` 308s to `https://thedispatch.uk` the same way www does. Preview hosts are left alone.
+- `server.js`: `/api/me` tries each `dispatch_session` in the Cookie header until one matches a live row. Logout and login delete every presented token, not only the first. `deletePresentedSessions` catches a database error so login still sets the new cookie. If `billingOrigin.js` is not in the tree, the script writes the full cookie helpers into `server.js` (`CANONICAL_HOST`, `REPLIT_PRODUCTION_HOST`, `useSecureCookie`, `shouldPinSessionDomain`, `cookieFlags`, `dispatchSessionTokens`, `clearSessionCookieHeader`, `sessionCookieHeader`, and the `the-dispatch.replit.app` 308). That also heals a `server.js` that already calls those names but never defined them.
 - `app.js` (only if it still has the pricefix11 `isPrimaryLiveQuote` gates): desk spine, compare, geo energy, search, dynamic lookup, dashboard `primaryLiveCount`, latency strip, and book counts use `hasSyncedQuote`, so a delayed, stale, cached, or proxy Yahoo print is shown with its existing provenance badge. The truly-live predicate and the watchlist live dot stay as they are.
 - `index.html`: `pricefix11` becomes `pricefix12` (`TD-pricefix12` and `/app.js?v=pricefix12`).
 
