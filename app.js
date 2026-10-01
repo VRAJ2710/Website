@@ -4241,7 +4241,7 @@ const FH_SYMBOLS = {
   USDINR:{sym:"INR=X",  proxy:true,scale:1},
   // More commodities
   OJ:      {sym:"OJ=F",  proxy:true,scale:1},
-  LUMBER:  {sym:"LBS=F", proxy:true,scale:1},
+  LUMBER:  {sym:"LBR=F", proxy:true,scale:1},
   PALLADIUM:{sym:"PA=F", proxy:true,scale:1},
   // Additional FX pairs — via Yahoo Finance
   AUDUSD:{sym:"AUDUSD=X", proxy:true, scale:1},
@@ -4254,7 +4254,7 @@ const FH_SYMBOLS = {
   WHEAT: {sym:"ZW=F",  proxy:true, scale:1},
   CORN:  {sym:"ZC=F",  proxy:true, scale:1},
   USDBRL:{sym:"BRL=X", proxy:true, scale:1},
-  LUMBER:{sym:"LBS=F", proxy:true, scale:1},
+  LUMBER:{sym:"LBR=F", proxy:true, scale:1},
   // ETFs, indices & sector ETFs
   SPY:{sym:"SPY",proxy:true,scale:1}, QQQ:{sym:"QQQ",proxy:true,scale:1},
   IWM:{sym:"IWM",proxy:true,scale:1}, RUT:{sym:"^RUT",proxy:true,scale:1},
@@ -4660,7 +4660,10 @@ async function _fetchYahooPriceChunk(chunk) {
     // Do not replace a fresh real-time Twelve Data core quote with delayed Yahoo.
     return liveQuoteSrc[tk] !== "twelve-data" || Date.now() - (liveQuoteTs[tk] || 0) > TWELVE_DATA_CACHE_WINDOW_MS;
   });
-  const yhSyms = [...new Set(filtered.map(tk => YAHOO_SYMBOLS[tk] || tk).filter(Boolean))];
+  const yhSyms = [...new Set(filtered.flatMap(tk => {
+    const primary = YAHOO_SYMBOLS[tk] || tk;
+    return tk === "LUMBER" ? [primary, "WOOD"] : [primary];
+  }).filter(Boolean))];
   if (!yhSyms.length) return 0;
   let hits = 0;
   try {
@@ -4669,7 +4672,11 @@ async function _fetchYahooPriceChunk(chunk) {
     const yahooData = await res.json();
     filtered.forEach(tk => {
       const yhSym = YAHOO_SYMBOLS[tk] || tk;
-      const q = (yahooData && (yahooData[yhSym] || yahooData[tk])) || null;
+      const primary = (yahooData && (yahooData[yhSym] || yahooData[tk])) || null;
+      const lumberEtf = tk === "LUMBER" && !(primary && primary.p > 0) && yahooData && yahooData.WOOD && yahooData.WOOD.p > 0
+        ? { ...yahooData.WOOD, name: yahooData.WOOD.name || "Lumber ETF proxy (WOOD)" }
+        : null;
+      const q = (primary && primary.p > 0) ? primary : lumberEtf;
       if (_applyLiveQuote(tk, q, "yahoo")) hits++;
     });
   } catch (e) { /* retry next cycle */ }
@@ -4850,7 +4857,7 @@ const YAHOO_SYMBOLS = {
   // Additional commodities
   COPPER:"HG=F", WHEAT:"ZW=F", CORN:"ZC=F",
   COFFEE:"KC=F", PLAT:"PL=F", COCOA:"CC=F",
-  OJ:"OJ=F", LUMBER:"LBS=F", PALLADIUM:"PA=F",
+  OJ:"OJ=F", LUMBER:"LBR=F", PALLADIUM:"PA=F",
   // Additional indices
   CAC:"^FCHI", ASX200:"^AXJO", KOSPI:"^KS11",
   // More US stocks

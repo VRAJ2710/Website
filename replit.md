@@ -23,9 +23,11 @@ Gold and the synthetic dollar index use keyless reference feeds (`api.gold-api.c
 
 ## Republish on Replit Autoscale
 
-Live `thedispatch.uk` is Replit Autoscale, not GitHub Pages. The running bundle is `app.js?v=pricefix5`, which is ahead of this git tree. Do not replace the Repl's `app.js` with an older checkout.
+Live `thedispatch.uk` is Replit Autoscale, not GitHub Pages. The running bundle is ahead of `main`. Do not replace the Repl's `app.js` or `server.js` with an older checkout.
 
-1. Pull this branch into the Repl (or copy `feedStatus.js`, `scripts/apply_feed_bootstrap_replit.py`, and the `server.js` feed changes).
-2. From the Repl root run `python3 scripts/apply_feed_bootstrap_replit.py`. It rewrites the live `app.js` quote/news bootstrap in place and cache-busts to `pricefix7`.
-3. Republish the Autoscale deployment. Confirm `app.js?v=pricefix7`, then run `BASE_URL=https://thedispatch.uk node scripts/smoke-feed-bootstrap.mjs`.
+1. Pull this branch into the Repl (or copy `rssFetch.js`, `feedStatus.js`, `scripts/apply_feed_bootstrap_replit.py`, and the `server.js` feed changes).
+2. From the Repl root run `python3 scripts/apply_feed_bootstrap_replit.py`. It patches the live files in place and cache-busts to `pricefix8`.
+3. Republish the Autoscale deployment. Confirm `app.js?v=pricefix8`, then run `BASE_URL=https://thedispatch.uk node scripts/smoke-feed-bootstrap.mjs`.
 4. Do not spend Replit AI credits on this apply. The script is the free path.
+
+The pricefix8 apply follows HTTPS redirects for RSS (MarketWatch, Guardian Business, and CoinDesk otherwise return an empty 200), maps `LUMBER` to `LBR=F` with a `WOOD` fallback, and lets `DXY` print from Yahoo `DX-Y.NYB`.

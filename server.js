@@ -15,6 +15,7 @@ const {
   synthesizeDxyFromUsdRates,
 } = require("./marketProxy");
 const { approvedRssFeedUrl } = require("./rssFeeds");
+const { fetchRssDocument } = require("./rssFetch");
 const {
   ensureDispatchPremiumPrice,
   getStripeMode,
@@ -241,13 +242,7 @@ async function rssFeed(req, res, feedId) {
   const clientAddress = req.socket?.remoteAddress || "unknown";
   if (!rssFeedRateLimiter.allow(clientAddress)) return text(res, 200, "", "application/xml; charset=utf-8");
   try {
-    const response = await fetch(feedUrl, {
-      headers: { "User-Agent": "DispatchMarkets/1.0" },
-      redirect: "error",
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (!response.ok) throw new Error(`RSS ${response.status}`);
-    const body = await readTextCapped(response, 512 * 1024);
+    const body = await fetchRssDocument(feedUrl, { readText: readTextCapped });
     rssFeedCache.set(feedId, body, 60_000);
     return text(res, 200, body, "application/xml; charset=utf-8");
   } catch (error) {

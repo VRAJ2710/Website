@@ -33,6 +33,8 @@ const WIRE = {
   "^IXIC": 17880,
   "HG=F": 4.55,
   "DX-Y.NYB": 101.38,
+  "LBR=F": 540,
+  "WOOD": 67.22,
   "AAPL": 226.4,
   "SI=F": 32.1,
   "BZ=F": 81.2,
@@ -171,6 +173,7 @@ async function main() {
         DXY: typeof P !== "undefined" ? P.DXY?.p : null,
         AAPL: typeof P !== "undefined" ? P.AAPL?.p : null,
         XAU: typeof P !== "undefined" ? P.XAU?.p : null,
+        LUMBER: typeof P !== "undefined" ? P.LUMBER?.p : null,
       },
       rss0: typeof RSS_FEEDS !== "undefined" ? RSS_FEEDS[0]?.id : null,
       rssN: typeof RSS_FEEDS !== "undefined" ? RSS_FEEDS.length : 0,
@@ -180,7 +183,7 @@ async function main() {
     if (snap.p1 === "— AWAITING FEED" || snap.p1 === "AWAITING FEED") stuck.push(`p1sub=${JSON.stringify(snap.p1)}`);
     if (snap.p2 === "AWAITING FEED") stuck.push(`p2sub=${JSON.stringify(snap.p2)}`);
     if (snap.news < 1) stuck.push("NEWS.length=0");
-    for (const tk of ["WTI", "SPX", "AAPL"]) {
+    for (const tk of ["WTI", "SPX", "AAPL", "LUMBER", "DXY"]) {
       if (!snap.live.includes(tk)) stuck.push(`liveSymbols missing ${tk}`);
     }
     if (stuck.length) failures.push("shell still loading: " + stuck.join("; "));
@@ -190,11 +193,14 @@ async function main() {
       if (snap.px.BTC !== 64250) failures.push(`BTC price ${snap.px.BTC} (wire BTC-USD is 64250)`);
       if (snap.px.COPPER !== 4.55) failures.push(`COPPER price ${snap.px.COPPER} (wire HG=F is 4.55)`);
       if (snap.px.AAPL !== 226.4) failures.push(`AAPL price ${snap.px.AAPL}`);
+      if (snap.px.LUMBER !== 540) failures.push(`LUMBER price ${snap.px.LUMBER} (LBR=F is 540; LBS=F is unpriced)`);
+      if (snap.px.DXY !== 101.38) failures.push(`DXY price ${snap.px.DXY} (DX-Y.NYB is 101.38)`);
       if (snap.rss0 !== "f0") failures.push(`RSS_FEEDS[0].id=${snap.rss0}`);
       const flat = mock.seen.yahoo.flat();
-      for (const need of ["^GSPC", "CL=F", "BTC-USD", "GC=F", "HG=F", "DX-Y.NYB"]) {
+      for (const need of ["^GSPC", "CL=F", "BTC-USD", "GC=F", "HG=F", "DX-Y.NYB", "LBR=F"]) {
         if (!flat.includes(need)) failures.push(`yahoo request missing ${need}`);
       }
+      if (flat.includes("LBS=F")) failures.push("yahoo still requested delisted LBS=F");
       if (mock.seen.badYahoo.length) failures.push("yahoo requested desk tickers " + JSON.stringify(mock.seen.badYahoo.slice(0, 4)));
       if (mock.seen.badRss.length) failures.push("rss feed ids " + JSON.stringify(mock.seen.badRss.slice(0, 8)));
       if (!mock.seen.rss.includes("f0")) failures.push("rss never requested f0");
