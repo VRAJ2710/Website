@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const { spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
@@ -7,6 +8,7 @@ const {
   canonicalRedirectLocation,
   clearSessionCookieHeader,
   configuredPublicOrigin,
+  dispatchSessionTokens,
   isServableStaticPath,
   isStripeWebhookPath,
   publicUrl,
@@ -53,6 +55,15 @@ test("308s www to apex while preserving path and query", () => {
   );
   assert.equal(canonicalRedirectLocation(req("thedispatch.uk", "/?checkout=1")), null);
   assert.equal(canonicalRedirectLocation(req("localhost:5000", "/")), null);
+  assert.equal(
+    canonicalRedirectLocation(req("the-dispatch.replit.app", "/__auth/login")),
+    "https://thedispatch.uk/__auth/login",
+  );
+  assert.equal(
+    canonicalRedirectLocation(req("the-dispatch.replit.app", "/markets/?x=1")),
+    "https://thedispatch.uk/markets/?x=1",
+  );
+  assert.equal(canonicalRedirectLocation(req("preview.replit.dev", "/")), null);
 
   const headers = {};
   let status;
@@ -69,28 +80,75 @@ test("308s www to apex while preserving path and query", () => {
     writeHead() { throw new Error("apex must not redirect"); },
     end() {},
   }), false);
+
+  const replitHeaders = {};
+  let replitStatus;
+  assert.equal(writeCanonicalRedirect(req("the-dispatch.replit.app", "/markets/"), {
+    writeHead(code, next) { replitStatus = code; Object.assign(replitHeaders, next); },
+    end() {},
+  }), true);
+  assert.equal(replitStatus, 308);
+  assert.equal(replitHeaders.Location, "https://thedispatch.uk/markets/");
 });
 
-test("sets Secure and Domain cookies on production hosts only", () => {
+test("clears host-only and Domain session cookies, then sets one Domain cookie", () => {
   const prod = sessionCookieHeader("abc", req("thedispatch.uk", "/", { "x-forwarded-proto": "https" }));
-  assert.match(prod, /dispatch_session=abc/);
-  assert.match(prod, /Secure/);
-  assert.match(prod, /Domain=thedispatch.uk/);
-  assert.match(prod, /HttpOnly/);
-  assert.match(prod, /SameSite=Lax/);
+  assert.ok(Array.isArray(prod));
+  assert.equal(prod.length, 3);
+  assert.match(prod[0], /Max-Age=0/);
+  assert.equal(prod[0].includes("Domain="), false);
+  assert.match(prod[0], /Secure/);
+  assert.match(prod[0], /HttpOnly/);
+  assert.match(prod[0], /SameSite=Lax/);
+  assert.match(prod[1], /Max-Age=0/);
+  assert.match(prod[1], /Domain=thedispatch.uk/);
+  assert.match(prod[1], /Secure/);
+  assert.match(prod[2], /dispatch_session=abc/);
+  assert.match(prod[2], /Domain=thedispatch.uk/);
+  assert.match(prod[2], /Secure/);
+  assert.equal(/Max-Age=0/.test(prod[2]), false);
 
   const www = sessionCookieHeader("abc", req("www.thedispatch.uk"));
-  assert.match(www, /Secure/);
-  assert.match(www, /Domain=thedispatch.uk/);
+  assert.match(www.at(-1), /Secure/);
+  assert.match(www.at(-1), /Domain=thedispatch.uk/);
 
   const local = sessionCookieHeader("abc", req("127.0.0.1:5000"));
-  assert.equal(local.includes("Secure"), false);
-  assert.equal(local.includes("Domain="), false);
+  assert.equal(local.at(-1).includes("Secure"), false);
+  assert.equal(local.at(-1).includes("Domain="), false);
+  assert.equal(local[0].includes("Domain="), false);
+  assert.match(local[1], /Domain=thedispatch.uk/);
+  assert.match(local[1], /Max-Age=0/);
 
   const cleared = clearSessionCookieHeader(req("thedispatch.uk", "/", { "x-forwarded-proto": "https" }));
-  assert.match(cleared, /Max-Age=0/);
-  assert.match(cleared, /Domain=thedispatch.uk/);
-  assert.match(cleared, /Secure/);
+  assert.ok(Array.isArray(cleared));
+  assert.equal(cleared.length, 2);
+  assert.match(cleared[0], /Max-Age=0/);
+  assert.equal(cleared[0].includes("Domain="), false);
+  assert.match(cleared[1], /Max-Age=0/);
+  assert.match(cleared[1], /Domain=thedispatch.uk/);
+  assert.match(cleared[1], /Secure/);
+
+  const replit = sessionCookieHeader("abc", req("the-dispatch.replit.app", "/", { "x-forwarded-proto": "https" }));
+  assert.match(replit.at(-1), /Domain=thedispatch.uk/);
+  assert.equal(replit.at(-1).includes("Max-Age=0"), false);
+});
+
+test("dispatchSessionTokens keeps every dispatch_session in header order", () => {
+  assert.deepEqual(
+    dispatchSessionTokens("theme=dark; dispatch_session=dead; dispatch_session=valid"),
+    ["dead", "valid"],
+  );
+  assert.deepEqual(dispatchSessionTokens(""), []);
+  assert.deepEqual(dispatchSessionTokens("dispatch_session="), []);
+});
+
+test("server.js resolves every presented session and clears both cookie shapes", () => {
+  const src = fs.readFileSync(path.join(__dirname, "..", "server.js"), "utf8");
+  assert.match(src, /dispatchSessionTokens/);
+  assert.match(src, /currentUserForToken/);
+  assert.match(src, /deletePresentedSessions/);
+  assert.match(src, /await deletePresentedSessions\(req, oldToken\)/);
+  assert.match(src, /await deletePresentedSessions\(req\)/);
 });
 
 test("hides server source and serves only public assets", () => {
@@ -187,4 +245,13 @@ test("startCheckout sends guests to subscribe only when /api/me has no account",
   });
   assert.equal(result.redirect, "/__auth/subscribe");
   assert.deepEqual(assigned, ["/__auth/subscribe"]);
+});
+
+test("apply_pricefix12 self-test", () => {
+  const result = spawnSync(
+    "python3",
+    [path.join(__dirname, "..", "scripts", "apply_pricefix12.py"), "--self-test"],
+    { encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, `${result.stdout || ""}\n${result.stderr || ""}`);
 });
