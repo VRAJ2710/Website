@@ -11,8 +11,11 @@ const {
   normalizeCoinGeckoPath,
   normalizeTwelveDataSymbols,
   normalizeTwelveDataQuotes,
+  normalizeGoldApiQuote,
+  synthesizeDxyFromUsdRates,
 } = require("./marketProxy");
 const { approvedRssFeedUrl } = require("./rssFeeds");
+const { fetchRssDocument } = require("./rssFetch");
 const {
   ensureDispatchPremiumPrice,
   getStripeMode,
@@ -34,6 +37,9 @@ const coinGeckoRateLimiter = new FixedWindowRateLimiter({ limit: 30, windowMs: 6
 const rssFeedCache = new BoundedTtlCache({ maxEntries: 30, maxBytes: 2 * 1024 * 1024 });
 const rssFeedRateLimiter = new FixedWindowRateLimiter({ limit: 30, windowMs: 60_000, maxKeys: 256 });
 const twelveDataCache = new BoundedTtlCache({ maxEntries: 8, maxBytes: 128 * 1024 });
+const marketReferenceCache = new BoundedTtlCache({ maxEntries: 4, maxBytes: 64 * 1024 });
+const MARKET_REFERENCE_CACHE_MS = 15 * 60 * 1000;
+const FRANKFURTER_CACHE_MS = 12 * 60 * 60 * 1000;
 const TWELVE_DATA_CACHE_MS = 15 * 60 * 1000;
 // The Basic plan permits eight credits/minute and 800/day. Our eight-symbol
 // allowlist plus a 15-minute shared cache caps normal refreshes at 768 credits/day.
@@ -236,17 +242,13 @@ async function rssFeed(req, res, feedId) {
   const clientAddress = req.socket?.remoteAddress || "unknown";
   if (!rssFeedRateLimiter.allow(clientAddress)) return text(res, 200, "", "application/xml; charset=utf-8");
   try {
-    const response = await fetch(feedUrl, {
-      headers: { "User-Agent": "DispatchMarkets/1.0" },
-      redirect: "error",
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (!response.ok) throw new Error(`RSS ${response.status}`);
-    const body = await readTextCapped(response, 512 * 1024);
+    const body = await fetchRssDocument(feedUrl, { readText: readTextCapped });
     rssFeedCache.set(feedId, body, 60_000);
     return text(res, 200, body, "application/xml; charset=utf-8");
-  } catch {
-    // Public feeds are optional. Preserve a quiet, honest empty-state response.
+  } catch (error) {
+    // Public feeds are optional. An empty body keeps the desk on a labelled
+    // degraded state instead of hanging the news bootstrap.
+    console.warn(`rss-feed ${feedId || "unknown"} failed:`, error.message || error);
     return text(res, 200, "", "application/xml; charset=utf-8");
   }
 }
@@ -486,27 +488,46 @@ function normaliseGoldDesk(value, quotes) {
 }
 async function yahooQuote(symbols) {
   const out = {};
-  await Promise.all(symbols.slice(0, 60).map(async symbol => {
+  const requested = (symbols || []).map(symbol => String(symbol || "").trim()).filter(Boolean);
+  // Isolated per symbol, in waves of 40. A longer list must not 400 the desk.
+  for (let i = 0; i < requested.length; i += 40) {
+  const list = requested.slice(i, i + 40);
+  await Promise.allSettled(list.map(async symbol => {
     try {
-      const u = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d`;
-      const d = await (await upstream(u)).json();
+      const u = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d&includePrePost=true`;
+      const response = await fetch(u, {
+        headers: { "User-Agent": "DispatchMarkets/1.0" },
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!response.ok) throw new Error(`yahoo ${symbol} HTTP ${response.status}`);
+      const d = await response.json();
       const meta = d.chart?.result?.[0]?.meta;
-      if (!meta || typeof meta.regularMarketPrice !== "number") return;
+      if (!meta || typeof meta.regularMarketPrice !== "number") throw new Error(`yahoo ${symbol} empty`);
       const price = meta.regularMarketPrice;
       const prev = meta.previousClose || meta.chartPreviousClose || price;
+      const marketState = String(meta.marketState || "");
       out[symbol] = {
         p: price, c: prev ? ((price - prev) / prev) * 100 : 0, prev,
         change: price - prev, currency: meta.currency, exchange: meta.exchangeName,
-        name: meta.longName || meta.shortName || symbol, ts: meta.regularMarketTime
+        name: meta.longName || meta.shortName || symbol,
+        ts: meta.regularMarketTime,
+        marketClosed: /CLOSE/i.test(marketState),
+        session: /PRE/i.test(marketState) ? "pre" : /POST|POSTPOST/i.test(marketState) ? "post" : "regular",
       };
-    } catch {}
+    } catch (error) {
+      console.warn(`yahoo-quote failed for ${symbol}:`, error.message || error);
+    }
   }));
+  }
   return out;
 }
 async function twelveDataQuote(symbols) {
   const apiKey = process.env.TWELVE_DATA_API_KEY;
   const requested = normalizeTwelveDataSymbols(symbols);
-  if (!apiKey) return { configured: false, quotes: {} };
+  if (!apiKey) {
+    console.warn("twelve-data quote degraded: TWELVE_DATA_API_KEY is not set; Yahoo remains the delayed tape");
+    return { configured: false, unavailable: true, reason: "missing_api_key", quotes: {} };
+  }
   if (!requested.length) return { configured: true, quotes: {} };
 
   const cacheKey = requested.join(",");
@@ -533,10 +554,54 @@ async function twelveDataQuote(symbols) {
     const result = { quotes, fetchedAt: Date.now() };
     twelveDataCache.set(cacheKey, result, TWELVE_DATA_CACHE_MS);
     return { configured: true, ...result };
-  } catch {
+  } catch (error) {
     // The caller falls back to Yahoo's explicitly delayed feed for this cycle.
+    console.warn("twelve-data quote failed:", error.message || error);
     return { configured: true, unavailable: true, quotes: {} };
   }
+}
+async function marketReferenceQuotes() {
+  const cached = marketReferenceCache.get("reference");
+  if (cached) return { ...cached, cached: true };
+  const [goldResult, dxyResult] = await Promise.allSettled([
+    (async () => {
+      const goldCached = marketReferenceCache.get("gold");
+      if (goldCached) return { ...goldCached, cached: true };
+      const response = await fetch("https://api.gold-api.com/price/XAU", {
+        headers: { "User-Agent": "DispatchMarkets/1.0" },
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!response.ok) throw new Error(`gold reference HTTP ${response.status}`);
+      const quote = normalizeGoldApiQuote(await response.json());
+      if (!quote) throw new Error("Gold reference unavailable");
+      marketReferenceCache.set("gold", quote, MARKET_REFERENCE_CACHE_MS);
+      return quote;
+    })(),
+    (async () => {
+      const dxyCached = marketReferenceCache.get("dxy");
+      if (dxyCached) return { ...dxyCached, cached: true };
+      const response = await fetch("https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR,GBP,JPY,CAD,SEK,CHF", {
+        headers: { "User-Agent": "DispatchMarkets/1.0" },
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!response.ok) throw new Error(`dollar reference HTTP ${response.status}`);
+      const payload = await response.json();
+      const quote = synthesizeDxyFromUsdRates(payload?.rates, payload?.date);
+      if (!quote) throw new Error("Dollar reference unavailable");
+      marketReferenceCache.set("dxy", quote, FRANKFURTER_CACHE_MS);
+      return quote;
+    })(),
+  ]);
+  const result = { fetchedAt: Date.now() };
+  if (goldResult.status === "fulfilled") result.XAU = goldResult.value;
+  else console.warn("market-reference XAU failed:", goldResult.reason?.message || goldResult.reason);
+  if (dxyResult.status === "fulfilled") result.DXY = dxyResult.value;
+  else console.warn("market-reference DXY failed:", dxyResult.reason?.message || dxyResult.reason);
+  if (!result.XAU && !result.DXY) {
+    return { ...result, unavailable: true, reason: "reference_feeds_failed" };
+  }
+  marketReferenceCache.set("reference", result, MARKET_REFERENCE_CACHE_MS);
+  return result;
 }
 function serveStatic(req, res, pathname) {
   const requested = pathname === "/" ? "/index.html" : pathname;
@@ -735,6 +800,9 @@ async function handle(req, res) {
   if (p === "/api/twelve-data-quote") {
     return json(res, 200, await twelveDataQuote((url.searchParams.get("symbols") || "").split(",").map(s => s.trim()).filter(Boolean)));
   }
+  if (p === "/api/market-reference-quotes") {
+    return json(res, 200, await marketReferenceQuotes());
+  }
   if (p === "/api/yahoo-chart") {
     try { const symbol = url.searchParams.get("symbol"); const range = url.searchParams.get("range") || "5d"; const interval = url.searchParams.get("interval") || "15m"; return json(res, 200, await (await upstream(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`)).json()); }
     // Chart data is decorative/optional. An empty chart response keeps the
@@ -747,12 +815,22 @@ async function handle(req, res) {
     catch { return json(res, 502, { quotes: [] }); }
   }
   if (p === "/api/finnhub") {
-    if (url.searchParams.get("endpoint") === "quote") {
-      const symbol = url.searchParams.get("symbol");
-      const quotes = await yahooQuote([symbol]);
-      return json(res, 200, quotes[symbol] || {});
+    const endpoint = url.searchParams.get("endpoint") || "news";
+    if (!process.env.FINNHUB_API_KEY) {
+      console.warn(`finnhub ${endpoint} degraded: FINNHUB_API_KEY is not set`);
     }
-    return json(res, 200, []);
+    if (endpoint === "quote") {
+      const symbol = url.searchParams.get("symbol");
+      const quotes = await yahooQuote(symbol ? [symbol] : []);
+      const quote = symbol ? quotes[symbol] : null;
+      if (!quote) {
+        console.warn(`finnhub quote fallback empty for ${symbol || "(missing symbol)"}`);
+        return json(res, 200, { unavailable: true, configured: Boolean(process.env.FINNHUB_API_KEY) }, { "X-Dispatch-Data-Status": "degraded" });
+      }
+      return json(res, 200, quote);
+    }
+    console.warn(`finnhub ${endpoint} returned no provider payload`);
+    return json(res, 200, [], { "X-Dispatch-Data-Status": "degraded" });
   }
   if (p === "/api/rss-feed") {
     return rssFeed(req, res, url.searchParams.get("feed"));

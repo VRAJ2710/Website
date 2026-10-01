@@ -165,6 +165,72 @@ function normalizeTwelveDataQuotes(payload) {
   return quotes;
 }
 
+// ICE US Dollar Index geometric weights. EUR and GBP are quoted as USD per unit,
+// so their exponents are negative. No API key — Frankfurter publishes ECB rates.
+const DXY_CONSTANT = 50.14348112;
+const DXY_WEIGHTS = Object.freeze({
+  EUR: -0.576,
+  JPY: 0.136,
+  GBP: -0.119,
+  CAD: 0.091,
+  SEK: 0.042,
+  CHF: 0.036,
+});
+
+function normalizeGoldApiQuote(payload, now = Date.now()) {
+  const price = Number(payload?.price);
+  if (!Number.isFinite(price) || price <= 0) return null;
+  const updated = Date.parse(payload?.updatedAt || "");
+  const ts = Number.isFinite(updated) ? Math.floor(updated / 1000) : Math.floor(now / 1000);
+  return {
+    p: price,
+    c: 0,
+    prev: price,
+    change: 0,
+    currency: typeof payload.currency === "string" ? payload.currency : "USD",
+    exchange: "FREE REFERENCE",
+    name: "Spot Gold (proxy)",
+    ts,
+    source: "gold-api-spot-proxy",
+    proxy: true,
+  };
+}
+
+function synthesizeDxyFromUsdRates(rates, date, now = Date.now()) {
+  if (!rates || typeof rates !== "object") return null;
+  const usdPerForeign = {
+    EUR: 1 / Number(rates.EUR),
+    GBP: 1 / Number(rates.GBP),
+    JPY: Number(rates.JPY),
+    CAD: Number(rates.CAD),
+    SEK: Number(rates.SEK),
+    CHF: Number(rates.CHF),
+  };
+  if (Object.values(usdPerForeign).some(value => !Number.isFinite(value) || value <= 0)) return null;
+  const price = DXY_CONSTANT
+    * (usdPerForeign.EUR ** DXY_WEIGHTS.EUR)
+    * (usdPerForeign.JPY ** DXY_WEIGHTS.JPY)
+    * (usdPerForeign.GBP ** DXY_WEIGHTS.GBP)
+    * (usdPerForeign.CAD ** DXY_WEIGHTS.CAD)
+    * (usdPerForeign.SEK ** DXY_WEIGHTS.SEK)
+    * (usdPerForeign.CHF ** DXY_WEIGHTS.CHF);
+  if (!Number.isFinite(price) || price <= 0) return null;
+  const parsedDate = date ? Date.parse(`${date}T00:00:00Z`) : NaN;
+  const ts = Number.isFinite(parsedDate) ? Math.floor(parsedDate / 1000) : Math.floor(now / 1000);
+  return {
+    p: price,
+    c: 0,
+    prev: price,
+    change: 0,
+    currency: "USD",
+    exchange: "SYNTHETIC",
+    name: "Synthetic Dollar Index (proxy)",
+    ts,
+    source: "frankfurter-ecb",
+    proxy: true,
+  };
+}
+
 module.exports = {
   BoundedTtlCache,
   FixedWindowRateLimiter,
@@ -172,4 +238,6 @@ module.exports = {
   TWELVE_DATA_ALLOWED_SYMBOLS,
   normalizeTwelveDataSymbols,
   normalizeTwelveDataQuotes,
+  normalizeGoldApiQuote,
+  synthesizeDxyFromUsdRates,
 };
