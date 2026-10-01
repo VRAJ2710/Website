@@ -152,9 +152,12 @@ async function waitForServer(baseUrl, child) {
 }
 
 function cookieFrom(response) {
-  const header = response.headers.get("set-cookie") || "";
-  const match = header.match(/dispatch_session=([^;]+)/);
-  assert.ok(match, "expected a dispatch_session cookie");
+  const headers = typeof response.headers.getSetCookie === "function"
+    ? response.headers.getSetCookie()
+    : String(response.headers.get("set-cookie") || "").split(/,(?=\s*dispatch_session=)/);
+  const live = headers.find(header => /dispatch_session=[^;\s]/.test(header) && !/Max-Age=0/i.test(header));
+  const match = String(live || "").match(/dispatch_session=([^;]+)/);
+  assert.ok(match && match[1], "expected a dispatch_session cookie");
   return `dispatch_session=${match[1]}`;
 }
 

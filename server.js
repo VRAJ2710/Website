@@ -21,6 +21,7 @@ const {
 } = require("./stripeClient");
 const {
   clearSessionCookieHeader,
+  dispatchSessionTokens,
   isStripeWebhookPath,
   publicUrl,
   resolveStaticFile,
@@ -82,8 +83,16 @@ function tokenHash(token) {
   return crypto.createHash("sha256").update(String(token || "")).digest("hex");
 }
 async function currentUser(req) {
-  const token = cookieValue(req, "dispatch_session");
-  if (!databaseReady || !token) return null;
+  if (!databaseReady) return null;
+  const tokens = dispatchSessionTokens(req.headers && req.headers.cookie);
+  for (const token of tokens) {
+    const user = await currentUserForToken(token);
+    if (user) return user;
+  }
+  return null;
+}
+async function currentUserForToken(token) {
+  if (!token) return null;
   const result = await sql`SELECT COALESCE(json_agg(row_to_json(uq)), '[]'::json) AS data FROM (SELECT u.id, u.email, u.password_hash AS "passwordHash", u.tier,
     u.billing_portal AS "billingPortal", u.stripe_customer_id AS "stripeCustomerId",
     u.stripe_subscription_id AS "stripeSubscriptionId", u.checkout_session AS "checkoutSession",
@@ -92,11 +101,19 @@ async function currentUser(req) {
     WHERE s.token_hash=${tokenHash(token)} AND s.expires_at > NOW() LIMIT 1) uq`;
   return result[0]?.data?.[0] || null;
 }
+async function deletePresentedSessions(req, extraToken = null) {
+  const header = req && req.headers ? req.headers.cookie : "";
+  const tokens = new Set(dispatchSessionTokens(header));
+  if (extraToken) tokens.add(extraToken);
+  for (const token of tokens) {
+    await sql`DELETE FROM dispatch_sessions WHERE token_hash=${tokenHash(token)}`;
+  }
+}
 async function setSession(req, res, user, oldToken = null) {
   const token = crypto.randomBytes(32).toString("hex");
   await sql`INSERT INTO dispatch_sessions (token_hash, user_id, expires_at)
     VALUES (${tokenHash(token)}, ${user.id}, NOW() + INTERVAL '30 days')`;
-  if (oldToken) await sql`DELETE FROM dispatch_sessions WHERE token_hash=${tokenHash(oldToken)}`;
+  await deletePresentedSessions(req, oldToken);
   res.setHeader("Set-Cookie", sessionCookieHeader(token, req));
 }
 function passwordHash(password, salt = crypto.randomBytes(16).toString("hex")) {
@@ -708,7 +725,7 @@ async function handle(req, res) {
     }
     res.writeHead(302, { Location: "/?checkout=1" }); return res.end();
   }
-  if (p === "/__auth/logout") { const token = cookieValue(req, "dispatch_session"); if (token) await sql`DELETE FROM dispatch_sessions WHERE token_hash=${tokenHash(token)}`; res.setHeader("Set-Cookie", clearSessionCookieHeader(req)); res.writeHead(302, { Location: "/" }); return res.end(); }
+  if (p === "/__auth/logout") { await deletePresentedSessions(req); res.setHeader("Set-Cookie", clearSessionCookieHeader(req)); res.writeHead(302, { Location: "/" }); return res.end(); }
 
   if (p === "/api/me") return json(res, 200, publicUser(await currentUser(req)));
   if (p === "/api/stripe-status") return json(res, 200, {

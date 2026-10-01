@@ -9,6 +9,7 @@ const path = require("path");
  */
 const CANONICAL_ORIGIN = "https://thedispatch.uk";
 const CANONICAL_HOST = "thedispatch.uk";
+const REPLIT_PRODUCTION_HOST = "the-dispatch.replit.app";
 const PUBLIC_HOSTS = new Set(["thedispatch.uk", "www.thedispatch.uk"]);
 
 const PUBLIC_STATIC_PATHS = new Set([
@@ -108,8 +109,10 @@ function webhookBaseUrl(env = process.env) {
 }
 
 function canonicalRedirectLocation(req, publicOrigin = CANONICAL_ORIGIN) {
-  if (hostnameOf(requestHost(req)) !== "www.thedispatch.uk") return null;
-  const origin = publicOrigin.replace(/\/$/, "");
+  const host = hostnameOf(requestHost(req));
+  // www and the production Replit alias both 308 to apex. Preview hosts stay put.
+  if (host !== "www.thedispatch.uk" && host !== REPLIT_PRODUCTION_HOST) return null;
+  const origin = String(publicOrigin || CANONICAL_ORIGIN).replace(/\/$/, "");
   try {
     const url = new URL(req.url || "/", origin);
     return `${origin}${url.pathname}${url.search}`;
@@ -127,23 +130,59 @@ function writeCanonicalRedirect(req, res, publicOrigin = CANONICAL_ORIGIN) {
 }
 
 function useSecureCookie(req) {
-  return requestProtocol(req) === "https" || isPublicDispatchHost(requestHost(req));
+  const host = hostnameOf(requestHost(req));
+  return requestProtocol(req) === "https" || isPublicDispatchHost(host) || host === REPLIT_PRODUCTION_HOST;
 }
 
-function cookieFlags(req, { maxAge, clear = false } = {}) {
+function shouldPinSessionDomain(req) {
+  const host = hostnameOf(requestHost(req));
+  // Apex and www share one cookie. The production Replit hostname must not mint
+  // another host-only dispatch_session. Browsers drop Domain=thedispatch.uk on
+  // that host; the 308 sends login to apex before a session cookie is set.
+  // Localhost and other preview hosts stay host-only so a Domain attribute is
+  // not written onto a host that cannot store it.
+  return PUBLIC_HOSTS.has(host) || host === REPLIT_PRODUCTION_HOST;
+}
+
+function cookieFlags(req, { maxAge, clear = false, domain } = {}) {
   const parts = ["Path=/", "HttpOnly", "SameSite=Lax"];
   parts.push(clear ? "Max-Age=0" : `Max-Age=${maxAge ?? 2592000}`);
   if (useSecureCookie(req)) parts.push("Secure");
-  if (isPublicDispatchHost(requestHost(req))) parts.push(`Domain=${CANONICAL_HOST}`);
+  const pinDomain = domain === undefined ? shouldPinSessionDomain(req) : Boolean(domain);
+  if (pinDomain) parts.push(`Domain=${CANONICAL_HOST}`);
   return parts;
 }
 
-function sessionCookieHeader(token, req) {
-  return [`dispatch_session=${token}`, ...cookieFlags(req)].join("; ");
+function dispatchSessionTokens(cookieHeader) {
+  const raw = Array.isArray(cookieHeader) ? cookieHeader.join("; ") : String(cookieHeader || "");
+  const prefix = "dispatch_session=";
+  const values = [];
+  for (const part of raw.split(";")) {
+    const trimmed = part.trim();
+    if (!trimmed.startsWith(prefix)) continue;
+    const encoded = trimmed.slice(prefix.length);
+    if (!encoded) continue;
+    try {
+      values.push(decodeURIComponent(encoded));
+    } catch {
+      values.push(encoded);
+    }
+    if (values.length >= 8) break;
+  }
+  return values;
 }
 
 function clearSessionCookieHeader(req) {
-  return ["dispatch_session=", ...cookieFlags(req, { clear: true })].join("; ");
+  const hostOnly = ["dispatch_session=", ...cookieFlags(req, { clear: true, domain: false })].join("; ");
+  const domainScoped = ["dispatch_session=", ...cookieFlags(req, { clear: true, domain: true })].join("; ");
+  return [hostOnly, domainScoped];
+}
+
+function sessionCookieHeader(token, req) {
+  const established = [`dispatch_session=${token}`, ...cookieFlags(req)].join("; ");
+  // Expire a host-only ghost and any previous Domain cookie, then set the new one.
+  // The later Domain (or host-only) Set-Cookie wins for that cookie's identity.
+  return [...clearSessionCookieHeader(req), established];
 }
 
 function isStripeWebhookPath(pathname) {
@@ -196,10 +235,12 @@ module.exports = {
   CANONICAL_ORIGIN,
   PUBLIC_HOSTS,
   PUBLIC_STATIC_PATHS,
+  REPLIT_PRODUCTION_HOST,
   canonicalRedirectLocation,
   clearSessionCookieHeader,
   configuredPublicOrigin,
   cookieFlags,
+  dispatchSessionTokens,
   isBlockedSourcePath,
   isPublicDispatchHost,
   isPublicDispatchOrigin,
@@ -210,6 +251,7 @@ module.exports = {
   requestProtocol,
   resolveStaticFile,
   sessionCookieHeader,
+  shouldPinSessionDomain,
   useSecureCookie,
   webhookBaseUrl,
   writeCanonicalRedirect,
