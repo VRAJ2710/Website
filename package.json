@@ -4,8 +4,10 @@
   "description": "The Dispatch Markets — AI-assisted market intelligence terminal",
   "main": "index.js",
   "scripts": {
-    "test": "npm run story:check && npm run test:market-proxy && npm run test:auth",
+    "test": "npm run story:check && npm run test:market-proxy && npm run test:feed-status && npm run test:auth",
     "test:market-proxy": "node --test test/market-proxy.test.js",
+    "test:feed-status": "node --test test/feed-status.test.js test/feed-bootstrap.test.js",
+    "smoke:feed": "node scripts/smoke-feed-bootstrap.mjs",
     "test:auth": "node --test --test-force-exit test/auth.integration.test.js",
     "story:check": "tsc -p tsconfig.story.json",
     "story:generate": "drizzle-kit generate --config drizzle.config.ts",

@@ -3835,36 +3835,36 @@ const NEWS_ALIASES={
 // ═══════════════════════════════════════════════════════════
 const RSS_FEEDS = [
   // Markets / desk
-  {url:"https://feeds.bbci.co.uk/news/business/rss.xml",src:"BBC Business",tier:1,cat:"Macro"},
-  {url:"https://www.cnbc.com/id/100003114/device/rss/rss.html",src:"CNBC",tier:1,cat:"Stocks"},
-  {url:"https://www.cnbc.com/id/20910258/device/rss/rss.html",src:"CNBC Markets",tier:1,cat:"Stocks"},
-  {url:"https://www.cnbc.com/id/19854910/device/rss/rss.html",src:"CNBC Energy",tier:1,cat:"Commodities"},
-  {url:"https://feeds.marketwatch.com/marketwatch/topstories",src:"MarketWatch",tier:2,cat:"Stocks"},
-  {url:"https://feeds.finance.yahoo.com/rss/2.0/headline?s=%5EGSPC,SPY,QQQ,IWM&region=US&lang=en-US",src:"Yahoo Markets",tier:1,cat:"Stocks"},
-  {url:"https://rss.nytimes.com/services/xml/rss/nyt/Business.xml",src:"NYT Business",tier:2,cat:"Macro"},
-  {url:"https://www.theguardian.com/business/rss",src:"Guardian Biz",tier:2,cat:"Macro"},
-  {url:"https://www.investing.com/rss/news_14.rss",src:"Investing Commodities",tier:1,cat:"Commodities"},
-  {url:"https://www.investing.com/rss/news_1.rss",src:"Investing FX",tier:2,cat:"FX"},
-  {url:"https://www.investing.com/rss/news_25.rss",src:"Investing Crypto",tier:2,cat:"Crypto"},
-  {url:"https://feeds.finance.yahoo.com/rss/2.0/headline?s=CL=F,GC=F,SI=F,NG=F&region=US&lang=en-US",src:"Yahoo Futures",tier:1,cat:"Commodities"},
-  {url:"https://www.coindesk.com/arc/outboundfeeds/rss/",src:"CoinDesk",tier:2,cat:"Crypto"},
-  {url:"https://feeds.finance.yahoo.com/rss/2.0/headline?s=%5EFTSE,%5EGDAXI,%5EN225,%5EHSI&region=US&lang=en-US",src:"Yahoo Global",tier:1,cat:"Stocks"},
+  {id:"f0",url:"https://feeds.bbci.co.uk/news/business/rss.xml",src:"BBC Business",tier:1,cat:"Macro"},
+  {id:"f1",url:"https://www.cnbc.com/id/100003114/device/rss/rss.html",src:"CNBC",tier:1,cat:"Stocks"},
+  {id:"f2",url:"https://www.cnbc.com/id/20910258/device/rss/rss.html",src:"CNBC Markets",tier:1,cat:"Stocks"},
+  {id:"f3",url:"https://www.cnbc.com/id/19854910/device/rss/rss.html",src:"CNBC Energy",tier:1,cat:"Commodities"},
+  {id:"f4",url:"https://feeds.marketwatch.com/marketwatch/topstories",src:"MarketWatch",tier:2,cat:"Stocks"},
+  {id:"f5",url:"https://feeds.finance.yahoo.com/rss/2.0/headline?s=%5EGSPC,SPY,QQQ,IWM&region=US&lang=en-US",src:"Yahoo Markets",tier:1,cat:"Stocks"},
+  {id:"f6",url:"https://rss.nytimes.com/services/xml/rss/nyt/Business.xml",src:"NYT Business",tier:2,cat:"Macro"},
+  {id:"f7",url:"https://www.theguardian.com/business/rss",src:"Guardian Biz",tier:2,cat:"Macro"},
+  {id:"f8",url:"https://www.investing.com/rss/news_14.rss",src:"Investing Commodities",tier:1,cat:"Commodities"},
+  {id:"f9",url:"https://www.investing.com/rss/news_1.rss",src:"Investing FX",tier:2,cat:"FX"},
+  {id:"f10",url:"https://www.investing.com/rss/news_25.rss",src:"Investing Crypto",tier:2,cat:"Crypto"},
+  {id:"f11",url:"https://feeds.finance.yahoo.com/rss/2.0/headline?s=CL=F,GC=F,SI=F,NG=F&region=US&lang=en-US",src:"Yahoo Futures",tier:1,cat:"Commodities"},
+  {id:"f12",url:"https://www.coindesk.com/arc/outboundfeeds/rss/",src:"CoinDesk",tier:2,cat:"Crypto"},
+  {id:"f13",url:"https://feeds.finance.yahoo.com/rss/2.0/headline?s=%5EFTSE,%5EGDAXI,%5EN225,%5EHSI&region=US&lang=en-US",src:"Yahoo Global",tier:1,cat:"Stocks"},
   // World / regional (fintech hub density)
-  {url:"https://feeds.bbci.co.uk/news/world/rss.xml",src:"BBC World",tier:1,cat:"Geopolitics"},
-  {url:"https://feeds.bbci.co.uk/news/world/europe/rss.xml",src:"BBC Europe",tier:1,cat:"Geopolitics"},
-  {url:"https://feeds.bbci.co.uk/news/world/asia/rss.xml",src:"BBC Asia",tier:1,cat:"Geopolitics"},
-  {url:"https://feeds.bbci.co.uk/news/world/middle_east/rss.xml",src:"BBC MidEast",tier:1,cat:"Geopolitics"},
-  {url:"https://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml",src:"BBC Americas",tier:1,cat:"Geopolitics"},
-  {url:"https://www.theguardian.com/world/rss",src:"Guardian World",tier:1,cat:"Geopolitics"},
-  {url:"https://www.theguardian.com/uk-news/rss",src:"Guardian UK",tier:2,cat:"Geopolitics"},
-  {url:"https://rss.nytimes.com/services/xml/rss/nyt/World.xml",src:"NYT World",tier:1,cat:"Geopolitics"},
-  {url:"https://rss.nytimes.com/services/xml/rss/nyt/Europe.xml",src:"NYT Europe",tier:2,cat:"Geopolitics"},
-  {url:"https://rss.nytimes.com/services/xml/rss/nyt/AsiaPacific.xml",src:"NYT Asia",tier:2,cat:"Geopolitics"},
-  {url:"https://www.aljazeera.com/xml/rss/all.xml",src:"Al Jazeera",tier:1,cat:"Geopolitics"},
-  {url:"https://feeds.npr.org/1004/rss.xml",src:"NPR World",tier:2,cat:"Geopolitics"},
+  {id:"f14",url:"https://feeds.bbci.co.uk/news/world/rss.xml",src:"BBC World",tier:1,cat:"Geopolitics"},
+  {id:"f15",url:"https://feeds.bbci.co.uk/news/world/europe/rss.xml",src:"BBC Europe",tier:1,cat:"Geopolitics"},
+  {id:"f16",url:"https://feeds.bbci.co.uk/news/world/asia/rss.xml",src:"BBC Asia",tier:1,cat:"Geopolitics"},
+  {id:"f17",url:"https://feeds.bbci.co.uk/news/world/middle_east/rss.xml",src:"BBC MidEast",tier:1,cat:"Geopolitics"},
+  {id:"f18",url:"https://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml",src:"BBC Americas",tier:1,cat:"Geopolitics"},
+  {id:"f19",url:"https://www.theguardian.com/world/rss",src:"Guardian World",tier:1,cat:"Geopolitics"},
+  {id:"f20",url:"https://www.theguardian.com/uk-news/rss",src:"Guardian UK",tier:2,cat:"Geopolitics"},
+  {id:"f21",url:"https://rss.nytimes.com/services/xml/rss/nyt/World.xml",src:"NYT World",tier:1,cat:"Geopolitics"},
+  {id:"f22",url:"https://rss.nytimes.com/services/xml/rss/nyt/Europe.xml",src:"NYT Europe",tier:2,cat:"Geopolitics"},
+  {id:"f23",url:"https://rss.nytimes.com/services/xml/rss/nyt/AsiaPacific.xml",src:"NYT Asia",tier:2,cat:"Geopolitics"},
+  {id:"f24",url:"https://www.aljazeera.com/xml/rss/all.xml",src:"Al Jazeera",tier:1,cat:"Geopolitics"},
+  {id:"f25",url:"https://feeds.npr.org/1004/rss.xml",src:"NPR World",tier:2,cat:"Geopolitics"},
   // CNN World removed 2026-08-13: rss.cnn.com no longer completes a TLS
   // handshake, so every load spent a request to earn a guaranteed 525.
-].map((feed,id)=>({...feed,id:`f${id}`}));
+].map((feed,id)=>({...feed,id:feed.id||`f${id}`}));
 
 // Heavier weights for specific tags so generic "market/stock" doesn't swallow oil/gold
 const TAG_RULES = {
@@ -3971,8 +3971,9 @@ async function fetchFinnhubNews(){
       {signal:AbortSignal.timeout(12000)});
     if(res.status===429)throw Object.assign(new Error("rate"),{code:429,cat});
     if(!res.ok)throw new Error("http "+res.status);
+    const degraded=res.headers.get("X-Dispatch-Data-Status")==="degraded";
     const items=await res.json();
-    return {cat,items:Array.isArray(items)?items:[]};
+    return {cat,items:Array.isArray(items)?items:[],degraded:degraded||!Array.isArray(items)};
   }));
   let rateLimited=false;
   results.forEach(r=>{
@@ -3982,7 +3983,7 @@ async function fetchFinnhubNews(){
       newsFeedHealth["Finnhub·"+cat]={ok:false,count:0,ts:Date.now()};
       return;
     }
-    const {cat,items}=r.value;
+    const {cat,items,degraded}=r.value;
     items.slice(0,8).forEach(it=>{
       if(!it.headline)return;
       const date=new Date((it.datetime||0)*1000);
@@ -4001,7 +4002,7 @@ async function fetchFinnhubNews(){
         link:(it.url&&it.url.startsWith("http"))?it.url:_newsLink({x:it.headline})
       });
     });
-    newsFeedHealth["Finnhub·"+cat]={ok:true,count:Math.min(items.length,8),ts:Date.now()};
+    newsFeedHealth["Finnhub·"+cat]={ok:!degraded&&items.length>0,count:Math.min(items.length,8),ts:Date.now(),degraded:!!degraded};
   });
   if(rateLimited&&!allItems.length)return [];
   return allItems;
@@ -4063,12 +4064,13 @@ async function fetchLiveNews(){
       _saveNewsCache();
       newsError=null;
     } else if(NEWS.length===0){
-      if(!_loadNewsCache())newsError="No feeds reachable — retry with ⟳";
+      if(!_loadNewsCache())newsError="NEWS DEGRADED — no headlines from RSS or Finnhub";
     } else {
       newsError="Refresh failed — showing previous batch";
     }
-  }catch(e){newsError="News fetch error — retrying next cycle";}
+  }catch(e){newsError="NEWS DEGRADED — news fetch error";console.error("news bootstrap failed:",e&&e.message||e);}
   newsFetching=false;renderStatus();_syncTapePulse();
+  try{syncShellFeedLabels();}catch(err){}
 
   // Re-render news surfaces without killing scroll / hard-resetting Android
   if(pg==="news"){
@@ -4658,7 +4660,7 @@ async function _fetchYahooPriceChunk(chunk) {
     // Do not replace a fresh real-time Twelve Data core quote with delayed Yahoo.
     return liveQuoteSrc[tk] !== "twelve-data" || Date.now() - (liveQuoteTs[tk] || 0) > TWELVE_DATA_CACHE_WINDOW_MS;
   });
-  const yhSyms = [...new Set(filtered.map(tk => YAHOO_SYMBOLS[tk]).filter(Boolean))];
+  const yhSyms = [...new Set(filtered.map(tk => YAHOO_SYMBOLS[tk] || tk).filter(Boolean))];
   if (!yhSyms.length) return 0;
   let hits = 0;
   try {
@@ -4666,9 +4668,8 @@ async function _fetchYahooPriceChunk(chunk) {
     if (!res.ok) return 0;
     const yahooData = await res.json();
     filtered.forEach(tk => {
-      const yhSym = YAHOO_SYMBOLS[tk];
-      // Response may be keyed by desk alias (BTC) or wire (BTC-USD) depending on request
-      const q = (yhSym && yahooData[yhSym]) || yahooData[tk];
+      const yhSym = YAHOO_SYMBOLS[tk] || tk;
+      const q = (yahooData && (yahooData[yhSym] || yahooData[tk])) || null;
       if (_applyLiveQuote(tk, q, "yahoo")) hits++;
     });
   } catch (e) { /* retry next cycle */ }
@@ -4694,12 +4695,38 @@ async function fetchTwelveDataPrices() {
   }
 }
 
+function syncShellFeedLabels(){
+  const liveEl=document.getElementById("cmdLive");
+  const p1=document.getElementById("p1sub");
+  const p2=document.getElementById("p2sub");
+  const n=typeof liveSymbols!=="undefined"?liveSymbols.size:0;
+  const priceSettled=!!_priceFetchAttempted&&!priceFetching;
+  if(liveEl){
+    if(updatePaused)liveEl.textContent="Paused";
+    else if(priceFetching&&n===0)liveEl.textContent="Fetching";
+    else if(n>0)liveEl.textContent=n+" synced";
+    else if(priceSettled)liveEl.textContent="FEED DEGRADED";
+  }
+  if(p1){
+    const cur=p1.textContent||"";
+    const placeholder=cur==="— AWAITING FEED"||cur==="— LIVE"||cur==="AWAITING FEED";
+    if(priceFetching&&n===0)p1.textContent="— AWAITING FEED";
+    else if(n>0&&placeholder)p1.textContent=n+" SYNCED";
+    else if(priceSettled&&n===0)p1.textContent="— FEED DEGRADED";
+  }
+  if(p2&&!termSelTk&&!_dynTk){
+    if(newsFetching&&!(typeof NEWS!=="undefined"&&NEWS.length))p2.textContent="AWAITING FEED";
+    else if(typeof NEWS!=="undefined"&&NEWS.length&&newsLastFetch)p2.textContent=_newsRelTime(newsLastFetch.getTime())+" AGO";
+    else if(!newsFetching)p2.textContent="NEWS DEGRADED";
+  }
+}
 async function fetchLivePrices(){
   if(updatePaused)return;
   priceFetching=true;
   _priceFetchAttempted=true;
   renderStatus();
   let successCount=0;
+  try{
 
   // Real-time core US equity + FX tape, cached centrally to protect the free plan.
   successCount += await fetchTwelveDataPrices();
@@ -4723,8 +4750,11 @@ async function fetchLivePrices(){
 
   for(let i=0;i<chunks.length;i+=2){
     const pair=chunks.slice(i,i+2);
-    const results=await Promise.all(pair.map(c=>_fetchYahooPriceChunk(c)));
-    successCount+=results.reduce((a,b)=>a+b,0);
+    const results=await Promise.allSettled(pair.map(c=>_fetchYahooPriceChunk(c)));
+    results.forEach(r=>{
+      if(r.status==="fulfilled")successCount+=r.value||0;
+      else console.error("yahoo price chunk failed:",r.reason&&r.reason.message||r.reason);
+    });
     if(i===0&&priHits===0){
       renderTape();
       if(IS_DESKTOP()){
@@ -4782,6 +4812,13 @@ async function fetchLivePrices(){
     }else{
       renderTerminalPanels();
     }
+  }
+  }catch(e){
+    priceErrorCount++;
+    console.error("price bootstrap failed:",e&&e.message||e);
+  }finally{
+    priceFetching=false;
+    try{syncShellFeedLabels();renderStatus();}catch(err){}
   }
 }
 

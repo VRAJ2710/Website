@@ -8,7 +8,7 @@
 <script>
 // One-shot cache bust — never loop-reload
 (function(){
-  var V='TD-1786750800';
+  var V='TD-pricefix7';
   try {
     var s=sessionStorage.getItem('td_ver');
     if(!s){ sessionStorage.setItem('td_ver',V); return; }
@@ -126,14 +126,14 @@
   <div class="panel" id="p1">
     <div class="panel-hdr">
       <span class="panel-title"><span class="panel-idx">01</span>Markets</span>
-      <span class="panel-hdr-r"><span class="panel-sub" id="p1sub">— LIVE</span><button type="button" class="p-exp-btn" onclick="toggleExpand('p1')" title="Expand (press 1)">⛶</button></span>
+      <span class="panel-hdr-r"><span class="panel-sub" id="p1sub">— AWAITING FEED</span><button type="button" class="p-exp-btn" onclick="toggleExpand('p1')" title="Expand (press 1)">⛶</button></span>
     </div>
     <div class="panel-body" id="p1body"></div>
   </div>
   <div class="panel" id="p2">
     <div class="panel-hdr">
       <span class="panel-title" id="p2title"><span class="panel-idx">02</span>News</span>
-      <span class="panel-hdr-r"><span class="panel-sub" id="p2sub">LIVE FEED</span><button type="button" class="p-exp-btn" onclick="toggleExpand('p2')" title="Expand (press 2)">⛶</button></span>
+      <span class="panel-hdr-r"><span class="panel-sub" id="p2sub">AWAITING FEED</span><button type="button" class="p-exp-btn" onclick="toggleExpand('p2')" title="Expand (press 2)">⛶</button></span>
     </div>
     <div class="panel-body" id="p2body"></div>
   </div>
@@ -302,7 +302,8 @@
 
 <!-- Context menu -->
 <div class="ctx-menu" id="ctxMenu"></div>
-<script src="/app.js?v=1786750800"></script>
+<script src="/feedStatus.js?v=pricefix7"></script>
+<script src="/app.js?v=pricefix7"></script>
 </body>
 </html>
 
