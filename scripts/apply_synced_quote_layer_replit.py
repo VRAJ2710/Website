@@ -123,6 +123,14 @@ def patch_app(src: str) -> tuple[str, list[str]]:
         "brief refresh",
     )
     apply(
+        "  const px = livePxN != null ? livePxN : g.price;\n"
+        "  const chg = g.changePct;",
+        "  const px = livePxN != null ? livePxN : g.price;\n"
+        "  const liveChgN = typeof liveChg === \"function\" ? liveChg(\"XAU\") : null;\n"
+        "  const chg = liveChgN != null ? liveChgN : g.changePct;",
+        "gold hero change",
+    )
+    apply(
         f'<span>DXY <b>${{d.macro?.dxy?.px != null ? d.macro.dxy.px : "{EM}"}}</b></span>',
         '<span>DXY <b>${livePx("DXY") != null ? livePx("DXY").toFixed(2) : (d.macro?.dxy?.px != null ? d.macro.dxy.px : "' + EM + '")}</b></span>',
         "gold hero dollar",

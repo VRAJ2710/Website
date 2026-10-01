@@ -108,6 +108,10 @@ async function _fetchLivePrices(){
   if(pg==="home"){ try{ _refreshHomeAfterPrices(); }catch(e){} }
   else if(pg==="brief"){ try{ renderMain(); }catch(e){} }
 }
+function _goldHeroChangeAnchor() {
+  const px = livePxN != null ? livePxN : g.price;
+  const chg = g.changePct;
+}
 const _hero = '<span>DXY <b>\${d.macro?.dxy?.px != null ? d.macro.dxy.px : "${EM}"}</b></span>';
 const _kv = '<div class="gd-kv"><span>DXY</span><b>\${d.macro?.dxy?.px != null ? d.macro.dxy.px : "${EM}"} <span class="\${(d.macro?.dxy?.chg||0)>=0?"px-up":"px-dn"}">\${d.macro?.dxy?.chg != null ? _gdChg(d.macro.dxy.chg) : ""}</span></b></div>';
 `;
@@ -135,6 +139,7 @@ test("synced quote layer uses hasSyncedQuote for proxy, delayed, and futures ali
   assert.doesNotMatch(app, /const px = referencePx\(tk\);/);
   assert.match(app, /_refreshBriefSurfaces\(\)/);
   assert.match(app, /livePx\("DXY"\)/);
+  assert.match(app, /liveChg\("XAU"\)/);
   assert.match(index, /TD-pricefix11/);
   assert.match(index, /app\.js\?v=pricefix11/);
   applyTo(dir);
