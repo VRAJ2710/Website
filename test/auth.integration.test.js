@@ -337,7 +337,10 @@ test("persistent account, session, and one-time recovery flows", async t => {
       const rawToken = sessionCookie.split("=")[1];
       await sql`UPDATE dispatch_sessions SET expires_at=NOW() - INTERVAL '1 second' WHERE token_hash=${tokenHash(rawToken)}`;
       const expired = await runningFetch(running.baseUrl, "/api/me", sessionCookie);
-      assert.deepEqual(await expired.json(), { tier: "free", billingPortal: false });
+      assert.equal(expired.status, 200);
+      const expiredBody = await expired.json();
+      assert.deepEqual(expiredBody, { guest: true, tier: "free", billingPortal: false, isAdmin: false });
+      assert.equal(Object.hasOwn(expiredBody, "id"), false);
 
       const login = await form(running.baseUrl, "/__auth/login", {
         email,
@@ -350,7 +353,10 @@ test("persistent account, session, and one-time recovery flows", async t => {
       });
       assert.equal(logout.status, 302);
       const afterLogout = await runningFetch(running.baseUrl, "/api/me", freshCookie);
-      assert.deepEqual(await afterLogout.json(), { tier: "free", billingPortal: false });
+      assert.equal(afterLogout.status, 200);
+      const loggedOut = await afterLogout.json();
+      assert.deepEqual(loggedOut, { guest: true, tier: "free", billingPortal: false, isAdmin: false });
+      assert.equal(Object.hasOwn(loggedOut, "id"), false);
     });
 
     let resetToken;

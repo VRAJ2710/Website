@@ -19,6 +19,17 @@ const {
   getStripeSync,
   getUncachableStripeClient,
 } = require("./stripeClient");
+const {
+  AiRequestError,
+  completeWithXaiKey,
+  generateDispatchReply,
+  guestUser,
+  resolvePublicUser,
+  sessionTokens,
+  xaiApiKey,
+  xaiBaseUrl,
+  xaiModel,
+} = require("./aiProvider");
 
 const root = __dirname;
 const checkoutLocks = new Map();
@@ -39,14 +50,6 @@ const TWELVE_DATA_CACHE_MS = 15 * 60 * 1000;
 // allowlist plus a 15-minute shared cache caps normal refreshes at 768 credits/day.
 const twelveDataDailyRateLimiter = new FixedWindowRateLimiter({ limit: 90, windowMs: 24 * 60 * 60 * 1000, maxKeys: 1 });
 
-class AiRequestError extends Error {
-  constructor(status, message, code) {
-    super(message);
-    this.status = status;
-    this.code = code;
-  }
-}
-
 function json(res, status, body, extraHeaders = {}) {
   const data = JSON.stringify(body);
   res.writeHead(status, {
@@ -65,16 +68,27 @@ function text(res, status, body, contentType = "text/plain; charset=utf-8") {
   res.end(body);
 }
 function cookieValue(req, name) {
-  const raw = req.headers.cookie || "";
-  const found = raw.split(";").map(v => v.trim()).find(v => v.startsWith(name + "="));
-  return found ? decodeURIComponent(found.slice(name.length + 1)) : null;
+  if (name === "dispatch_session") {
+    const tokens = sessionTokens(req && req.headers ? req.headers.cookie : "");
+    return tokens[0] || null;
+  }
+  const header = req && req.headers ? req.headers.cookie : "";
+  const raw = Array.isArray(header) ? header.join("; ") : String(header || "");
+  const prefix = `${name}=`;
+  for (const part of raw.split(";")) {
+    const trimmed = part.trim();
+    if (!trimmed.startsWith(prefix)) continue;
+    const encoded = trimmed.slice(prefix.length);
+    if (!encoded) return null;
+    try { return decodeURIComponent(encoded); } catch { return null; }
+  }
+  return null;
 }
 function tokenHash(token) {
   return crypto.createHash("sha256").update(String(token || "")).digest("hex");
 }
-async function currentUser(req) {
-  const token = cookieValue(req, "dispatch_session");
-  if (!databaseReady || !token) return null;
+async function currentUserForToken(token) {
+  if (!token || !databaseReady || !sql) return null;
   const result = await sql`SELECT COALESCE(json_agg(row_to_json(uq)), '[]'::json) AS data FROM (SELECT u.id, u.email, u.password_hash AS "passwordHash", u.tier,
     u.billing_portal AS "billingPortal", u.stripe_customer_id AS "stripeCustomerId",
     u.stripe_subscription_id AS "stripeSubscriptionId", u.checkout_session AS "checkoutSession",
@@ -82,6 +96,19 @@ async function currentUser(req) {
     FROM dispatch_sessions s JOIN dispatch_users u ON u.id = s.user_id
     WHERE s.token_hash=${tokenHash(token)} AND s.expires_at > NOW() LIMIT 1) uq`;
   return result[0]?.data?.[0] || null;
+}
+async function currentUser(req) {
+  if (!databaseReady) return null;
+  const tokens = sessionTokens(req && req.headers ? req.headers.cookie : "");
+  for (const token of tokens) {
+    try {
+      const user = await currentUserForToken(token);
+      if (user) return user;
+    } catch (error) {
+      console.error("session lookup failed:", error && error.message ? error.message : error);
+    }
+  }
+  return null;
 }
 async function setSession(res, user, oldToken = null) {
   const token = crypto.randomBytes(32).toString("hex");
@@ -139,11 +166,6 @@ async function saveUser(user) {
     stripe_customer_id=${user.stripeCustomerId || null}, stripe_subscription_id=${user.stripeSubscriptionId || null},
     checkout_session=${user.checkoutSession ? JSON.stringify(user.checkoutSession) : null},
     checkout_attempt_id=${user.checkoutAttemptId || null} WHERE id=${user.id}`;
-}
-function publicUser(user) {
-  if (!user) return { tier: "free", billingPortal: false };
-  const { passwordHash, ...safeUser } = user;
-  return safeUser;
 }
 function withCheckoutLock(userId, work) {
   const previous = checkoutLocks.get(userId) || Promise.resolve();
@@ -338,9 +360,15 @@ async function discoverAiModel() {
   aiModelCache = { id: selected.id, expiresAt: Date.now() + AI_MODEL_CACHE_MS };
   return selected.id;
 }
-async function generateAi({ system, messages, maxTokens = 1000, temperature = 0.2 }) {
+async function generateAiWithConnector({ system, messages, maxTokens = 1000, temperature = 0.2 }) {
   return withTimeout((async () => {
-    const model = await discoverAiModel();
+    let model = xaiModel();
+    try {
+      model = await discoverAiModel();
+    } catch (error) {
+      if (error instanceof AiRequestError && error.code === "PROVIDER_CREDITS") throw error;
+      console.error("xAI model discovery failed; trying", model, error?.code || error?.message || error);
+    }
     const response = await xaiProxy("/v1/chat/completions", {
       method: "POST",
       body: {
@@ -368,6 +396,23 @@ async function generateAi({ system, messages, maxTokens = 1000, temperature = 0.
     if (!text) throw new AiRequestError(502, "The AI returned an empty response. Please try again.", "EMPTY_RESPONSE");
     return { text: String(text), model };
   })(), AI_TIMEOUT_MS);
+}
+async function generateAi({ system, messages, maxTokens = 1000, temperature = 0.2 }) {
+  const boundedTokens = Math.max(300, Math.min(Number(maxTokens) || 1000, 2400));
+  return generateDispatchReply({
+    apiKey: xaiApiKey(),
+    completeWithKey: apiKey => completeWithXaiKey({
+      apiKey,
+      model: xaiModel(),
+      baseUrl: xaiBaseUrl(),
+      system,
+      messages,
+      maxTokens: boundedTokens,
+      temperature,
+      timeoutMs: AI_TIMEOUT_MS,
+    }),
+    completeWithConnector: () => generateAiWithConnector({ system, messages, maxTokens: boundedTokens, temperature }),
+  });
 }
 function sendAiError(res, error) {
   const status = error instanceof AiRequestError ? error.status : 502;
@@ -707,9 +752,36 @@ async function handle(req, res) {
     }
     res.writeHead(302, { Location: "/?checkout=1" }); return res.end();
   }
-  if (p === "/__auth/logout") { const token = cookieValue(req, "dispatch_session"); if (token) await sql`DELETE FROM dispatch_sessions WHERE token_hash=${tokenHash(token)}`; res.setHeader("Set-Cookie", "dispatch_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax"); res.writeHead(302, { Location: "/" }); return res.end(); }
+  if (p === "/__auth/logout") {
+    // A Neon empty-result decode error must not skip the cookie clear. Logged-out
+    // browsers then call /api/me and need a guest 200, not a stuck session or a 500.
+    try {
+      if (databaseReady && sql) {
+        for (const token of sessionTokens(req.headers && req.headers.cookie)) {
+          try {
+            await sql`DELETE FROM dispatch_sessions WHERE token_hash=${tokenHash(token)}`;
+          } catch (error) {
+            console.error("logout session delete failed:", error && error.message ? error.message : error);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("logout failed:", error && error.message ? error.message : error);
+    }
+    res.setHeader("Set-Cookie", "dispatch_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax");
+    res.writeHead(302, { Location: "/" });
+    return res.end();
+  }
 
-  if (p === "/api/me") return json(res, 200, publicUser(await currentUser(req)));
+  if (p === "/api/me") {
+    try {
+      const body = await resolvePublicUser(req.headers && req.headers.cookie, async () => currentUser(req));
+      return json(res, 200, body && typeof body === "object" ? body : guestUser());
+    } catch (error) {
+      console.error("GET /api/me failed:", error && error.message ? error.message : error);
+      return json(res, 200, guestUser());
+    }
+  }
   if (p === "/api/stripe-status") return json(res, 200, {
     active: (await currentUser(req))?.tier === "premium",
     configured: stripeState.ready,
@@ -764,7 +836,7 @@ async function handle(req, res) {
   if (["/api/financials", "/api/earnings", "/api/statements", "/api/holders"].includes(p)) return json(res, 200, { symbol: url.searchParams.get("symbol"), data: [], earnings: [], holders: [] });
   if (["/api/brief", "/api/intelligence", "/api/lenses", "/api/committee", "/api/chat", "/api/gold-desk"].includes(p)) {
     const user = await currentUser(req);
-    if (!user || user.tier !== "premium") return json(res, 401, { error: "Premium membership required" });
+    if (!user || (user.tier !== "premium" && user.isAdmin !== true)) return json(res, 401, { error: "Premium membership required" });
     const body = req.method === "POST" ? await readBody(req) : {};
     try {
       if (p === "/api/chat") {
@@ -927,7 +999,11 @@ async function start() {
   await initializeStripe();
   server.listen(PORT, "0.0.0.0", () => console.log(`Dispatch Markets preview listening on ${PORT}`));
 }
-start().catch(error => {
-  console.error("Application startup failed:", error);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  start().catch(error => {
+    console.error("Application startup failed:", error);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = { handle };

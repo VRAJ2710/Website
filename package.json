@@ -4,7 +4,8 @@
   "description": "The Dispatch Markets — AI-assisted market intelligence terminal",
   "main": "index.js",
   "scripts": {
-    "test": "npm run story:check && npm run test:market-proxy && npm run test:auth",
+    "test": "npm run test:chat-me && npm run story:check && npm run test:market-proxy && npm run test:auth",
+    "test:chat-me": "node --test test/ai-provider.test.js",
     "test:market-proxy": "node --test test/market-proxy.test.js",
     "test:auth": "node --test --test-force-exit test/auth.integration.test.js",
     "story:check": "tsc -p tsconfig.story.json",
