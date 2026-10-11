@@ -2,7 +2,7 @@
 """patch_rt18s.py — server: gzip/brotli for static text assets (node zlib, no deps).
 Usage: python3 patch_rt18s.py [--check] <path/to/server.js>
 Adds one helper block before `async function handle(req, res) {` and one call
-as the first statement after `const p = url.pathname;` in handle().
+right after `if (writeCanonicalHostRedirect(req, res)) return;` at the top of handle().
 """
 import sys, os, subprocess, tempfile
 CHECK = '--check' in sys.argv
@@ -13,19 +13,26 @@ def die(m): print('ABORT:', m); sys.exit(1)
 raw = open(F, 'rb').read(); crlf = b'\r\n' in raw
 s = raw.decode('utf-8').replace('\r\n', '\n')
 if 'rt18s:' in s or 'rt18sWrapResponse' in s: die('rt18s already applied')
-for need in ['const fs = require("fs");', 'const path = require("path");', 'const root = __dirname;', 'res.writeHead(']:
-    if need not in s: die('precondition missing: ' + need)
 for bad in ['createGzip', 'brotliCompress', '"Content-Encoding"', "'Content-Encoding'", 'compression()']:
     if bad in s: die('server already does compression (' + bad + '); not stacking')
-ANCHOR = 'async function handle(req, res) {\n  const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);\n  const p = url.pathname;\n'
+ANCHOR = '  attachSecurityHeaders(res);\n  if (writeCanonicalHostRedirect(req, res)) return;\n'
 n = s.count(ANCHOR)
-if n != 1: die(f'handle() anchor matched {n} times (want 1)')
+if n != 1: die(f'security/host-redirect anchor matched {n} times (want 1)')
+HANDLE = 'async function handle(req, res) {\n'
+if s.count(HANDLE) != 1: die('async function handle(req, res) matched %d times (want 1)' % s.count(HANDLE))
+hi = s.index(HANDLE); ai = s.index(ANCHOR)
+if not (hi < ai < hi + 600): die('anchor is not at the top of handle()')
+for nm in ['rt18sZlib', 'rt18sFs', 'rt18sPath', 'RT18S_ROOT', 'rt18sWrapResponse', 'rt18sAccepts', 'rt18sPrecompressed', 'RT18S_CT', 'RT18S_PRE', 'rt18sPreCache']:
+    if nm in s: die('name collision: ' + nm)
 BLOCK = r"""// ── rt18s: static text compression (gzip / brotli via node zlib) ──
 // Wraps the response object at the top of handle(): compressible static responses
 // (html/css/js/svg/json, not /api/*) are gzip/brotli-encoded per Accept-Encoding;
 // app.js and styles.css are precompressed once per process (async, keyed by mtime).
 // Existing status codes and cache headers are kept; 304/HEAD/ranges are untouched.
 const rt18sZlib = require("zlib");
+const rt18sFs = require("fs");
+const rt18sPath = require("path");
+const RT18S_ROOT = __dirname; // server.js sits next to app.js / styles.css
 const RT18S_CT = /^(text\/(html|css|javascript|plain)|application\/(javascript|json|manifest\+json)|image\/svg\+xml)\b/i;
 const RT18S_PRE = { "/app.js": "app.js", "/styles.css": "styles.css" };
 const rt18sPreCache = new Map(); // name -> { mtimeMs, gzip, br, pending }
@@ -43,12 +50,12 @@ function rt18sAccepts(req) {
 }
 function rt18sPrecompressed(name, enc) {
   let st;
-  try { st = fs.statSync(path.join(root, name)); } catch (e) { return null; }
+  try { st = rt18sFs.statSync(rt18sPath.join(RT18S_ROOT, name)); } catch (e) { return null; }
   let entry = rt18sPreCache.get(name);
   if (!entry || entry.mtimeMs !== st.mtimeMs) {
     entry = { mtimeMs: st.mtimeMs, gzip: null, br: null, pending: true };
     rt18sPreCache.set(name, entry);
-    fs.readFile(path.join(root, name), (err, buf) => {
+    rt18sFs.readFile(rt18sPath.join(RT18S_ROOT, name), (err, buf) => {
       if (err) { entry.pending = false; return; }
       // Async (libuv threadpool): never blocks the event loop.
       rt18sZlib.gzip(buf, { level: 9 }, (e1, gz) => { if (!e1) entry.gzip = gz; });
@@ -57,7 +64,9 @@ function rt18sPrecompressed(name, enc) {
   }
   return entry[enc] || null;
 }
-function rt18sWrapResponse(req, res, pathname) {
+function rt18sWrapResponse(req, res) {
+  let pathname = "/";
+  try { pathname = new URL(req.url || "/", "http://localhost").pathname; } catch (e) { return; }
   if (req.method !== "GET" && req.method !== "HEAD") return;
   if (pathname.startsWith("/api/") || req.headers.range) return;
   const enc = rt18sAccepts(req);
@@ -130,7 +139,8 @@ function rt18sWrapResponse(req, res, pathname) {
 // Warm the precompressed cache at boot (async, off the event loop).
 setImmediate(() => { Object.values(RT18S_PRE).forEach(n => { rt18sPrecompressed(n, "gzip"); }); });
 """
-s = s.replace(ANCHOR, BLOCK + '\n' + ANCHOR + '  rt18sWrapResponse(req, res, p);\n')
+s = s[:hi] + BLOCK + '\n' + s[hi:]
+s = s.replace(ANCHOR, ANCHOR + '  rt18sWrapResponse(req, res);\n', 1)
 with tempfile.NamedTemporaryFile('w', suffix='.js', delete=False) as t: t.write(s); tmp = t.name
 r = subprocess.run(['node', '--check', tmp], capture_output=True, text=True); os.unlink(tmp)
 if r.returncode: die('node --check failed: ' + r.stderr[:400])
