@@ -43,7 +43,7 @@ R('rs cmp lbl', 'vs SPY (day)</td>', 'vs SPY (day, pts)</td>')
 R('pulse sent', '${_rt16Clip(_rt24Th(a), 140)}', '${_rt26Sent(_rt24Th(a), 160)}')
 R('card sent', '${_rt16Clip(_rt24Th(a), 120)}', '${_rt26Sent(_rt24Th(a), 140)}')
 R('intel head', '_rt24Copy(intel.headline)', '_rt26Copy(intel.headline)', 2)
-R('intel insight', '(intel.insight || "").replace(/</g, "<")', '_rt26Sent(_rt26Copy(intel.insight || ""), 420).replace(/</g, "<")', 2)
+R('intel insight', '(intel.insight || "").replace(/</g, "\x26lt;")', '_rt26Sent(_rt26Copy(intel.insight || ""), 420).replace(/</g, "\x26lt;")', 2)
 R('phone back', '  let h=`<div class="rt23-stock"', '  let h=`<button type="button" class="rt26-back" onclick="_rt26Back()" aria-label="Back">← Back</button><div class="rt23-stock"')
 # 7. phone palette
 R('palette enter', '  if (e.key === "Enter" && _searchIdx >= 0 && items[_searchIdx]) { e.preventDefault(); items[_searchIdx].click(); return; }',
