@@ -3,12 +3,26 @@
 
 Root of the 9.3s first paint: bb2StreamInner awaits Yahoo (up to 900ms) before
 writeHead. On a cold in-memory cache that wait returns nothing, so the lead is
-empty and the first visible text is the model, several seconds later. The 200ms
-client prefetch and the premium check are not that gap. This patch opens the
-SSE response before any quote fetch. A cached snapshot, stale included, is the
-first event and names its as-of. A cold fetch is kicked in the background of
-this request (no cron); the first event is "Fetching latest valuations." If the
-refresh finishes within 800ms the comparison block follows in the same reply.
+empty and the first visible text is the model. This patch opens the SSE
+response before any quote fetch. A cached snapshot, stale included, is the
+first event and names its as-of. A cold fetch runs in the background of this
+request (no cron). The status line "Fetching latest valuations." is not the
+answer. The model starts at once, in parallel with that fetch.
+
+generateAi does not stream. It POSTs without stream:true, reads response.json(),
+and returns choices[0].message.content. Google there is :generateContent, not
+the SSE endpoint. The Ask stream does not call generateAi. It calls bb2OpenAi
+(gpt-4o-mini, stream:true, one delta per SSE line) and, on failure, bb2Gemini
+(streamGenerateContent?alt=sse, one part per event). Timeouts stay 20s, in that
+order. Those calls already deliver tokens as they arrive. Two things still hid
+them: the cold path waited up to 800ms for Yahoo before bb2Complete, and the
+pump held every partial until a sentence ended. Non-comparison tokens are now
+written as they arrive. A partial that names a ticker and a number, or a P/E,
+stays held until the sentence boundary, then the same validator runs.
+
+Peer and valuation questions drop context lines that do not name the ticker or
+a peer (generic headlines, the regime essay, the brief, the portfolio). The
+authoritative comparison block stays. Other questions keep their context.
 
 The held-sentence matcher treated the newline before a replaced sentence as
 part of that sentence, so the replacement was glued on: "(90.2%).Trailing…".
@@ -223,8 +237,8 @@ function bb3Compose(reply, built, cite) {
     var lead = bb3LeadText(built, cite).trim();
     return (lead + (text ? "\n\n" + text : "")).trim();
   }
-  var fetching = /Fetching latest valuations\./.test(String(reply || "")) ? "Fetching latest valuations.\n\n" : "";
-  return (fetching + text).trim();
+  if (text) return text.trim();
+  return /Fetching latest valuations\./.test(String(reply || "")) ? "Fetching latest valuations." : "";
 }
 function bb3ReadCache(syms) {
   var out = {}, any = false;
@@ -233,6 +247,54 @@ function bb3ReadCache(syms) {
     if (hit && hit.v) { out[sym] = hit.v; any = true; }
   });
   return any ? out : null;
+}
+function bb3Hold(text, facts) {
+  var s = String(text || "");
+  if (!s) return false;
+  if (/p\/e|multiple|trailing|forward|\bttm\b|not reported/i.test(s)) return true;
+  if (/\b(higher|lower|above|below|cheaper|richer|premium|discount)\b/i.test(s)) return true;
+  if (/\b[A-Z]{2,5}\b/.test(s) && /\d/.test(s)) return true;
+  if (/\d\.$/.test(s)) return true;
+  if (facts && facts.length) {
+    for (var n = 0; n < facts.length; n++) {
+      var f = facts[n];
+      if (!f) continue;
+      if ((f.a && new RegExp("\\b" + f.a + "\\b").test(s)) || (f.b && new RegExp("\\b" + f.b + "\\b").test(s))) return true;
+    }
+  }
+  return false;
+}
+function bb3TrimBody(body) {
+  var info = bb3Tickers(body);
+  if (!info.peer || !body || typeof body.context !== "string" || !body.context) return body;
+  var tickers = info.tickers;
+  var lines = body.context.split("\n");
+  var kept = [], inHeads = false, keepFollow = false;
+  lines.forEach(function (line) {
+    var t = line.trim();
+    if (/^Latest headlines:/i.test(t)) { inHeads = true; keepFollow = false; return; }
+    if (inHeads) {
+      if (!t) { inHeads = false; return; }
+      if (/^[•\-] /.test(t) || /^\[[^\]]+\]/.test(t)) {
+        if (bb3Mentions({ name: t, detail: t, link: "" }, tickers)) kept.push(t);
+        return;
+      }
+      inHeads = false;
+    }
+    if (!t) { keepFollow = false; return; }
+    var mention = bb3Mentions({ name: t, detail: "", link: "" }, tickers);
+    var peerHead = /peer valuation/i.test(t);
+    var follow = keepFollow && /^(Financials:|Earnings:|Live price:)/i.test(t);
+    if (mention || peerHead || follow) {
+      kept.push(line);
+      keepFollow = /^(Active ticker:|Peer valuations)/i.test(t);
+    } else keepFollow = false;
+  });
+  var ctx = kept.join("\n").replace(/\n{3,}/g, "\n\n").trim().slice(0, 1600);
+  var next = {};
+  Object.keys(body).forEach(function (k) { next[k] = body[k]; });
+  next.context = ctx;
+  return next;
 }
 async function bb3StreamInner(req, res) {
   var t0 = Date.now();
@@ -246,11 +308,12 @@ async function bb3StreamInner(req, res) {
   });
   if (typeof res.flushHeaders === "function") { try { res.flushHeaders(); } catch (e) {} }
   if (res.socket && typeof res.socket.setNoDelay === "function") { try { res.socket.setNoDelay(true); } catch (e2) {} }
-  var firstAt = 0;
-  function send(obj) {
+  var firstAt = 0, modelAt = 0;
+  function send(obj, kind) {
     res.write("data: " + JSON.stringify(obj) + "\n\n");
     if (typeof res.flush === "function") { try { res.flush(); } catch (e) {} }
     if (!firstAt && obj && obj.t) firstAt = Date.now();
+    if (kind === "model" && obj && obj.t && !modelAt) modelAt = Date.now();
   }
   var info = bb3Tickers(body);
   var base = info.peer ? (typeof bb2Base === "function" ? bb2Base(info.q) : null) : null;
@@ -268,27 +331,29 @@ async function bb3StreamInner(req, res) {
   var facts = built && built.facts ? built.facts : [];
   var lead = bb3LeadText(built, cite);
   var acc = "";
-  if (lead) { acc += lead; send({ t: lead }); }
-  else if (base) { var note = "Fetching latest valuations.\n\n"; acc += note; send({ t: note }); }
+  if (lead) { acc += lead; send({ t: lead }, "lead"); }
+  else if (base) { var note = "Fetching latest valuations.\n\n"; acc += note; send({ t: note }, "status"); }
+  var pendingLead = null;
   if (syms.length && typeof bb2Refresh === "function") {
     var job = null;
     try { job = bb2Refresh(syms); } catch (e) { job = null; }
-    if (!built && job && typeof job.then === "function") {
-      var up = await Promise.race([
-        job.then(function () { return "up"; }).catch(function () { return "up"; }),
-        new Promise(function (r) { setTimeout(function () { r("slow"); }, 800); })
-      ]);
-      if (up === "up") {
-        vals = bb3ReadCache(syms);
-        if (vals && typeof bb2BuildFacts === "function") {
+    if (job && typeof job.then === "function") {
+      if (!built) {
+        pendingLead = Promise.race([
+          job.then(function () { return "up"; }).catch(function () { return "up"; }),
+          new Promise(function (r) { setTimeout(function () { r("slow"); }, 800); })
+        ]).then(function (up) {
+          if (up !== "up") { if (typeof job.catch === "function") job.catch(function () {}); return; }
+          vals = bb3ReadCache(syms);
+          if (!(vals && typeof bb2BuildFacts === "function")) return;
           built = bb2BuildFacts(base, vals);
           facts = built.facts || [];
           cite = addYahoo();
           lead = bb3LeadText(built, cite);
-          if (lead) { acc += lead; send({ t: lead }); }
-        }
+          if (lead) { acc += lead; send({ t: lead }, "lead"); }
+        });
       } else if (typeof job.catch === "function") job.catch(function () {});
-    } else if (job && typeof job.catch === "function") job.catch(function () {});
+    }
   }
   var store = (typeof bb2Als !== "undefined" && bb2Als && bb2Als.getStore) ? bb2Als.getStore() : null;
   if (store) {
@@ -307,7 +372,7 @@ async function bb3StreamInner(req, res) {
       if (bb3Restates(part.sentence, facts)) continue;
       var piece = part.prefix + bb3Fix(part.sentence, facts) + part.sep;
       acc += piece;
-      send({ t: piece });
+      send({ t: piece }, "model");
     }
     if (force && buf) {
       var last = bb3Next(buf, true);
@@ -315,17 +380,24 @@ async function bb3StreamInner(req, res) {
       if (last && !bb3Restates(last.sentence, facts)) {
         var tail = last.prefix + bb3Fix(last.sentence, facts) + last.sep;
         acc += tail;
-        send({ t: tail });
+        send({ t: tail }, "model");
       }
+    } else if (buf && !bb3Hold(buf, facts)) {
+      var open = buf;
+      buf = "";
+      acc += open;
+      send({ t: open }, "model");
     }
   }
   var meta = { provider: "Dispatch", model: "comparison" };
   try {
-    var system = typeof bb2System === "function" ? bb2System(body, built, sources) : "";
-    meta = await bb2Complete(system, body && body.messages, function (d) { buf += d; pump(false); });
+    var askBody = bb3TrimBody(body);
+    var system = typeof bb2System === "function" ? bb2System(askBody, built, sources) : "";
+    meta = await bb2Complete(system, askBody && askBody.messages, function (d) { buf += d; pump(false); });
   } catch (e) {
     if (!acc.trim()) { send({ error: "unavailable" }); res.end(); console.warn("bb3 chat provider miss", Date.now() - t0); return; }
   }
+  if (pendingLead) { try { await pendingLead; } catch (e2) {} }
   pump(true);
   if (store) store.facts = facts;
   var citeN = store && store.peerSource ? (store.clientSources.length + 1) : 0;
@@ -339,7 +411,7 @@ async function bb3StreamInner(req, res) {
   if (srcAt >= 0 && acc.indexOf("Sources:") < 0) send({ t: reply.slice(srcAt) });
   send({ done: true, reply: reply, meta: { provider: meta.provider, model: meta.model, streamed: true }, sources: footSources });
   res.end();
-  console.warn("bb3 chat ttft_ms", (firstAt || Date.now()) - t0, "total_ms", Date.now() - t0);
+  console.warn("bb3 chat ttft_ms", (firstAt || Date.now()) - t0, "model_ttft_ms", modelAt ? modelAt - t0 : -1, "total_ms", Date.now() - t0);
 }
 try {
   var bb3Client0 = bb2ClientSources;
@@ -359,7 +431,7 @@ try {
   if (typeof bb2System === "function") {
     var bb3System0 = bb2System;
     bb2System = function (body, built, sources) {
-      return bb3System0.apply(this, arguments) + "\n\nThe peer comparison lines are already on screen. Do not repeat them as a paragraph or as bullets. Do not restate a peer P/E. Add only other context.";
+      return bb3System0.call(this, bb3TrimBody(body), built, sources) + "\n\nThe peer comparison lines are already on screen. Do not repeat them as a paragraph or as bullets. Do not restate a peer P/E. Add only other context.";
     };
   }
   bb2StreamInner = bb3StreamInner;

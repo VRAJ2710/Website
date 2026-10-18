@@ -71,7 +71,7 @@ function load(opts) {
       if (!sources || !sources.length) return "\n\nSources: No news or price sources were supplied for this answer.";
       return "\n\nSources:\n" + sources.map((s, i) => "[" + (i + 1) + "] " + s.name + " | " + (s.detail || "")).join("\n");
     },
-    bb2System() { return "system"; },
+    bb2System(body) { sandbox._seenContext = body && body.context; return "system"; },
     bb2Complete: async (_s, _m, onDelta) => {
       onDelta("Demand is the driver.\n");
       onDelta("- MU trailing P/E (TTM) 11.8x is lower than WDC trailing P/E (TTM) 12.3x by 0.5x (4.1%).\n");
@@ -271,6 +271,72 @@ test("cached snapshot is the first event and does not wait for Yahoo", async () 
   assert.ok(res.writes[0].at < 1000);
   await pending;
   assert.equal(started, true);
+});
+
+test("cold cache streams the first model token without waiting for Yahoo or the full completion", async () => {
+  let yahooDone = false;
+  const s = load({
+    refresh() {
+      return new Promise(resolve => {
+        const t = setTimeout(() => { yahooDone = true; resolve(); }, 2500);
+        if (t.unref) t.unref();
+      });
+    },
+    body: {
+      messages: [{ role: "user", content: "How does MU's valuation compare with its peers?" }],
+      tickers: ["MU"],
+      context: [
+        "Peer valuations (live):",
+        "MU: trailing P/E (TTM) 11.8x",
+        "Regime: Risk-On and a long essay about the dollar.",
+        "Latest headlines:",
+        "• Canada base fire spreads overnight",
+        "• MU lifts its data-center outlook",
+        "• oil prices jump on supply",
+        "Portfolio:",
+        "AAPL ×1 @ $100",
+        "Active ticker: MU Micron · $185"
+      ].join("\n") + "\n" + "unrelated ".repeat(2000)
+    }
+  });
+  s.bb2Complete = async (_sys, _msgs, onDelta) => {
+    await new Promise(r => setTimeout(r, 600));
+    onDelta("Demand ");
+    await new Promise(r => setTimeout(r, 40));
+    onDelta("is firm.\n");
+    const bad = "MU trailing P/E (TTM) 11.8x is higher than its forward P/E 4.2x.\n";
+    for (const ch of bad) onDelta(ch);
+    return { provider: "OpenAI", model: "gpt-4o-mini" };
+  };
+  const res = streamRes();
+  await s.bb2Als.run({ facts: [], clientSources: [], peerSource: null }, () => s.bb2StreamInner({
+    method: "POST", url: "/api/chat", headers: { host: "localhost" }
+  }, res));
+  const events = res.writes.map(w => ({ at: w.at, ev: JSON.parse(w.chunk.replace(/^data: /, "").trim()) }));
+  assert.match(events[0].ev.t, /Fetching latest valuations/);
+  assert.ok(events[0].at < 1000);
+  const model = events.find(w => w.ev.t && /Demand/.test(w.ev.t));
+  assert.ok(model, "no model token");
+  assert.ok(model.at >= 500 && model.at < 2000, "model ttft " + model.at);
+  assert.ok(model.at > events[0].at);
+  assert.equal(yahooDone, false);
+  const done = events.filter(w => w.ev.done).pop();
+  assert.match(done.ev.reply, /Demand is firm/);
+  assert.match(done.ev.reply, /different bases and are not compared/);
+  assert.equal(done.ev.reply.includes("%Trailing"), false);
+  assert.equal(done.ev.reply.includes(").Trailing"), false);
+  assert.equal(/higher than its forward/.test(done.ev.reply), false);
+  assert.equal(/^Fetching latest valuations/.test(done.ev.reply), false);
+  assert.equal(/Canada base fire|oil prices|Portfolio:|Regime:/.test(s._seenContext || ""), false);
+  assert.match(s._seenContext, /MU lifts its data-center outlook/);
+  assert.match(s._seenContext, /Active ticker: MU/);
+  assert.ok(s._seenContext.length < 1600, "context " + s._seenContext.length);
+});
+
+test("a non-peer question keeps its context", () => {
+  const s = load({ body: { messages: [{ role: "user", content: "What moved gold today?" }], context: "Latest headlines:\n• Canada base fire spreads\n", tickers: [] } });
+  const out = s.bb3TrimBody(s._body);
+  assert.match(out.context, /Canada base fire/);
 });
 
 test("admin and premium can stream; free and logged-out get the JSON 401", async () => {
