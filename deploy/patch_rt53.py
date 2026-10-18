@@ -155,6 +155,17 @@ s = sub1(s,
 'if (pg === "home" && (dirty.has("XAU") || dirty.has("DXY") || dirty.has("PAXG"))) {',
 'if (pg === "home" && (dirty.has("XAU") || dirty.has("DXY") || dirty.has("PAXG") || dirty.has("VIX") || dirty.has("TNX") || dirty.has("BRENT") || dirty.has("WTI") || dirty.has("BTC"))) {',
 'home quote paint')
+s = sub1(s,
+'Keys are configured in Replit Secrets, never on this page.',
+"Keys are kept in this site's private settings, never on this page.",
+'settings jargon')
+def nsub(hay, old, new, n, label):
+    c = hay.count(old)
+    if c != n: die('%s matched %d times, expected %d' % (label, c, n))
+    return hay.replace(old, new)
+s = nsub(s, 'vixN.toFixed(1)', 'vixN.toFixed(2)', 2, 'vixN rounding')
+s = nsub(s, 'vix.toFixed(1)', 'vix.toFixed(2)', 3, 'vix rounding')
+s = nsub(s, "['VIX', 'VIX', v => v.toFixed(1)]", "['VIX', 'VIX', v => v.toFixed(2)]", 1, 'geo VIX tile')
 
 # Regime fit is rendered from the server payload only. These three sites are the ones that
 # print a computed fit on the ticker card and in Market Lab. The ranking engine is left as it is.
@@ -534,12 +545,14 @@ function _rt53FitAsk(tk) {
   if (_rt53FitAsked[tk]) return;
   _rt53FitAsked[tk] = 1;
   var bag = _rt53FitBag;
+  // Single source: GET /api/regime-fit. 404 (bb3 not deployed yet) and any other miss stay on "not available yet". The client never fills a number in.
   fetch("/api/regime-fit?ticker=" + encodeURIComponent(tk), { credentials: "same-origin", signal: AbortSignal.timeout(8000) }).then(function (r) {
-    return r.ok ? r.json() : null;
+    if (r.status === 404 || !r.ok) return null;
+    return r.json();
   }).then(function (j) {
     bag[tk] = _rt53FitTake(j, tk);
     _rt53FitRepaint();
-  }).catch(function () { bag[tk] = null; });
+  }).catch(function () { bag[tk] = null; _rt53FitRepaint(); });
 }
 function _rt53FitAt(iso) {
   if (!iso) return "\u2014";
@@ -550,24 +563,37 @@ function _rt53FitAt(iso) {
     return _rt53FitAtFmt.format(d) + " UK";
   } catch (e) { return "\u2014"; }
 }
+function _rt53FitPts(n) {
+  var v = Number(n);
+  if (!isFinite(v)) return "";
+  if (Object.is(v, -0)) v = 0;
+  if (v > 0) return "+" + (Math.round(v * 10) / 10);
+  if (v < 0) return "\u2212" + (Math.round(Math.abs(v) * 10) / 10);
+  return "0";
+}
 function _rt53FitInputLine(inp) {
-  var val = inp.value == null || inp.value === "" ? "\u2014" : String(inp.value);
-  if (inp.unit) val += (inp.value == null || inp.value === "" ? "" : " ") + String(inp.unit);
+  if (!inp) return "";
+  // The last row is a clamp. It is usually 0, and a zero clamp is not a market input.
+  if (String(inp.key || "") === "bounds" && Number(inp.contribution) === 0) return "";
+  var missing = inp.value == null || inp.value === "";
+  var val = missing ? "\u2014" : String(inp.value);
+  if (!missing && inp.unit) val += " " + String(inp.unit);
   var bits = [inp.label || inp.key || "Input", val];
   if (inp.source) bits.push(String(inp.source));
   if (inp.asOf) bits.push(_rt53FitAt(inp.asOf));
-  if (inp.weight != null && inp.weight !== "") bits.push("weight " + inp.weight);
-  if (inp.contribution != null && inp.contribution !== "") bits.push("contribution " + inp.contribution);
+  if (inp.contribution != null && inp.contribution !== "") bits.push(_rt53FitPts(inp.contribution) + " points");
   return bits.join(" \u00b7 ");
 }
 function _rt53FitSheet(tk) {
   var f = _rt53FitRead(tk), E = function (v) { try { return _rt52E(v); } catch (e) { return _rt53Esc(v); } };
   if (f.state === "absent") return { k: "REGIME FIT", t: (f.ticker || tk) + " \u00b7 Fit score not available yet", what: E("The desk publishes one fit score from the server. It is not on this page yet, so nothing is estimated here."), how: [], src: E("Dispatch server"), at: "\u2014", why: "" };
-  var how = (f.inputs || []).map(function (inp) { return E(_rt53FitInputLine(inp)); });
+  var how = (f.inputs || []).map(function (inp) { return _rt53FitInputLine(inp); }).filter(Boolean).map(E);
   var bench = "SPY \u2014";
   if (f.benchmark) bench = String(f.benchmark.symbol || "SPY") + " " + (f.benchmark.value == null || f.benchmark.value === "" ? "\u2014" : f.benchmark.value) + (f.benchmark.asOf ? " \u00b7 " + _rt53FitAt(f.benchmark.asOf) : "");
   var title = f.state === "score" ? (f.ticker + " \u00b7 " + f.score + "/100" + (f.label ? " \u00b7 " + f.label : "")) : (f.ticker + " \u00b7 " + (f.reason || "No fit score"));
-  return { k: "REGIME FIT", t: title, what: E(f.method || (f.state === "null" ? (f.reason || "No fit score was published for this name.") : "\u2014")), how: how, src: E(bench), at: f.asOf ? _rt53FitAt(f.asOf) : "\u2014", why: f.regime ? E("Regime: " + f.regime + (f.version ? " \u00b7 version " + f.version : "")) : (f.version ? E("Version " + f.version) : "") };
+  var what = f.state === "null" ? (f.reason || "No fit score was published for this name.") : "How well this name suits the current market mood. The score starts at 50. Each row adds or takes off points. A missing price is shown as a dash and adds nothing.";
+  var method = f.method ? '<details class="rt53-fit-how"><summary>How this is calculated</summary><p>' + E(f.method) + "</p></details>" : "";
+  return { k: "REGIME FIT", t: title, v: method, what: E(what), how: how, src: E(bench), at: f.asOf ? _rt53FitAt(f.asOf) : "\u2014", why: f.regime ? E("Market mood: " + f.regime + (f.version ? " \u00b7 version " + f.version : "")) : (f.version ? E("Version " + f.version) : "") };
 }
 function _rt53FitHtml(tk, mode) {
   try {
@@ -624,8 +650,203 @@ try {
     } catch (e2) { return x; }
   };
 } catch (e) {}
-(function () { try { var st = document.createElement("style"); st.setAttribute("data-rt53", ""); st.textContent = '.bb1-sec{margin:16px 0 8px}.bb1-h{margin:0 0 8px;font:800 10px/1.3 var(--mn,ui-monospace);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3,#8b909a)}.bb1-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--rule,#2a2e36);border:1px solid var(--rule,#2a2e36)}.bb1-tile{background:var(--paper,#14151A);color:var(--ink,#EDEDE8);padding:11px 12px 12px;min-width:0}.bb1-k{font:700 10px/1.2 var(--ui,system-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2,#A8ADB6)}.bb1-v{margin-top:5px;font:500 20px/1.15 var(--data,ui-monospace);font-variant-numeric:tabular-nums;color:var(--ink,#EDEDE8)}.bb1-c{font:500 12px/1 var(--data,ui-monospace);margin-left:4px}.bb1-day{font:400 10px/1 var(--ui,system-ui);letter-spacing:0;color:var(--ink-3,#8b909a);margin-left:3px}.bb1-up{color:var(--pos,#3fbf7f)}.bb1-dn{color:var(--neg,#e05a5a)}.bb1-why{margin:8px 0 0;color:var(--ink-2,#C5C8CE);font:400 12px/1.45 var(--ui,system-ui)}.bb1-meta{margin-top:8px;color:var(--ink-3,#8b909a);font:400 10px/1.4 var(--data,ui-monospace)}.front-door-quotes:has(.bb1-sec){display:block;background:transparent;gap:0}.front-door-quotes>.bb1-sec{grid-column:1 / -1}@media(min-width:768px){.bb1-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.bb1-v{font-size:22px}}.rt53-fit-wrap{padding:0}.rt53-fit-hud{display:flex;flex-direction:column;align-items:stretch;gap:8px;min-width:0}.rt53-fit-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;width:100%;min-height:44px;margin:0;padding:12px;text-align:left;background:transparent;border:0;color:inherit;font:inherit;cursor:pointer}.rt53-fit-k{font:700 8px/1.2 var(--mn,ui-monospace);letter-spacing:.15em;color:var(--gd,#d4a64a)}.rt53-fit-v{font:800 22px/1.1 var(--mn,ui-monospace);font-variant-numeric:tabular-nums;color:var(--tx,#eee)}.rt53-fit-card.up .rt53-fit-v{color:var(--gn,#3fbf7f)}.rt53-fit-card.dn .rt53-fit-v{color:var(--rd,#e05a5a)}.rt53-fit-of{font-size:12px;font-weight:700;opacity:.65}.rt53-fit-s{font:400 12px/1.45 var(--sn,system-ui);color:var(--t2,#c3c9d5)}.rt53-fit-ctl{display:none}@media(min-width:1280px){.lab-hud>.rt53-fit-hud{grid-column:1 / -1;flex-direction:row;align-items:center;justify-content:space-between;gap:16px}.lab-hud .rt53-fit-card{flex-direction:row;flex-wrap:wrap;align-items:baseline;gap:6px 14px;width:auto;flex:1;padding:4px 0}.rt53-fit-card{pointer-events:none;cursor:default}.rt53-fit-ctl{display:inline-flex;align-items:center;align-self:center;flex:0 0 auto;pointer-events:auto;cursor:pointer;min-height:44px;padding:8px 12px;background:transparent;border:1px solid var(--gb,#333);border-radius:8px;color:var(--gd,#d4a64a);font:700 11px/1.2 var(--sn,system-ui);white-space:nowrap}}'; document.head.appendChild(st); } catch (e) {} })();
+// ── rt53 QA ── dossier sheet, one trading-now line, news tags, desk score, 13F, hours slot, signals paint.
+function _rt53bTag(text) {
+  var low = " " + String(text || "").toLowerCase().replace(/\s+/g, " ") + " ";
+  var cache = _rt53bTag.re || (_rt53bTag.re = Object.create(null));
+  function hit(words) {
+    for (var i = 0; i < words.length; i++) {
+      var k = String(words[i] || "").trim();
+      if (!k) continue;
+      var re = cache[k];
+      if (!re) {
+        var e = k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        var pre = /^[a-z0-9]/i.test(k) ? "(^|[^a-z0-9])" : "";
+        var post = /[a-z0-9]$/i.test(k) ? "($|[^a-z0-9])" : "";
+        re = cache[k] = new RegExp(pre + e + post, "i");
+      }
+      if (re.test(low)) return true;
+    }
+    return false;
+  }
+  if (hit(["bitcoin", "crypto", "cryptocurrency", "cryptocurrencies", "ethereum", "btc", "eth", "blockchain", "solana", "xrp", "dogecoin", "stablecoin", "binance", "coinbase", "defi", "altcoin"])) return "Crypto";
+  var best = "", bestScore = 0, rules = (typeof TAG_RULES === "object" && TAG_RULES) || {};
+  Object.keys(rules).forEach(function (tag) {
+    if (tag === "Crypto") return;
+    var cfg = rules[tag] || {}, keys = cfg.k || [], s = 0;
+    for (var i = 0; i < keys.length; i++) if (hit([keys[i]])) s += cfg.w || 1;
+    if (s > bestScore) { bestScore = s; best = tag; }
+  });
+  return bestScore > 0 ? best : "Other";
+}
+try {
+  if (typeof _rt53Dt0 === "function") { _rt53Dt0 = _rt53bTag; if (_rt53DtCache && _rt53DtCache.clear) _rt53DtCache.clear(); }
+  else detectTag = _rt53bTag;
+  (typeof NEWS !== "undefined" ? NEWS : []).forEach(function (n) { if (n) delete n._rt52; });
+  if (typeof _rt52Retag === "function") _rt52Retag();
+} catch (e) {}
+try {
+  _rt51Label = function () {
+    var b = _rt51Brk();
+    if (!b || !b.priced) return "Prices loading";
+    return b.live + " trading now \u00b7 " + b.closed + " closed" + (b.weekend ? " for the weekend" : "") + (b.quiet ? " \u00b7 " + b.quiet + " quiet" : "");
+  };
+} catch (e) {}
+try {
+  RT52_B.dossier = function (iso) {
+    var d = (typeof TD_COUNTRY_DOSSIERS !== "undefined") ? TD_COUNTRY_DOSSIERS[iso] : null;
+    if (!d) return null;
+    var E = function (v) { try { return _rt52E(v); } catch (e2) { return _rt53Esc(v); } };
+    var asOf = "";
+    try { asOf = _rt53FitAt(new Date().toISOString()); } catch (e2) {}
+    var how = (d.signals || []).map(function (x) { return "Desk note: " + x; });
+    how.push("Desk stress score: " + d.cii + " out of 100. It is a baseline set by the desk, not a live index.");
+    if (d.tickers && d.tickers.length) how.push("Linked markets: " + d.tickers.join(", "));
+    return { k: "COUNTRY DOSSIER", t: d.name + " \u00b7 " + d.cii + "/100", what: E("What this is: a short desk note on " + d.name + " and the markets tied to it."), how: how.map(E), src: E("The Dispatch desk. Headlines elsewhere on Geo Ops come from the news wires."), at: asOf || "\u2014", why: E("Why it matters: stress in " + d.name + " can move the linked prices. It is context for the tape, not a forecast.") };
+  };
+  openCountryDossier = function (iso) { try { _geoDossierIso = iso; } catch (e2) {} if (typeof _rt52Show === "function") _rt52Show("dossier", iso); };
+} catch (e) {}
+try {
+  RT52_B.desk = function (score) {
+    var n = String(score == null ? "" : score);
+    var E = function (v) { try { return _rt52E(v); } catch (e2) { return _rt53Esc(v); } };
+    return { k: "DESK SCORE", t: "Impact " + n + " out of 10", what: E("A plain reading of this headline, from 0 to 10. It uses the words in the story. It is not a forecast."), how: [E("Urgent words, such as a break, a strike or a record, sit higher."), E("A clear rise or a clear fall in the wording moves the number a step further."), E("The same headline always gets the same number.")], src: E("The Dispatch desk, from the headline text"), at: (function () { try { return _rt53FitAt(new Date().toISOString()); } catch (e2) { return "\u2014"; } })(), why: E("It shows how hard the desk thinks the headline can hit prices. It is not a recommendation.") };
+  };
+  var _rt53bCard = _renderNewsCard;
+  _renderNewsCard = function () {
+    var h = _rt53bCard.apply(this, arguments);
+    return String(h).replace(/<span class="news-impact-score ([^"]*)" title="[^"]*">Impact (\d+)\/10<\/span>/g, '<button type="button" class="news-impact-score $1" data-rt52b="desk" data-rt52a="$2" aria-haspopup="dialog">Impact $2/10</button>');
+  };
+} catch (e) {}
+try {
+  _rt48eIntro = function (st) {
+    try {
+      if (typeof _rt48QuizReg === "function") _rt48QuizReg();
+      if (!st || !st[0] || st[0].t !== "info" || !/in the news/i.test(String(st[0].h || ""))) return st;
+      var heads = [], bank = [], exps = [];
+      st.forEach(function (step) {
+        if (!step) return;
+        if (step.t === "scen") {
+          var sc = (typeof RT47_SCEN !== "undefined") ? RT47_SCEN[step.n] : null, m = sc && sc[3];
+          if (m && m.auto && m.h) heads.push(m.h);
+          else if (sc && sc[0]) bank.push(sc[0]);
+        } else if (step.t === "q" && step.ai) {
+          var q = (typeof RT46_QUIZ !== "undefined" && RT46_QUIZ.news) ? RT46_QUIZ.news[step.n] : null;
+          if (q && q[0]) exps.push(q[0]);
+        }
+      });
+      function pl(k, w) { return k + " " + w + (k === 1 ? "" : "s"); }
+      var b = "";
+      if (heads.length) b = pl(heads.length, "recent headline") + " from the site's news feeds, matched automatically to a market scenario. " + (heads.length === 1 ? "The card asks" : "Each card asks") + ": if this news was a surprise, what is the usual first reaction?";
+      else if (bank.length) b = "None of the latest headlines matched a scenario template today, so here " + (bank.length === 1 ? "is 1 scenario" : "are " + bank.length + " scenarios") + " from the scenario bank instead.";
+      if (exps.length) b += (b ? " Then " : "") + pl(exps.length, "short explainer") + " on how " + (exps.length === 1 ? "a headline" : "headlines") + " like " + (exps.length === 1 ? "this" : "these") + " usually " + (exps.length === 1 ? "moves" : "move") + " gold, oil, the dollar, yields, stocks or crypto.";
+      if (b) st[0] = Object.assign({}, st[0], { b: b });
+    } catch (e2) {}
+    return st;
+  };
+} catch (e) {}
+try {
+  var _rt53bF13 = _rt52F13Row;
+  _rt52F13Row = function (x, mgr) {
+    var h = _rt53bF13.apply(this, arguments);
+    try {
+      if (x && String(x.ticker || "").trim()) return h;
+      var nm = (typeof _rt52Title === "function" ? _rt52Title(x && x.security) : "") || "Holding";
+      var badge = '<span class="rt52-tk rt53-name">' + _rt52E(nm) + "</span>";
+      if (h.indexOf('<span class="rt52-tk"></span>') >= 0) return h.replace('<span class="rt52-tk"></span>', badge);
+    } catch (e2) {}
+    return h;
+  };
+} catch (e) {}
+function _rt53bMount13() {
+  try {
+    if (typeof IS_DESKTOP === "function" && !IS_DESKTOP()) return;
+    if ((typeof termSelTk !== "undefined" && termSelTk) || (typeof _dynTk !== "undefined" && _dynTk)) return;
+    var el = document.getElementById("p2body");
+    if (!el || el.querySelector(".institutional-intel") || typeof _renderInstitutionalIntelligence !== "function") return;
+    var box = document.createElement("div");
+    box.innerHTML = _renderInstitutionalIntelligence();
+    while (box.firstChild) el.appendChild(box.firstChild);
+    if (typeof _institutionalData !== "undefined" && !_institutionalData["13f"] && typeof _loadInstitutional === "function") _loadInstitutional("13f");
+  } catch (e) {}
+}
+function _rt53bMountFit() {
+  try {
+    if (typeof IS_DESKTOP !== "function" || !IS_DESKTOP()) return;
+    if (typeof termSelTk === "undefined" || !termSelTk) return;
+    var el = document.getElementById("p2body");
+    if (!el || el.querySelector(".rt53-fit-hud")) return;
+    var box = document.createElement("div");
+    box.innerHTML = _rt53FitHtml(termSelTk, "hud");
+    if (box.firstElementChild) el.insertBefore(box.firstElementChild, el.firstChild);
+  } catch (e) {}
+}
+try {
+  var _rt53bP2 = renderP2;
+  renderP2 = function () { var r = _rt53bP2.apply(this, arguments); _rt53bMountFit(); _rt53bMount13(); return r; };
+} catch (e) {}
+try {
+  var _rt53bRnv = _refreshNewsView;
+  _refreshNewsView = function () {
+    var r = _rt53bRnv.apply(this, arguments);
+    try {
+      var old = document.querySelector("#p2body .institutional-intel");
+      if (old && typeof _renderInstitutionalIntelligence === "function") {
+        var box = document.createElement("div");
+        box.innerHTML = _renderInstitutionalIntelligence();
+        if (box.firstElementChild) old.replaceWith(box.firstElementChild);
+      }
+    } catch (e2) {}
+    return r;
+  };
+} catch (e) {}
+function _rt53bReserveSess(root) {
+  try {
+    (root || document).querySelectorAll("#latency-strip").forEach(function (el) {
+      if (el.querySelector(".rt38-sess")) return;
+      var s = document.createElement("span");
+      s.className = "latency-pill rt38-sess";
+      s.setAttribute("aria-hidden", "true");
+      s.textContent = "\u00a0";
+      el.insertBefore(s, el.children[1] || null);
+    });
+  } catch (e) {}
+}
+try {
+  var _rt53bLS = _renderLatencyStrip;
+  _renderLatencyStrip = function () {
+    var h = _rt53bLS.apply(this, arguments);
+    try {
+      if (String(h).indexOf("rt38-sess") < 0) h = String(h).replace(/(<span class="latency-pill">[\s\S]*?<\/span>)/, '$1<span class="latency-pill rt38-sess" aria-hidden="true">\u00a0</span>');
+    } catch (e2) {}
+    return h;
+  };
+} catch (e) {}
+try { _rt53bReserveSess(); setTimeout(_rt53bReserveSess, 0); } catch (e) {}
+try {
+  var _rt53bPanels = renderTerminalPanels, _rt53bSigIdle = 0;
+  renderTerminalPanels = function () {
+    var onSig = false;
+    try { onSig = typeof pg === "string" && pg === "sig" && typeof IS_DESKTOP === "function" && IS_DESKTOP() && !termSelTk && !_dynTk; } catch (e2) {}
+    if (!onSig) return _rt53bPanels.apply(this, arguments);
+    try { renderP3(); } catch (e2) {}
+    try { var liveEl = document.getElementById("cmdLive"); if (liveEl && typeof _rt37Sum === "function") liveEl.textContent = _rt37Sum(); } catch (e2) {}
+    if (!_rt53bSigIdle) {
+      _rt53bSigIdle = 1;
+      var rest = function () { _rt53bSigIdle = 0; try { if (pg === "sig") { renderP1(); renderP4(); renderP2(); } } catch (e3) {} };
+      if (typeof requestIdleCallback === "function") requestIdleCallback(rest, { timeout: 700 }); else setTimeout(rest, 40);
+    }
+  };
+} catch (e) {}
+(function () { try { var st = document.createElement("style"); st.setAttribute("data-rt53", ""); st.textContent = '.bb1-sec{margin:16px 0 8px}.bb1-h{margin:0 0 8px;font:800 10px/1.3 var(--mn,ui-monospace);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3,#8b909a)}.bb1-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--rule,#2a2e36);border:1px solid var(--rule,#2a2e36)}.bb1-tile{background:var(--paper,#14151A);color:var(--ink,#EDEDE8);padding:11px 12px 12px;min-width:0}.bb1-k{font:700 10px/1.2 var(--ui,system-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2,#A8ADB6)}.bb1-v{margin-top:5px;font:500 20px/1.15 var(--data,ui-monospace);font-variant-numeric:tabular-nums;color:var(--ink,#EDEDE8)}.bb1-c{font:500 12px/1 var(--data,ui-monospace);margin-left:4px}.bb1-day{font:400 10px/1 var(--ui,system-ui);letter-spacing:0;color:var(--ink-3,#8b909a);margin-left:3px}.bb1-up{color:var(--pos,#3fbf7f)}.bb1-dn{color:var(--neg,#e05a5a)}.bb1-why{margin:8px 0 0;color:var(--ink-2,#C5C8CE);font:400 12px/1.45 var(--ui,system-ui)}.bb1-meta{margin-top:8px;color:var(--ink-3,#8b909a);font:400 10px/1.4 var(--data,ui-monospace)}.front-door-quotes:has(.bb1-sec){display:block;background:transparent;gap:0}.front-door-quotes>.bb1-sec{grid-column:1 / -1}@media(min-width:768px){.bb1-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.bb1-v{font-size:22px}}.rt53-fit-wrap{padding:0}.rt53-fit-hud{display:flex;flex-direction:column;align-items:stretch;gap:8px;min-width:0}.rt53-fit-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;width:100%;min-height:44px;margin:0;padding:12px;text-align:left;background:transparent;border:0;color:inherit;font:inherit;cursor:pointer}.rt53-fit-k{font:700 8px/1.2 var(--mn,ui-monospace);letter-spacing:.15em;color:var(--gd,#d4a64a)}.rt53-fit-v{font:800 22px/1.1 var(--mn,ui-monospace);font-variant-numeric:tabular-nums;color:var(--tx,#eee)}.rt53-fit-card.up .rt53-fit-v{color:var(--gn,#3fbf7f)}.rt53-fit-card.dn .rt53-fit-v{color:var(--rd,#e05a5a)}.rt53-fit-of{font-size:12px;font-weight:700;opacity:.65}.rt53-fit-s{font:400 12px/1.45 var(--sn,system-ui);color:var(--t2,#c3c9d5)}.rt53-fit-ctl{display:none}@media(min-width:1280px){.lab-hud>.rt53-fit-hud{grid-column:1 / -1;flex-direction:row;align-items:center;justify-content:space-between;gap:16px}.lab-hud .rt53-fit-card{flex-direction:row;flex-wrap:wrap;align-items:baseline;gap:6px 14px;width:auto;flex:1;padding:4px 0}.rt53-fit-card{pointer-events:none;cursor:default}.rt53-fit-ctl{display:inline-flex;align-items:center;align-self:center;flex:0 0 auto;pointer-events:auto;cursor:pointer;min-height:44px;padding:8px 12px;background:transparent;border:1px solid var(--gb,#333);border-radius:8px;color:var(--gd,#d4a64a);font:700 11px/1.2 var(--sn,system-ui);white-space:nowrap}#p2body>.rt53-fit-hud{flex-direction:row;align-items:center;justify-content:space-between;gap:16px;padding:8px 12px;border-bottom:1px solid var(--gb,#333)}}.rt53-fit-how{margin:0 0 10px}.rt53-fit-how summary{cursor:pointer;color:var(--gd,#d4a64a);font:700 12px/1.4 var(--sn,system-ui)}.rt53-fit-how p{margin:8px 0 0;color:var(--t2,#c3c9d5)}.latency-strip .rt38-sess{display:inline-block;min-height:18px;vertical-align:middle}.news-impact-score{cursor:pointer}.rt52-tk.rt53-name{letter-spacing:0;text-transform:none;font-size:11px;max-width:9em}'; document.head.appendChild(st); } catch (e) {} })();
 '''
+# bb3_fit has already signed the Hormuz oil lines. Leave that text in place.
+for bit in (
+    'bb3fit: a rise in oil raises this supply-risk score',
+    'capped at 12 points either way',
+    '${Math.abs(oilC).toFixed(2)}',
+):
+    if s.count(bit) != 1: die('bb3 Hormuz text matched %d times: %s' % (s.count(bit), bit[:48]))
 s = s.rstrip('\n') + '\n' + BLOCK
 h = h.replace('app.js?v=' + base + '"', 'app.js?v=' + nxt + '"')
 with tempfile.NamedTemporaryFile('w', suffix='.js', delete=False) as t: t.write(s); tmp = t.name
