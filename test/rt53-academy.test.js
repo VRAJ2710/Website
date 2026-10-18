@@ -45,64 +45,42 @@ function toCrlf(file) {
   fs.writeFileSync(file, text);
 }
 
-function ensureLiveClient() {
-  if (fs.existsSync("/tmp/live-try.js") && fs.existsSync("/tmp/live-index.html")) return;
-  execFileSync("curl", ["-fsS", "--max-time", "40", "-o", "/tmp/live-index.html", "https://thedispatch.uk/"], { timeout: 50000 });
-  execFileSync("curl", ["-fsS", "--max-time", "40", "-o", "/tmp/live-try.js", "https://thedispatch.uk/app.js?v=chat58"], { timeout: 50000 });
-}
+const LIVE_UPLOAD = {
+  app: "/home/ubuntu/.cursor/projects/workspace/uploads/app_0092.js",
+  index: "/home/ubuntu/.cursor/projects/workspace/uploads/index_d0e3.html",
+  server: "/home/ubuntu/.cursor/projects/workspace/uploads/server_479b.js",
+};
+const LIVE_MD5 = {
+  app: "45107b5b78039f675ffd94646ce4d309",
+  index: "87ee1667f8e6deef4c449ff9a61cce8d",
+  server: "4e8c340439b57d202b6c13711cc7a338",
+};
 
 function buildBase() {
-  ensureLiveClient();
+  for (const file of Object.values(LIVE_UPLOAD)) {
+    if (!fs.existsSync(file)) throw new Error("live fixture missing: " + file);
+  }
   fs.rmSync(BASE, { recursive: true, force: true });
   fs.mkdirSync(BASE, { recursive: true });
-  const appSrc = "/tmp/live-try.js";
-  const indexSrc = "/tmp/live-index.html";
-  fs.copyFileSync(appSrc, path.join(BASE, "app.js"));
-  fs.copyFileSync(indexSrc, path.join(BASE, "index.html"));
-  const fold = execFileSync("git", ["show", "origin/fold-chat56:server.js"], { cwd: ROOT, maxBuffer: 8 * 1024 * 1024 });
-  const stubs = `
-const SEC_13F_MANAGERS = [];
-const secRateLimiter = { allow() { return true; } };
-const SEC_USER_AGENT = "DispatchMarkets/1.0";
-async function secText() { return "{}"; }
-function sec13fInformationTableUrl() { return ""; }
-function institutionalResponse(type, status, source, asOf, items, note) {
-  return { type, status, source, asOf, items: items || [], note: note || "" };
-}
-function xmlValue() { return ""; }
-function secNumber() { return 0; }
-function isAdminUser(user) { return false; }
-async function institutional13f() { return institutionalResponse("13f", "unavailable", "SEC EDGAR", null, [], ""); }
-async function rt52Fixture13fRoute(res) {
-  return json(res, 200, await institutional13f());
-}
-function rt52FixtureAdminGate(res, user) {
-  if (!isAdminUser(user)) return text(res, 403, "Administrator access required.");
-  return null;
-}
-`;
-  fs.writeFileSync(path.join(BASE, "server.js"), Buffer.concat([fold, Buffer.from(stubs)]));
-  const rt52s = run("patch_rt52s.py", [path.join(BASE, "server.js")]);
-  if (rt52s.code !== 0) throw new Error("patch_rt52s failed\n" + rt52s.stdout);
-  const rt17src = fs.readFileSync(path.join(ROOT, "deploy", "patch_rt17s.py"), "utf8");
-  const block = rt17src.match(/BLOCK = r'''([\s\S]*?)'''\n/);
-  if (!block) throw new Error("could not read the rt17 prefs block");
-  fs.appendFileSync(path.join(BASE, "server.js"), "\n" + block[1] + `
-// ── bb2 ── Ask stream gate uses the existing helper. Admins pass with premium users.
-function hasPremiumAccess(user) {
-  return Boolean(user && (user.tier === "premium" || isAdminUser(user)));
-}
-// ── bb3 ── regime fit is computed once on the server and is the same for every reader.
-async function bb3RegimeFit(ticker) { return { ticker: ticker, regimeFit: 28 }; }
-`);
+  fs.copyFileSync(LIVE_UPLOAD.app, path.join(BASE, "app.js"));
+  fs.copyFileSync(LIVE_UPLOAD.index, path.join(BASE, "index.html"));
+  fs.copyFileSync(LIVE_UPLOAD.server, path.join(BASE, "server.js"));
+  if (md5(path.join(BASE, "app.js")) !== LIVE_MD5.app) throw new Error("live app.js md5 mismatch");
+  if (md5(path.join(BASE, "index.html")) !== LIVE_MD5.index) throw new Error("live index.html md5 mismatch");
+  if (md5(path.join(BASE, "server.js")) !== LIVE_MD5.server) throw new Error("live server.js md5 mismatch");
   const app = fs.readFileSync(path.join(BASE, "app.js"), "utf8");
-  for (const needle of ["// ── rt52 ──", "// ── bb2 ──", "function _rt47Save()", "Saved in this browser only."]) {
+  for (const needle of ["// ── rt52 ──", "function _rt47Save()", "Saved in this browser only."]) {
     if (!app.includes(needle)) throw new Error("live app.js missing " + needle);
   }
+  if (app.includes("// ── bb2 ──")) throw new Error("plain live app.js already has bb2");
   const foot = app.split("\n").find(line => line.includes("Saved in this browser only."));
   if (!foot || !foot.includes("`")) throw new Error("footer is not inside a template literal");
-  if (!fs.readFileSync(path.join(BASE, "index.html"), "utf8").includes('app.js?v=chat58"')) {
-    throw new Error("live index is not chat58");
+  if (!fs.readFileSync(path.join(BASE, "index.html"), "utf8").includes('app.js?v=chat57"')) {
+    throw new Error("live index is not chat57");
+  }
+  const server = fs.readFileSync(path.join(BASE, "server.js"), "utf8");
+  if (!server.includes("function hasPremiumAccess(") || !server.includes("// ── rt52s")) {
+    throw new Error("live server.js missing rt52s or hasPremiumAccess");
   }
 }
 
@@ -176,6 +154,8 @@ function _rt53TestPrep(patch) {
   if ("day" in patch) _rt48sState.day = patch.day;
   if ("tries" in patch) _rt48sState.tries = patch.tries;
   if ("generatedAt" in patch) _rt48sState.generatedAt = patch.generatedAt;
+  if ("buildLast" in patch) _rt48sState.last = patch.buildLast;
+  if ("kind" in patch) _rt48sState.kind = patch.kind;
   if ("lastMem" in patch) _rt53Last = patch.lastMem;
   return { v3: _rt48sFile, last: _rt53LastFile };
 }
@@ -190,12 +170,14 @@ function noSecret(body) {
 
 buildBase();
 
-test("post-bb2 base has the live client and the rt52s, bb2, and premium markers", () => {
-  assert.equal(md5(path.join(BASE, "app.js")), "86153acc103ab9bd246fbdf96055ffab");
+test("plain live base is the uploaded post-rt52 trio, before bb2", () => {
+  assert.equal(md5(path.join(BASE, "app.js")), LIVE_MD5.app);
+  assert.equal(md5(path.join(BASE, "index.html")), LIVE_MD5.index);
+  assert.equal(md5(path.join(BASE, "server.js")), LIVE_MD5.server);
   const server = fs.readFileSync(path.join(BASE, "server.js"), "utf8");
   assert.match(server, /\/\/ ── rt52s: 13F v2 ──/);
   assert.match(server, /function hasPremiumAccess\(/);
-  assert.match(server, /async function bb3RegimeFit\(ticker\)/);
+  assert.equal(server.includes("// ── bb2 ──"), false);
 });
 
 test("dry run writes nothing and a second run refuses", () => {
@@ -204,7 +186,7 @@ test("dry run writes nothing and a second run refuses", () => {
   const before = ["app.js", "index.html", "server.js"].map(name => md5(path.join(dir, name)));
   const dry = run("patch_rt53.py", ["--check", dir]);
   assert.equal(dry.code, 0, dry.stdout);
-  assert.match(dry.stdout, /chat58 -> chat59/);
+  assert.match(dry.stdout, /chat57 -> chat58/);
   assert.match(dry.stdout, /dry run, nothing written/);
   const after = ["app.js", "index.html", "server.js"].map(name => md5(path.join(dir, name)));
   assert.deepEqual(after, before);
@@ -214,14 +196,18 @@ test("dry run writes nothing and a second run refuses", () => {
   const again = run("patch_rt53.py", [dir]);
   assert.equal(again.code, 1, again.stdout);
   assert.match(again.stdout, /REFUSE/);
-  assert.match(fs.readFileSync(path.join(dir, "index.html"), "utf8"), /app\.js\?v=chat59"/);
+  assert.match(fs.readFileSync(path.join(dir, "index.html"), "utf8"), /app\.js\?v=chat58"/);
 });
 
-test("rt53s then rt53, and rt53 then rt53s, leave bb2 and bb3 in place", () => {
+test("rt53s then rt53, and rt53 then rt53s, leave neighbouring markers in place", () => {
   const first = path.join(os.tmpdir(), "rt53-order-a");
   const second = path.join(os.tmpdir(), "rt53-order-b");
   copyTree(BASE, first);
   copyTree(BASE, second);
+  for (const dir of [first, second]) {
+    fs.appendFileSync(path.join(dir, "app.js"), "\n// ── bb2 ──\n");
+    fs.appendFileSync(path.join(dir, "server.js"), "\n// ── bb2 ──\nasync function bb3RegimeFit(ticker) { return { ticker: ticker, regimeFit: 28 }; }\n");
+  }
   const indexBefore = md5(path.join(first, "index.html"));
   const dailyFirst = run("patch_rt53s.py", [path.join(first, "server.js")]);
   assert.equal(dailyFirst.code, 0, dailyFirst.stdout);
@@ -237,13 +223,13 @@ test("rt53s then rt53, and rt53 then rt53s, leave bb2 and bb3 in place", () => {
     const app = fs.readFileSync(path.join(dir, "app.js"), "utf8");
     assert.match(server, /\/\/ ── rt53s: academy-daily ──/);
     assert.match(server, /\/\/ ── rt53a ──/);
-    assert.match(server, /\/\/ ── bb2 ──/);
     assert.match(server, /async function bb3RegimeFit\(ticker\)/);
     assert.match(server, /function hasPremiumAccess\(user\)/);
+    assert.match(server, /\/\/ ── bb2 ──/);
     assert.equal(server.includes("ON CONFLICT (user_id) DO UPDATE SET prefs=EXCLUDED.prefs"), false);
     assert.match(app, /\/\/ ── rt53a ──/);
     assert.match(app, /\/\/ ── bb2 ──/);
-    assert.match(fs.readFileSync(path.join(dir, "index.html"), "utf8"), /app\.js\?v=chat59"/);
+    assert.match(fs.readFileSync(path.join(dir, "index.html"), "utf8"), /app\.js\?v=chat58"/);
     const region = server.slice(server.indexOf("/* RT53_SERVER_START */"), server.indexOf("/* RT53_SERVER_END */"));
     assert.equal(region.includes("user.tier"), false);
     const daily = server.slice(server.indexOf("// ── rt53s:"), server.indexOf("const MARKET_SYSTEM"));
@@ -257,23 +243,23 @@ test("rt53s then rt53, and rt53 then rt53s, leave bb2 and bb3 in place", () => {
   assert.match(refuse.stdout, /REFUSE/);
 });
 
-test("a later bust increments, chat57 is refused, a missing anchor writes nothing", () => {
+test("a later bust increments, chat56 is refused, a missing anchor writes nothing", () => {
   const later = path.join(os.tmpdir(), "rt53-chat59");
   copyTree(BASE, later);
   const index = path.join(later, "index.html");
-  fs.writeFileSync(index, fs.readFileSync(index, "utf8").replace("chat58", "chat59"));
+  fs.writeFileSync(index, fs.readFileSync(index, "utf8").replace("chat57", "chat59"));
   const bumped = run("patch_rt53.py", [later]);
   assert.equal(bumped.code, 0, bumped.stdout);
   assert.match(fs.readFileSync(index, "utf8"), /app\.js\?v=chat60"/);
 
-  const early = path.join(os.tmpdir(), "rt53-chat57");
+  const early = path.join(os.tmpdir(), "rt53-chat56");
   copyTree(BASE, early);
   const earlyIndex = path.join(early, "index.html");
   const earlyHash = md5(path.join(early, "app.js"));
-  fs.writeFileSync(earlyIndex, fs.readFileSync(earlyIndex, "utf8").replace("chat58", "chat57"));
+  fs.writeFileSync(earlyIndex, fs.readFileSync(earlyIndex, "utf8").replace("chat57", "chat56"));
   const refused = run("patch_rt53.py", [early]);
   assert.equal(refused.code, 1, refused.stdout);
-  assert.match(refused.stdout, /chat57/);
+  assert.match(refused.stdout, /chat56/);
   assert.equal(md5(path.join(early, "app.js")), earlyHash);
 
   const missing = path.join(os.tmpdir(), "rt53-missing");
@@ -522,17 +508,130 @@ test("academy-daily survives a dead feed, serves the last good lesson, and hides
       reject(error);
     });
   });
+  hung.generateAi = () => new Promise(resolve => setTimeout(() => resolve({ text: "" }), 3800));
   const started = Date.now();
   const hungRes = mockRes();
   await hung.academyDaily({ url: "/api/academy-daily" }, hungRes);
   const elapsed = Date.now() - started;
   assert.equal(hungRes.statusCode, 200);
-  assert.ok(elapsed < 9000, "hung upstream returned in " + elapsed + "ms");
+  assert.ok(elapsed < 1600, "cold hung upstream returned in " + elapsed + "ms");
+  assert.ok(elapsed >= 700, "cold path returned before the timeout: " + elapsed + "ms");
   assert.equal(JSON.parse(hungRes.body).source, "fallback");
+  noSecret(JSON.parse(hungRes.body));
+
+  const warm = loadAcademy(server);
+  const warmItem = warm._rt48bItem(
+    { h: "The Federal Reserve cuts rates in a surprise move", src: "Dispatch Academy", link: "" },
+    "gold", "up",
+    "Gold often rises on a surprise Fed cut: lower rates reduce the cost of holding a metal that pays no interest, and the dollar tends to weaken.",
+    "ai"
+  );
+  assert.equal(warm._rt48bValid(warmItem), true);
+  const today = warm._rt48sDay();
+  warm._rt53TestPrep({
+    items: [warmItem, Object.assign({}, warmItem), Object.assign({}, warmItem)],
+    day: today,
+    tries: 1,
+    generatedAt: new Date().toISOString(),
+    buildLast: Date.now(),
+    kind: "ai",
+    lastMem: null,
+  });
+  let warmFetch = 0;
+  let warmAi = 0;
+  warm.fetch = async () => { warmFetch += 1; throw new Error("warm path must not fetch"); };
+  warm.generateAi = () => { warmAi += 1; return new Promise(resolve => setTimeout(() => resolve({ text: "" }), 3800)); };
+  const warmStarted = Date.now();
+  const warmRes = mockRes();
+  await warm.academyDaily({ url: "/api/academy-daily" }, warmRes);
+  const warmMs = Date.now() - warmStarted;
+  const warmBody = JSON.parse(warmRes.body);
+  assert.equal(warmRes.statusCode, 200);
+  assert.equal(warmBody.source, "cache");
+  assert.equal(warmBody.stale, false);
+  assert.ok(warmMs < 250, "warm response took " + warmMs + "ms");
+  assert.equal(warmFetch, 0);
+  assert.equal(warmAi, 0);
+  noSecret(warmBody);
+
+  const swr = loadAcademy(server);
+  const swrItem = swr._rt48bItem(
+    { h: "The Federal Reserve cuts rates in a surprise move", src: "Dispatch Academy", link: "" },
+    "gold", "up",
+    "Gold often rises on a surprise Fed cut: lower rates reduce the cost of holding a metal that pays no interest, and the dollar tends to weaken.",
+    "template"
+  );
+  swr._rt53TestPrep({ items: [], day: "", tries: 0, generatedAt: "", buildLast: 0, lastMem: null });
+  fs.writeFileSync(swr._rt53TestPrep({ items: [], day: "", tries: 0, generatedAt: "", buildLast: 0, lastMem: null }).last, JSON.stringify({
+    v: 1, at: Date.parse("2026-10-16T12:00:00.000Z"), day: "2026-10-16", generatedAt: "2026-10-16T12:00:00.000Z", items: [swrItem], kind: "template",
+  }));
+  let swrFetch = 0;
+  swr.fetch = (url, opts) => {
+    swrFetch += 1;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => resolve({ ok: true, text: async () => "" }), 30000);
+      const signal = opts && opts.signal;
+      if (signal) signal.addEventListener("abort", () => { clearTimeout(timer); reject(Object.assign(new Error("aborted"), { name: "AbortError" })); });
+    });
+  };
+  const swrStarted = Date.now();
+  const swrRes = mockRes();
+  await swr.academyDaily({ url: "/api/academy-daily" }, swrRes);
+  const swrMs = Date.now() - swrStarted;
+  const swrBody = JSON.parse(swrRes.body);
+  assert.equal(swrBody.source, "stale");
+  assert.ok(swrMs < 250, "stale-while-revalidate took " + swrMs + "ms");
+  assert.ok(swrFetch >= 1, "a stale lesson still starts a refresh");
+  noSecret(swrBody);
+
+  const before = await timeLiveHandler();
   console.log(JSON.stringify({
     live: { status: 200, source: liveBody.source, items: liveBody.items.length },
     down: { status: 200, source: downBody.source },
     stale: { status: 200, source: staleBody.source, asOf: staleBody.asOf },
-    diag: 403, adminDiag: true, hungMs: elapsed,
+    diag: 403, adminDiag: true,
+    beforeMs: before,
+    coldMs: elapsed, warmMs: warmMs, swrMs: swrMs,
   }));
 });
+
+async function timeLiveHandler() {
+  const text = fs.readFileSync(LIVE_UPLOAD.server, "utf8");
+  const start = text.indexOf("// ── rt48c:");
+  const end = text.indexOf("const MARKET_SYSTEM");
+  assert.ok(start >= 0 && end > start, "live academy slice");
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "rt53before-"));
+  let aiCalls = 0;
+  const sandbox = {
+    console, Buffer, URL, URLSearchParams, TextDecoder, TextEncoder, Intl,
+    setTimeout, clearTimeout, AbortSignal, Map, Set, Promise, Date, Math, JSON, RegExp, Error,
+    encodeURIComponent, decodeURIComponent, isFinite, parseInt, Number, String, Object, Array,
+    process: { env: { OPENAI_API_KEY: SECRET, ACADEMY_AI: "on" } },
+    require(name) {
+      if (name === "fs") return fs;
+      if (name === "path") return path;
+      if (name === "os") return { tmpdir: () => tmp };
+      throw new Error("require " + name);
+    },
+    fetch: async () => ({ ok: true, text: async () => "<rss><item><title>The Federal Reserve cuts rates in a surprise move</title><link>https://example.test/fed</link></item></rss>" }),
+    generateAi() {
+      aiCalls += 1;
+      return new Promise(resolve => setTimeout(() => resolve({ text: "", model: "slow" }), 3800));
+    },
+    currentUser: async () => null,
+    isAdminUser() { return false; },
+    approvedRssFeedUrl() { return "https://example.test/rss"; },
+  };
+  vm.runInNewContext(text.slice(start, end), sandbox);
+  const res = mockRes();
+  const t0 = Date.now();
+  await sandbox.academyDaily({ url: "/api/academy-daily" }, res);
+  const ms = Date.now() - t0;
+  const body = JSON.parse(res.body);
+  noSecret(body);
+  assert.equal(res.statusCode, 200);
+  assert.equal(aiCalls, 1);
+  assert.ok(ms >= 3400 && ms < 6500, "unpatched handler took " + ms + "ms");
+  assert.equal(body.asOf, undefined);
+  return ms;
+}

@@ -4,22 +4,26 @@
 Stacks on the live rt48c handler (the block patch_rt48c.py installed) and on rt52s.
 No new tables, no cron, no background worker, no Stripe, no secrets.
 
-What changes, with the same small anchors whether or not bb2 (PR #23) is applied:
-- each RSS fetch and the AI call have a hard timeout (bb2 may wrap generateAi; this calls it at request time);
-- the last good lesson is kept in memory and in the temp dir, including across the London day, and is served when a refresh fails;
-- if there is no last good lesson, one deterministic fallback lesson is returned;
+What changes, with the same small anchors on the plain live files and after bb2 (PR #23):
+- a saved lesson is returned immediately. A fresh one is source cache. An older or previous-day
+  lesson is source stale. A refresh, when one is due, keeps running after the response
+  (stale-while-revalidate). There is no timer and no new process;
+- a cold request, with nothing saved, waits at most 900ms. The build may finish in that
+  window (source live) or keep going after the response. The user still gets a last-good
+  lesson or the deterministic fallback;
+- each RSS fetch and the AI call have their own timeout. The AI cap stays long enough
+  for a slow model to fill the cache for the next request. bb2 may wrap generateAi;
+  this calls it at request time;
+- the last good lesson is kept in memory and in the temp dir, including across the London day;
 - the handler always answers users with JSON. A thrown error becomes that fallback, not a 500;
-- ?diag=1 stays admin-only and is now 403 for everyone else. ?refresh=1 still does not rebuild for non-admins;
+- ?diag=1 stays admin-only and is 403 for everyone else. ?refresh=1 still does not rebuild for non-admins;
 - every user response carries asOf and source (live, cache, stale, fallback).
 
-Refresh happens only when a request finds the saved lesson missing, older than two hours, or an admin asks.
-The in-flight build is the one that request started. There is no timer and no new process.
-
 Version: this file does not edit app.js or index.html, so it does not change ?v=chatNN.
-patch_rt53.py detects the current chatNN (live is chat58 after bb2) and adds one.
-bb3 may land beside this file; it is not an anchor and this file does not edit regime fit.
-Requires the rt52s marker, the bb2 marker, and function hasPremiumAccess(. It does not
-compare tier strings. Diag stays admin-only via the existing isAdminUser helper.
+patch_rt53.py detects the current chatNN (plain live is chat57) and adds one.
+Requires the rt52s marker and function hasPremiumAccess(. It does not require the bb2
+marker, so it applies before or after PR #23. It does not compare tier strings.
+Diag stays admin-only via the existing isAdminUser helper.
 This file does not edit the rt52s 13F block, Ask/Expert, or the prefs schema.
 
 Usage:
@@ -64,13 +68,13 @@ if not os.path.isfile(P):
 s, crlf = load(P)
 show("rt53s before server.js", s, crlf)
 digest = stats(s, crlf)[0]
-LIVE = "2e04b3c16f8400dc5ea211e676831b23"
+LIVE = "4e8c340439b57d202b6c13711cc7a338"
 if digest != LIVE:
-    print("WARN md5 server.js: have %s expected live bb2+hotfix %s (anchors still decide)" % (digest, LIVE))
+    print("WARN md5 server.js: have %s expected plain live %s (anchors still decide)" % (digest, LIVE))
 if "// ── rt53s:" in s:
     die("REFUSE: rt53s already applied")
 errors = []
-for need in ("// ── rt52s", "// ── bb2 ──", "function hasPremiumAccess(", "// ── rt48c:", "async function academyDaily(req, res) {", "function _rt48bValid(", "async function _rt48sBuild(", "const _rt48sFile"):
+for need in ("// ── rt52s", "function hasPremiumAccess(", "// ── rt48c:", "async function academyDaily(req, res) {", "function _rt48bValid(", "async function _rt48sBuild(", "const _rt48sFile"):
     if need not in s:
         errors.append("missing %r" % need)
 FETCH = '    const r = await fetch(u, { headers: { "User-Agent": "DispatchMarkets/1.0" }, signal: AbortSignal.timeout(8000) }); if (!r.ok) return; all.push(..._rt48sParse((await r.text()).slice(0, 600000), src)); } catch (e) {} }));'
@@ -93,7 +97,7 @@ if s.find(START, i + len(START), j) >= 0:
 if not (0 <= s.find(FETCH) < i and 0 <= s.find(GEN) < i):
     die("rss fetch and generateAi anchors must sit before academyDaily")
 
-FETCH_NEW = '    const xml = await _rt53Get(u, 4500); if (!xml) return; all.push(..._rt48sParse(xml, src)); } catch (e) {} }));'
+FETCH_NEW = '    const xml = await _rt53Get(u, 1500); if (!xml) return; all.push(..._rt48sParse(xml, src)); } catch (e) {} }));'
 GEN_NEW = "        const r = await _rt53Gen({ maxTokens: 1600, temperature: 0.2,"
 
 HELPERS = r'''// ── rt53s: academy-daily ── timeouts, last-good cache, deterministic fallback. No cron. ?diag=1 is admin-only.
@@ -208,32 +212,40 @@ NEW = r'''async function academyDaily(req, res) {
     const day = _rt48sDay();
     const seed = _rt53ValidState();
     if (seed && seed.items.length) _rt53Remember(seed.items, seed.generatedAt, seed.kind, seed.day);
+    const last = _rt53Recall();
     const freshMs = 2 * 60 * 60 * 1000;
     const ageOf = (st) => { const t = Date.parse(st && st.generatedAt || ""); return isFinite(t) ? Date.now() - t : Infinity; };
-    const fresh = !!(seed && seed.day === day && seed.items.length && ageOf(seed) < freshMs);
+    const todayGood = !!(seed && seed.day === day && seed.items.length);
+    const fresh = !!(todayGood && ageOf(seed) < freshMs);
+    const haveServable = todayGood || !!(last && last.items && last.items.length);
+    const weak = !todayGood || seed.items.length < 3 || !seed.items.some(x => x.kind === "ai");
+    const due = (_rt48sState.tries || 0) < 3 && Date.now() - (_rt48sState.last || 0) > 2 * 36e5;
     let builtNow = false;
-    if (forced || !fresh) {
+    if (forced || ((weak || !fresh) && due)) {
       try {
+        const already = !!_rt48sState.busy;
         if (!_rt48sState.busy) {
-          if (forced) { _rt48sState.forced = (_rt48sState.forced || 0) + 1; _rt48sState.busy = _rt48sBuild("admin-refresh").finally(() => { _rt48sState.busy = null; }); }
-          else {
-            const weak = !seed || seed.day !== day || seed.items.length < 3 || !seed.items.some(x => x.kind === "ai");
-            const due = (_rt48sState.tries || 0) < 3 && Date.now() - (_rt48sState.last || 0) > 2 * 36e5;
-            if (weak && due) _rt48sState.busy = _rt48sBuild(seed && seed.items.length ? "auto-retry" : "auto").finally(() => { _rt48sState.busy = null; });
-          }
+          if (forced) _rt48sState.forced = (_rt48sState.forced || 0) + 1;
+          const why = forced ? "admin-refresh" : (todayGood ? "auto-retry" : "auto");
+          const job = _rt48sBuild(why).finally(() => { _rt48sState.busy = null; });
+          _rt48sState.busy = job;
+          job.then(() => {
+            try {
+              const built = _rt53ValidState();
+              if (built && built.items.length) _rt53Remember(built.items, built.generatedAt, built.kind, built.day);
+            } catch (e) {}
+          }, () => {});
         }
-        if (_rt48sState.busy) {
+        // Anything already saved is sent now. Only a cold miss waits, and only briefly.
+        if (!haveServable && !already && _rt48sState.busy) {
           let finished = false;
           const waited = _rt48sState.busy.then(() => { finished = true; }, () => { finished = true; });
-          await Promise.race([waited, new Promise(r => setTimeout(r, forced ? 12000 : 6000))]);
+          await Promise.race([waited, new Promise(r => setTimeout(r, 900))]);
           builtNow = finished;
         }
       } catch (e) {}
-      const built = _rt53ValidState();
-      if (built && built.items.length) _rt53Remember(built.items, built.generatedAt, built.kind, built.day);
     }
     const nowState = _rt53ValidState();
-    const last = _rt53Recall();
     let source = "fallback", items = [], asOf = "", kind = "template", contentDay = day;
     if (nowState && nowState.day === day && nowState.items.length && nowState.kind !== "fallback") {
       source = builtNow ? "live" : (ageOf(nowState) < freshMs ? "cache" : "stale");
@@ -275,7 +287,7 @@ if out.count("// ── rt53s:") != 1:
     die("rt53s marker count is %d" % out.count("// ── rt53s:"))
 nodecheck(out, "server.js")
 show("rt53s after server.js", out, crlf)
-print("OK rt53s: academy-daily timeouts, last-good cache, fallback lesson, diag 403; index bump skipped (server-only); node --check passed" + (" (dry run, nothing written)" if CHECK else ""))
+print("OK rt53s: academy-daily stale-while-revalidate, 900ms cold bound, last-good cache, fallback lesson, diag 403; index bump skipped (server-only); node --check passed" + (" (dry run, nothing written)" if CHECK else ""))
 if CHECK:
     sys.exit(0)
 

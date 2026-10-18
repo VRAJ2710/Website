@@ -14,15 +14,14 @@ XP, day or badge is dropped. A settings save that does not send academy leaves
 the stored academy in place. An academy-only save does not reset layout,
 watchlist or the other prefs fields.
 
-Primary base is live chat58: rt52 + rt52s + bb2, including the one-line stream
-hotfix that gates with hasPremiumAccess (admins count as premium). Requires
-those markers, function hasPremiumAccess(, and app.js?v=chatNN with NN >= 58.
-Detects the current bust and adds one, so chat58 becomes chat59. It does not
-hard-code 59. A later client bust (for example if bb3 also edits app.js) still
-increments whatever it finds. bb3's server-only regime-fit work is not an
-anchor here. No tier-string checks: sign-in stays on the existing /api/prefs
-route, which uses currentUser. Premium gating, where it already exists, stays
-inside hasPremiumAccess.
+Primary base is the plain live site after rt52, rt52s, and rt52ops: chat57, with
+function hasPremiumAccess( already present. bb2 (PR #23) is not required, so
+this also applies after that patch. Requires the rt52 markers, function
+hasPremiumAccess(, and app.js?v=chatNN with NN >= 57. Detects the current bust
+and adds one. It does not hard-code the next number. A later client bust still
+increments whatever it finds. No tier-string checks: sign-in stays on the
+existing /api/prefs route, which uses currentUser. Premium gating, where it
+already exists, stays inside hasPremiumAccess.
 
 Usage:
     python3 patch_rt53.py --check <dir with app.js, index.html, server.js>
@@ -71,12 +70,12 @@ v, vcrlf = load(SRV)
 show("rt53 before app.js", s, crlf)
 show("rt53 before index.html", h, hcrlf)
 show("rt53 before server.js", v, vcrlf)
-# Live chat58 after bb2 + the hasPremiumAccess hotfix. A mismatch warns only;
-# anchors decide, so a fixture or a later bb3 edit can still apply.
+# Plain live files after rt52, rt52s, and rt52ops, before bb2. A mismatch warns
+# only; anchors decide, so a later bb2 or home-freeze edit can still apply.
 EXPECTED_MD5 = {
-    "app.js": "86153acc103ab9bd246fbdf96055ffab",
-    "index.html": "a54489bc53dec217580f50eceb58a502",
-    "server.js": "2e04b3c16f8400dc5ea211e676831b23",
+    "app.js": "45107b5b78039f675ffd94646ce4d309",
+    "index.html": "87ee1667f8e6deef4c449ff9a61cce8d",
+    "server.js": "4e8c340439b57d202b6c13711cc7a338",
 }
 for path, text, use_crlf in ((APP, s, crlf), (IDX, h, hcrlf), (SRV, v, vcrlf)):
     digest = stats(text, use_crlf)[0]
@@ -89,12 +88,8 @@ if "// ── rt53a ──" in s or "// ── rt53a ──" in v:
 errors = []
 if "// ── rt52 ──" not in s:
     errors.append("app.js missing rt52 marker (apply patch_rt52.py first)")
-if "// ── bb2 ──" not in s:
-    errors.append("app.js missing bb2 marker (live base is chat58, after bb2)")
 if "// ── rt52s" not in v:
     errors.append("server.js missing rt52s marker (apply patch_rt52s.py first)")
-if "// ── bb2 ──" not in v:
-    errors.append("server.js missing bb2 marker (live base includes bb2)")
 if "function hasPremiumAccess(" not in v:
     errors.append("server.js missing function hasPremiumAccess( (admins share the premium helper; do not compare tier strings)")
 CLIENT_NEEDLES = [
@@ -114,8 +109,8 @@ if len(vers) != 1:
     errors.append("index app.js?v=chatNN matched %d times (need 1)" % len(vers))
 else:
     nver = int(vers[0])
-    if nver < 58:
-        errors.append("index is chat%d; expected chat58 or later (bb2 is live on chat58)" % nver)
+    if nver < 57:
+        errors.append("index is chat%d; expected chat57 or later (post rt52)" % nver)
 PUT = (
     "        const prefs = rt17SanitizePrefs(body && body.prefs);\n"
     "        await sql`INSERT INTO dispatch_user_prefs (user_id, prefs, updated_at) VALUES (${user.id}, ${JSON.stringify(prefs)}::jsonb, NOW())\n"
