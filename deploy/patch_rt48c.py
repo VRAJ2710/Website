@@ -5,7 +5,7 @@ Why: on prod every AI explainer was being rejected and only one template matched
   as invented numbers, asset aliases from the model ("GBP", "S&P 500", "Up") are normalised, reasons are recorded;
 - headlines get textbook knock-on assets ("dollar slips" -> gold, EUR/USD, pound; "yields fall" -> gold; "Bitcoin dips" -> Ether), and an item
   whose answer the headline already states is rejected for every asset;
-- 15 more template rules (safe-haven, sanctions/hurricanes, recession, tariffs, US jobs, hawkish/dovish Fed, knock-ons); templates are spread
+- 14 more template rules (safe-haven, sanctions/hurricanes, recession, tariffs, US jobs, hawkish/dovish Fed, knock-ons); templates are spread
   across different assets and top up to 3 items;
 - provider reply parsing: raw JSON, markdown fences, prose, bare arrays, truncated replies (complete items salvaged); maxTokens 700 -> 1600;
 - auto rebuild (max 3 a day, 2h apart) while fewer than 3 items or no AI item; new cache file (v3) so today's template-only cache is rebuilt;
