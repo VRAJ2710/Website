@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""patch_rt53.py: chat58 -> chat59 (client only).
+"""patch_rt53.py: chat59 -> chat60 (client only).
 
-bb2 ships first (chat57 -> chat58). This patch refuses unless the tree is that
-post-bb2 bundle:
-  app.js md5 86153acc103ab9bd246fbdf96055ffab
-  index.html md5 4a680ac27bde0eb044944767ac6838c6 and exactly app.js?v=chat58
+bb3_ask then bb3_fit ship first (chat58 -> chat59). This patch refuses unless
+the tree is that bundle:
+  app.js md5 d38b70eb458091fa69143f9fe3bfe193
+  index.html md5 b15074aedc3261bf9e2ca611084082ba and exactly app.js?v=chat59
   and the rt52 block is present.
-Refuses again if rt53 is already present. Finishes with node --check.
+A second run prints REFUSE (already applied) and exits 0. Any other miss
+aborts with a non-zero status. Finishes with node --check.
 
 Home stops rebuilding the hidden four-panel desk, and the 26 news feeds wait until the desk
 or the news panel is opened. News tagging is memoized and regime keywords are computed once
@@ -28,23 +29,24 @@ args = [a for a in sys.argv[1:] if a != '--check']
 D = args[0] if args else '.'
 APP, IDX = os.path.join(D, 'app.js'), os.path.join(D, 'index.html')
 
-BASE_CHAT = 58
-EXPECT_APP_MD5 = "86153acc103ab9bd246fbdf96055ffab"
-EXPECT_INDEX_MD5 = "4a680ac27bde0eb044944767ac6838c6"
+BASE_CHAT = 59
+EXPECT_APP_MD5 = "d38b70eb458091fa69143f9fe3bfe193"
+EXPECT_INDEX_MD5 = "b15074aedc3261bf9e2ca611084082ba"
 NEED_MARKER = "// ── rt52 ──"
 
 def load(p):
     b = open(p, 'rb').read(); return b.decode('utf-8').replace('\r\n', '\n'), b'\r\n' in b
 def die(m): print('ABORT:', m); sys.exit(1)
+def already(m): print('REFUSE:', m); sys.exit(0)
 raw = open(APP, 'rb').read()
 raw_idx = open(IDX, 'rb').read()
 s, crlf = load(APP); h, hcrlf = load(IDX)
-if '// ── rt53 ──' in s: die('rt53 already applied')
+if '// ── rt53 ──' in s: already('rt53 already applied')
 if NEED_MARKER not in s: die('base lacks ' + NEED_MARKER)
 md5 = hashlib.md5(raw).hexdigest()
 imd5 = hashlib.md5(raw_idx).hexdigest()
 if md5 != EXPECT_APP_MD5:
-    die('app.js md5 %s != %s (this patch applies only to the post-bb2 chat58 bundle)' % (md5, EXPECT_APP_MD5))
+    die('app.js md5 %s != %s (this patch applies only to the chat59 bundle, bb3_ask then bb3_fit)' % (md5, EXPECT_APP_MD5))
 if imd5 != EXPECT_INDEX_MD5:
     die('index.html md5 %s != %s' % (imd5, EXPECT_INDEX_MD5))
 v = re.findall(r'app\.js\?v=chat(\d+)"', h)

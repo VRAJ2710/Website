@@ -4,29 +4,30 @@
 Keyless CSV (https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFII10). Cached in memory
 for about 6 hours. No new table, no key, no Stripe.
 
-The expected live chat58 server is md5 2e04b3c16f8400dc5ea211e676831b23
-(8,453 lines: chat57 + bb2's server patch + the premium-access hotfix). A different
-md5 warns and does not abort, matching the bb patches: the anchors decide. Each
-anchor must appear exactly once, or the patch refuses:
+The expected live chat59 server is md5 6972fdeb0fc892f370ef63fe21b80b55
+(bb3_ask then bb3_fit on the chat58 server). A different md5 warns and does not
+abort, matching the bb patches: the anchors decide. Each anchor must appear
+exactly once, or the patch refuses:
   if (rp === "/api/eia-spot") return rt44Eia(res); // rt44: EIA official spot
   function json(res
   the two console sentences that still say "Replit project's private settings"
-The EIA line is left byte-for-byte. A second run refuses because the route is
-already present. Finishes with node --check. Does not run the server.
+The EIA line is left byte-for-byte. A second run prints REFUSE (already applied)
+and exits 0. A missing or repeated anchor still exits non-zero. Finishes with
+node --check. Does not run the server.
 
 Usage: python3 patch_rt53s.py [--check] server.js"""
 import sys, os, hashlib, subprocess, shutil
 args = [a for a in sys.argv[1:] if a != "--check"]; check = "--check" in sys.argv
 p = args[0] if args else "server.js"
-EXPECT_MD5 = "2e04b3c16f8400dc5ea211e676831b23"
+EXPECT_MD5 = "6972fdeb0fc892f370ef63fe21b80b55"
 
-def refuse(m):
-    print("REFUSE:", m); sys.exit(1)
+def refuse(m, code=1):
+    print("REFUSE:", m); sys.exit(code)
 
 raw_b = open(p, "rb").read()
 md5 = hashlib.md5(raw_b).hexdigest()
 raw = raw_b.decode("utf-8"); crlf = "\r\n" in raw; s = raw.replace("\r\n", "\n")
-if "// ── rt53s ──" in s or 'rp === "/api/real-yield"' in s: refuse("rt53s already applied")
+if "// ── rt53s ──" in s or 'rp === "/api/real-yield"' in s: refuse("rt53s already applied", 0)
 if md5 != EXPECT_MD5:
     print("WARN md5 server.js: have %s expected %s (anchors still decide)" % (md5, EXPECT_MD5))
 ANC = 'if (rp === "/api/eia-spot") return rt44Eia(res); // rt44: EIA official spot'
@@ -76,5 +77,5 @@ if crlf: out = out.replace("\n", "\r\n")
 tmp = p + ".rt53s.tmp.js"; open(tmp, "wb").write(out.encode("utf-8"))
 r = subprocess.run(["node", "--check", tmp], capture_output=True, text=True)
 if r.returncode: os.remove(tmp); sys.exit("node --check FAILED:\n" + r.stderr)
-if check: os.remove(tmp); print("CHECK OK: rt53s would apply on live chat58", md5); sys.exit(0)
-shutil.copy(p, p + ".bak-rt53s"); os.replace(tmp, p); print("APPLIED rt53s on live chat58", md5, "; backup at", p + ".bak-rt53s")
+if check: os.remove(tmp); print("CHECK OK: rt53s would apply on live chat59", md5); sys.exit(0)
+shutil.copy(p, p + ".bak-rt53s"); os.replace(tmp, p); print("APPLIED rt53s on live chat59", md5, "; backup at", p + ".bak-rt53s")
