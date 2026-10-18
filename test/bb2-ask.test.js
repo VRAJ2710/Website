@@ -13,6 +13,8 @@ function extractJs() {
   const js = m[1];
   assert.equal(js.includes("setInterval("), false);
   assert.equal(/node-cron|CREATE TABLE|\bcron\b/.test(js), false);
+  assert.equal(js.includes("user.tier"), false);
+  assert.ok(js.includes("!hasPremiumAccess(user)"));
   return js;
 }
 
@@ -41,6 +43,8 @@ function loadBb2(env, fetchImpl) {
     decodeURIComponent,
     process: { env: Object.assign({}, env || {}) },
     currentUser: async () => ({ id: "u", tier: "premium" }),
+    isAdminUser(user) { return Boolean(user && user.isAdmin === true); },
+    hasPremiumAccess(user) { return Boolean(user && (user.tier === "premium" || sandbox.isAdminUser(user))); },
     json(res, status, body) { res.statusCode = status; res._json = body; },
     handle: async () => {},
     generateAi: async () => ({ text: "", model: "stub" }),
@@ -189,6 +193,8 @@ function loadWithStubs(bad) {
     encodeURIComponent, decodeURIComponent,
     process: { env: {} },
     currentUser: async () => ({ id: "u", tier: "premium" }),
+    isAdminUser(user) { return Boolean(user && user.isAdmin === true); },
+    hasPremiumAccess(user) { return Boolean(user && (user.tier === "premium" || sandbox.isAdminUser(user))); },
     json(res, status, body) { res.statusCode = status; res._json = body; },
     fetch: async () => { throw new Error("unexpected fetch"); },
   };
@@ -242,4 +248,71 @@ test("a stale snapshot refreshes from Yahoo's keyless quote and a free user is n
   status = res.statusCode;
   assert.equal(status, 401);
   assert.equal(res._json && res._json.error, "Premium membership required");
+});
+
+test("admin, premium, free, and logged-out access matches the JSON path", async () => {
+  const roles = [
+    { name: "admin", user: { id: "a", tier: "free", isAdmin: true }, allow: true },
+    { name: "premium", user: { id: "p", tier: "premium", isAdmin: false }, allow: true },
+    { name: "free", user: { id: "f", tier: "free", isAdmin: false }, allow: false },
+    { name: "logged-out", user: null, allow: false },
+  ];
+  for (const role of roles) {
+    const sandbox = {
+      console, require, Buffer, URL, URLSearchParams, TextDecoder, TextEncoder, Intl,
+      setTimeout, clearTimeout, AbortSignal, Map, Set, Promise, Date, Math, JSON, RegExp, Error,
+      encodeURIComponent, decodeURIComponent,
+      process: { env: { AI_INTEGRATIONS_OPENAI_BASE_URL: "http://openai.test/v1", AI_INTEGRATIONS_OPENAI_API_KEY: "test-key" } },
+      currentUser: async () => role.user,
+      isAdminUser(user) { return Boolean(user && user.isAdmin === true); },
+      hasPremiumAccess(user) { return Boolean(user && (user.tier === "premium" || sandbox.isAdminUser(user))); },
+      json(res, status, body) { res.statusCode = status; res._json = body; return res; },
+      fetch: async () => ({ ok: false, status: 503, text: async () => "", json: async () => ({}) }),
+    };
+    sandbox.global = sandbox;
+    sandbox.globalThis = sandbox;
+    sandbox._body = { messages: [{ role: "user", content: "hello" }], sources: [] };
+    sandbox.readBody = async () => sandbox._body;
+    sandbox.generateAi = async () => ({ text: "ok", model: "stub" });
+    sandbox.handle = async function (req, res) {
+      const user = await sandbox.currentUser(req);
+      if (!user || !sandbox.hasPremiumAccess(user)) return sandbox.json(res, 401, { error: "Premium membership required" });
+      res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+      res.end(JSON.stringify({ reply: "ok", meta: {} }));
+    };
+    vm.createContext(sandbox);
+    vm.runInContext(extractJs(), sandbox, { filename: "bb2.js" });
+    const streamRes = {
+      statusCode: 0, headers: null, headersSent: false, writableEnded: false, _json: null,
+      writeHead(code, headers) { this.statusCode = code; this.headers = headers; this.headersSent = true; },
+      write() { return true; },
+      end() { this.writableEnded = true; },
+      setHeader() {},
+      socket: { setNoDelay() {} },
+    };
+    await sandbox.handle({ method: "POST", url: "/api/chat", headers: { host: "localhost", accept: "text/event-stream", "x-dispatch-stream": "1" } }, streamRes);
+    const jsonRes = {
+      statusCode: 0, headers: null, headersSent: false, writableEnded: false, _json: null, chunk: "",
+      writeHead(code, headers) { this.statusCode = code; this.headers = headers; this.headersSent = true; },
+      write() { return true; },
+      end(chunk) { this.chunk = chunk == null ? "" : String(chunk); this.writableEnded = true; },
+      setHeader() {},
+      socket: { setNoDelay() {} },
+    };
+    await sandbox.handle({ method: "POST", url: "/api/chat", headers: { host: "localhost", accept: "application/json" } }, jsonRes);
+    if (role.allow) {
+      assert.equal(streamRes.statusCode, 200, role.name);
+      assert.match(streamRes.headers["Content-Type"], /text\/event-stream/, role.name);
+      assert.equal(streamRes._json, null, role.name);
+      assert.equal(jsonRes.statusCode, 200, role.name);
+      assert.match(jsonRes.headers["Content-Type"], /application\/json/, role.name);
+    } else {
+      assert.equal(streamRes.statusCode, 401, role.name);
+      assert.equal(streamRes.headersSent, false, role.name);
+      assert.equal(streamRes._json && streamRes._json.error, "Premium membership required", role.name);
+      assert.equal(jsonRes.statusCode, 401, role.name);
+      assert.equal(jsonRes._json && jsonRes._json.error, "Premium membership required", role.name);
+      assert.equal(streamRes._json.error, jsonRes._json.error, role.name);
+    }
+  }
 });

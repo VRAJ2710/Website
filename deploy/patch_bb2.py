@@ -26,6 +26,9 @@ is capped at 800ms so an out-of-credits provider is skipped quickly. OpenAI
 gpt-4o-mini is tried first, then Gemini 2.5 Flash. If neither key is configured,
 the request falls through to the existing JSON handler.
 
+Streaming allows the same people as the JSON handler: currentUser, then
+hasPremiumAccess (premium tier or admin). It does not re-check tier itself.
+
 Stacks on rt52 + rt52s. rt53 (home freeze and the macro grid) may already
 have run and bumped the cache buster; this patch does not require its marker.
 Refuses unless these are present:
@@ -336,6 +339,7 @@ SERVER_ANCHORS = [
     "async function handle(",
     "function json(",
     "async function currentUser(",
+    "function hasPremiumAccess(",
     "async function readBody(",
     '"/api/chat"',
     "return json(res, 200, await institutional13fV2());",
@@ -859,7 +863,7 @@ function bb2Lead(built, cite) {
 async function bb2StreamInner(req, res) {
   const t0 = Date.now();
   const user = await currentUser(req);
-  if (!user || user.tier !== "premium") return json(res, 401, { error: "Premium membership required" });
+  if (!user || !hasPremiumAccess(user)) return json(res, 401, { error: "Premium membership required" });
   const body = await bb2Read0(req);
   const q = bb2Question(body);
   const base = bb2PeerAsk(q) ? bb2Base(q) : null;
