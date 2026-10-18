@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://thedispatch.uk/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://thedispatch.uk/brief/</loc><changefreq>daily</changefreq><priority>0.8</priority></url>
+  <url><loc>https://thedispatch.uk/playbook/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://thedispatch.uk/gold/</loc><changefreq>weekly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://thedispatch.uk/markets/</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://thedispatch.uk/news/</loc><changefreq>daily</changefreq><priority>0.7</priority></url>
+  <url><loc>https://thedispatch.uk/research/</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://thedispatch.uk/signals/</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://thedispatch.uk/dashboard/</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://thedispatch.uk/learn/</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://thedispatch.uk/portfolio/</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://thedispatch.uk/watchlist/</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://thedispatch.uk/lab/</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://thedispatch.uk/screener/</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://thedispatch.uk/sectors/</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://thedispatch.uk/heatmap/</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://thedispatch.uk/crypto/</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://thedispatch.uk/paper/</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://thedispatch.uk/geo/</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://thedispatch.uk/brief/dispatch-brief/</loc><lastmod>2026-09-06T13:03:02.088Z</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>
+  <url><loc>https://thedispatch.uk/report/spx2026/</loc><lastmod>2026-09-07T13:45:08.272Z</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://thedispatch.uk/research/research-desk/</loc><lastmod>2026-09-06T13:03:02.097Z</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+</urlset>
