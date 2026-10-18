@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""patch_rt53.py: chat59 -> chat60 (client only).
+"""patch_rt53.py: client home freeze. Reads app.js?v=chatNN and writes chatNN+1.
 
-bb3_ask then bb3_fit ship first (chat58 -> chat59). This patch refuses unless
-the tree is that bundle:
+The known live base is chat59 (bb3_ask then bb3_fit):
   app.js md5 d38b70eb458091fa69143f9fe3bfe193
-  index.html md5 b15074aedc3261bf9e2ca611084082ba and exactly app.js?v=chat59
-  and the rt52 block is present.
-A second run prints REFUSE (already applied) and exits 0. Any other miss
-aborts with a non-zero status. Finishes with node --check.
+  index.html md5 b15074aedc3261bf9e2ca611084082ba
+A different checksum prints WARN and continues. Anchors still decide: a missing
+or ambiguous anchor aborts with a non-zero status. A second run prints
+REFUSE (already applied) and exits 0. Finishes with node --check.
 
 Home stops rebuilding the hidden four-panel desk, and the 26 news feeds wait until the desk
 or the news panel is opened. News tagging is memoized and regime keywords are computed once
@@ -29,7 +28,6 @@ args = [a for a in sys.argv[1:] if a != '--check']
 D = args[0] if args else '.'
 APP, IDX = os.path.join(D, 'app.js'), os.path.join(D, 'index.html')
 
-BASE_CHAT = 59
 EXPECT_APP_MD5 = "d38b70eb458091fa69143f9fe3bfe193"
 EXPECT_INDEX_MD5 = "b15074aedc3261bf9e2ca611084082ba"
 NEED_MARKER = "// ── rt52 ──"
@@ -46,13 +44,12 @@ if NEED_MARKER not in s: die('base lacks ' + NEED_MARKER)
 md5 = hashlib.md5(raw).hexdigest()
 imd5 = hashlib.md5(raw_idx).hexdigest()
 if md5 != EXPECT_APP_MD5:
-    die('app.js md5 %s != %s (this patch applies only to the chat59 bundle, bb3_ask then bb3_fit)' % (md5, EXPECT_APP_MD5))
+    print('WARN md5 app.js: have %s expected %s (anchors still decide)' % (md5, EXPECT_APP_MD5))
 if imd5 != EXPECT_INDEX_MD5:
-    die('index.html md5 %s != %s' % (imd5, EXPECT_INDEX_MD5))
+    print('WARN md5 index.html: have %s expected %s (anchors still decide)' % (imd5, EXPECT_INDEX_MD5))
 v = re.findall(r'app\.js\?v=chat(\d+)"', h)
-if len(v) != 1: die('index app.js?v=chatN bust not found exactly once')
+if len(v) != 1: die('index app.js?v=chatN bust matched %d times' % len(v))
 n = int(v[0]); base, nxt = 'chat%d' % n, 'chat%d' % (n + 1)
-if n != BASE_CHAT: die('index is %s; this patch requires chat%d' % (base, BASE_CHAT))
 print('base:', base, 'app.md5', md5, 'index.md5', imd5, '->', nxt)
 
 def sub1(src, old, new, label):
@@ -194,6 +191,22 @@ s = sub1(s,
 '''          <div class="lab-hud-stat" title="How well this ticker matches current regime model"><div class="lab-hud-l">REGIME FIT · MODEL</div><div class="lab-hud-v" style="color:${fitCol}">${fit.score}%</div></div>''',
 '''          ${_rt53FitHtml(_labTk,"hud")}''',
 'lab regime fit hud')
+s = sub1(s,
+'''    const sc = a?.sc != null ? a.sc : Math.round(_tickerRegimeFit(tk, _computeRegimeEngine()).score);''',
+'''    const sc = a?.sc != null ? a.sc : null;''',
+'heatmap local fit fallback')
+s = sub1(s,
+'''      <div style="font-family:var(--mn);font-size:16px;font-weight:900;color:var(--gd);margin:4px 0">${sc}</div>''',
+'''      <div style="font-family:var(--mn);font-size:16px;font-weight:900;color:var(--gd);margin:4px 0">${sc == null ? "\u2014" : sc}</div>''',
+'heatmap empty fit cell')
+s = sub1(s,
+'''      const scShow = a._dyn ? Math.round(_tickerRegimeFit(a.tk, reP4).score) : a.sc;''',
+'''      const scShow = _rt53ShownScore(a);''',
+'desktop watchlist fit cell')
+s = sub1(s,
+'''    const scShow=a._dyn?Math.round(_tickerRegimeFit(a.tk,reWl).score):a.sc;''',
+'''    const scShow=_rt53ShownScore(a);''',
+'mobile watchlist fit cell')
 
 BLOCK = r'''// ── rt53 ── Home no longer rebuilds the hidden desk. The news feeds start when the desk or the news panel
 // is first opened. The macro grid (bb1) paints with the front door, including a daily US real yield.
@@ -444,31 +457,13 @@ _quoteMeta = function (tk) {
 // field lives. The card, the lab control and the basis sheet render this object only.
 var _rt53FitBag = Object.create(null), _rt53FitAsked = Object.create(null), _rt53FitAtFmt = null;
 function _rt53FitPick(tk) {
+  // Harness fixture, then the bag filled only by GET /api/regime-fit. No financials field,
+  // no dynamic payload, and no in-browser score is a display source.
   var fx = typeof window !== "undefined" ? window._rt53FitFixture : null;
   if (fx && typeof fx === "object") {
     if (Object.prototype.hasOwnProperty.call(fx, tk)) return fx[tk] || null;
     if (String(fx.ticker || fx.symbol || "").toUpperCase() === tk) return fx;
   }
-  try {
-    if (typeof _finCache !== "undefined" && _finCache && Object.prototype.hasOwnProperty.call(_finCache, tk)) {
-      var fin = _finCache[tk];
-      if (fin && typeof fin === "object" && Object.prototype.hasOwnProperty.call(fin, "regimeFit")) return fin.regimeFit || null;
-    }
-  } catch (e) {}
-  try {
-    if (typeof _dynData !== "undefined" && _dynData && typeof _dynData === "object" && Object.prototype.hasOwnProperty.call(_dynData, "regimeFit")) {
-      var dt = String(_dynData.ticker || _dynData.symbol || (typeof _dynTk !== "undefined" ? _dynTk : "") || "").toUpperCase();
-      if (!dt || dt === tk) return _dynData.regimeFit || null;
-    }
-  } catch (e) {}
-  try {
-    var mk = typeof window !== "undefined" ? window._rt53FitMarkets : null;
-    if (mk && typeof mk === "object") {
-      if (Object.prototype.hasOwnProperty.call(mk, tk)) return mk[tk] || null;
-      var list = mk.regimeFit ? (Array.isArray(mk.regimeFit) ? mk.regimeFit : [mk.regimeFit]) : [];
-      for (var i = 0; i < list.length; i++) if (list[i] && String(list[i].ticker || "").toUpperCase() === tk) return list[i];
-    }
-  } catch (e) {}
   if (_rt53FitBag && Object.prototype.hasOwnProperty.call(_rt53FitBag, tk)) return _rt53FitBag[tk];
   return undefined;
 }
@@ -502,6 +497,7 @@ function _rt53FitPeek(tk) {
   tk = String(tk || "").toUpperCase();
   try {
     var raw = _rt53FitPick(tk);
+    if (raw === undefined) return { state: "loading", ticker: tk };
     if (raw == null) return { state: "absent", ticker: tk };
     return _rt53FitNorm(raw, tk);
   } catch (e) { return { state: "absent", ticker: tk }; }
@@ -510,10 +506,17 @@ function _rt53FitRead(tk) {
   tk = String(tk || "").toUpperCase();
   try {
     var raw = _rt53FitPick(tk);
-    if (raw === undefined) { _rt53FitAsk(tk); return { state: "absent", ticker: tk }; }
+    if (raw === undefined) { _rt53FitAsk(tk); return { state: "loading", ticker: tk }; }
     if (raw == null) return { state: "absent", ticker: tk };
     return _rt53FitNorm(raw, tk);
   } catch (e) { return { state: "absent", ticker: tk }; }
+}
+function _rt53ShownScore(a) {
+  if (!a || !a._dyn) return a && a.sc != null ? a.sc : "\u2014";
+  var f = _rt53FitRead(a.tk);
+  if (f.state === "score") return f.score;
+  if (f.state === "loading") return "\u2026";
+  return "\u2014";
 }
 function _rt53FitTake(j, tk) {
   if (!j || typeof j !== "object") return null;
@@ -537,6 +540,17 @@ function _rt53FitRepaint() {
     });
     var look = document.querySelector(".lab-lookfor li");
     if (look) look.innerHTML = _rt53FitLook();
+    document.querySelectorAll(".smart-fit[data-tk]").forEach(function (el) {
+      var f = _rt53FitPeek(el.getAttribute("data-tk"));
+      el.textContent = f.state === "score" ? String(f.score) : "";
+    });
+    var card = document.getElementById("siteIntelCard");
+    if (card && typeof _renderSiteIntelCard === "function") {
+      var hold2 = document.createElement("div");
+      hold2.innerHTML = _renderSiteIntelCard((typeof _siteIntel !== "undefined" && _siteIntel.surface) || "ticker", { tk: typeof selTk !== "undefined" ? selTk : "" });
+      if (hold2.firstElementChild) card.replaceWith(hold2.firstElementChild);
+    }
+    try { if (typeof _intelBarSig !== "undefined") _intelBarSig = ""; if (typeof _paintSiteIntelBar === "function") _paintSiteIntelBar(); } catch (e2) {}
   } catch (e) {}
 }
 function _rt53FitAsk(tk) {
@@ -586,6 +600,7 @@ function _rt53FitInputLine(inp) {
 }
 function _rt53FitSheet(tk) {
   var f = _rt53FitRead(tk), E = function (v) { try { return _rt52E(v); } catch (e) { return _rt53Esc(v); } };
+  if (f.state === "loading") return { k: "REGIME FIT", t: (f.ticker || tk) + " \u00b7 Loading", what: E("The published fit is on its way from the desk. This page does not estimate a number while it waits."), how: [], src: E("Dispatch server"), at: "\u2014", why: "" };
   if (f.state === "absent") return { k: "REGIME FIT", t: (f.ticker || tk) + " \u00b7 Fit score not available yet", what: E("The desk publishes one fit score from the server. It is not on this page yet, so nothing is estimated here."), how: [], src: E("Dispatch server"), at: "\u2014", why: "" };
   var how = (f.inputs || []).map(function (inp) { return _rt53FitInputLine(inp); }).filter(Boolean).map(E);
   var bench = "SPY \u2014";
@@ -598,7 +613,10 @@ function _rt53FitSheet(tk) {
 function _rt53FitHtml(tk, mode) {
   try {
     var f = _rt53FitRead(tk), v = "", sub = "Fit score not available yet", tone = "";
-    if (f.state === "score") {
+    if (f.state === "loading") {
+      v = '<span class="rt53-fit-v rt53-fit-skel" aria-hidden="true"></span>';
+      sub = "Loading the published fit";
+    } else if (f.state === "score") {
       v = '<span class="rt53-fit-v">' + f.score + '<span class="rt53-fit-of">/100</span></span>';
       sub = [f.label, f.regime].filter(Boolean).join(" \u00b7 ") || "Published fit";
       tone = f.label === "Tailwind" ? " up" : f.label === "Headwind" ? " dn" : "";
@@ -616,22 +634,37 @@ function _rt53FitLook() {
   var f = _rt53FitRead(typeof _labTk !== "undefined" ? _labTk : "");
   if (f.state === "score") return "Regime fit is <strong>" + f.score + "/100</strong>" + (f.label ? " \u00b7 " + _rt53Esc(f.label) : "") + (f.regime ? " \u00b7 " + _rt53Esc(f.regime) : "") + ". The figure is the desk\u2019s published score.";
   if (f.state === "null") return _rt53Esc(f.reason || "No fit score for this name.");
+  if (f.state === "loading") return "The published fit is still loading.";
   return "Fit score not available yet.";
+}
+function _rt53FitPhrase(tk) {
+  var f = _rt53FitRead(tk);
+  if (f.state === "score") return "regime fit " + f.score + "/100";
+  if (f.state === "null") return f.reason || "no fit score";
+  if (f.state === "loading") return "regime fit loading";
+  return "fit score not available yet";
 }
 try { RT52_B.rt53fit = function (tk) { return _rt53FitSheet(tk); }; RT52_B.fit = RT52_B.rt53fit; } catch (e) {}
 try {
   var _rt53Local0 = _computeLocalIntel;
   _computeLocalIntel = function (surface, extra) {
     var r = _rt53Local0.apply(this, arguments);
-    if (!r || surface !== "ticker") return r;
+    if (!r) return r;
     try {
       var tk = (extra && extra.tk) || (typeof selTk !== "undefined" ? selTk : "");
-      var f = _rt53FitPeek(tk);
-      r.insight = String(r.insight || "").replace(/(?:Regime-aligned|Neutral fit|Headwind|Tailwind|Neutral) · regime fit \d+\/100 · /gi, "").replace(/regime fit \d+\/100/gi, f.state === "score" ? ("regime fit " + f.score + "/100") : "fit score not available yet");
-      if (typeof r.headline === "string") {
-        if (f.state === "score" && f.label) r.headline = tk + " \u2014 " + f.label;
+      var phrase = surface === "ticker" && tk ? _rt53FitPhrase(tk) : "";
+      r.insight = String(r.insight || "")
+        .replace(/(?:Regime-aligned|Neutral fit|Headwind|Tailwind|Neutral) · regime fit \d+\/100 · (?:no sync|no price yet) · /gi, phrase ? phrase + " · " : "")
+        .replace(/(?:Regime-aligned|Neutral fit|Headwind|Tailwind|Neutral) · regime fit \d+\/100 · /gi, phrase ? phrase + " · " : "")
+        .replace(/regime fit \d+\/100/gi, phrase || "fit score not available yet")
+        .replace(/Top fit: ([A-Z0-9.\-=^]{1,12}) \(\d+\)/g, function (_, t) { var f = _rt53FitRead(t); return "Top fit: " + t + (f.state === "score" ? " (" + f.score + ")" : ""); })
+        .replace(/Weakest: ([A-Z0-9.\-=^]{1,12}) \(\d+\)/g, function (_, t) { var f = _rt53FitRead(t); return "Weakest: " + t + (f.state === "score" ? " (" + f.score + ")" : ""); });
+      if (surface === "ticker" && typeof r.headline === "string") {
+        var f = _rt53FitRead(tk);
+        if (f.state === "score" && f.label) r.headline = String(tk).toUpperCase() + " \u2014 " + f.label;
         else r.headline = r.headline.replace(/ — (Regime-aligned|Neutral fit|Headwind|Tailwind|Neutral)\b/, "");
       }
+      if (Array.isArray(r.fit)) r.fit = r.fit.filter(function (item) { return item && item.tk; });
     } catch (e2) {}
     return r;
   };
@@ -649,6 +682,67 @@ try {
       return x.replace(m[0], m[1]);
     } catch (e2) { return x; }
   };
+} catch (e) {}
+try {
+  var _rt53Badge0 = _smartFitBadge;
+  _smartFitBadge = function (tk) {
+    var f = _rt53FitPeek(tk);
+    if (f.state !== "score") return "";
+    return String(_rt53Badge0.apply(this, arguments)).replace(/>\s*\d+\s*</, ">" + f.score + "<").replace('class="smart-fit"', 'class="smart-fit" data-tk="' + _rt53Esc(tk) + '"');
+  };
+} catch (e) {}
+try {
+  var _rt53SiCard0 = _renderSiteIntelCard;
+  _renderSiteIntelCard = function () {
+    var h = String(_rt53SiCard0.apply(this, arguments));
+    return h.replace(/<span class="si-fit-chip"[^>]*>([A-Z0-9.\-=^]{1,12}) \d+<\/span>/g, function (_, t) {
+      var f = _rt53FitRead(t);
+      if (f.state === "score") return '<span class="si-fit-chip">' + t + " " + f.score + "</span>";
+      if (f.state === "loading") return '<span class="si-fit-chip">' + t + ' <i class="rt53-fit-skel"></i></span>';
+      return '<span class="si-fit-chip">' + t + "</span>";
+    });
+  };
+} catch (e) {}
+try {
+  var _rt53DeskCard0 = _renderMorningDeskRunCard;
+  _renderMorningDeskRunCard = function () {
+    var h = String(_rt53DeskCard0.apply(this, arguments));
+    return h.replace(/(<span>([A-Z0-9.\-=^]{1,12})<\/span>)<b>[^<]*<\/b>/g, function (_, span, t) {
+      var f = _rt53FitRead(t);
+      if (f.state === "score") return span + "<b>" + f.score + "/100</b>";
+      if (f.state === "loading") return span + '<b class="rt53-fit-skel"></b>';
+      return span;
+    });
+  };
+} catch (e) {}
+try {
+  var _rt53Notes0 = _renderDeskNotesPanel;
+  _renderDeskNotesPanel = function () {
+    return String(_rt53Notes0.apply(this, arguments)).replace(/ · fit [^·<]*%/g, "");
+  };
+  var _rt53SaveNote0 = saveDeskNote;
+  saveDeskNote = function () {
+    var r = _rt53SaveNote0.apply(this, arguments);
+    try {
+      var list = _deskNotesStore();
+      if (list[0] && list[0].fit != null) { delete list[0].fit; _deskNotesSave(list); }
+      var host = document.getElementById("lab-notes");
+      if (host) host.outerHTML = _renderDeskNotesPanel();
+    } catch (e2) {}
+    return r;
+  };
+} catch (e) {}
+try {
+  var notes = JSON.parse(localStorage.getItem("td_desk_notes_v1") || "[]"), dirty = false;
+  (Array.isArray(notes) ? notes : []).forEach(function (n) { if (n && Object.prototype.hasOwnProperty.call(n, "fit")) { delete n.fit; dirty = true; } });
+  if (dirty) localStorage.setItem("td_desk_notes_v1", JSON.stringify(notes));
+} catch (e) {}
+try {
+  var run = JSON.parse(sessionStorage.getItem("td_desk_run") || "null");
+  if (run) {
+    ["top", "weak"].forEach(function (k) { (run[k] || []).forEach(function (x) { if (x && x.score != null) delete x.score; }); });
+    sessionStorage.setItem("td_desk_run", JSON.stringify(run));
+  }
 } catch (e) {}
 // ── rt53 QA ── dossier sheet, one trading-now line, news tags, desk score, 13F, hours slot, signals paint.
 function _rt53bTag(text) {
@@ -838,7 +932,7 @@ try {
     }
   };
 } catch (e) {}
-(function () { try { var st = document.createElement("style"); st.setAttribute("data-rt53", ""); st.textContent = '.bb1-sec{margin:16px 0 8px}.bb1-h{margin:0 0 8px;font:800 10px/1.3 var(--mn,ui-monospace);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3,#8b909a)}.bb1-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--rule,#2a2e36);border:1px solid var(--rule,#2a2e36)}.bb1-tile{background:var(--paper,#14151A);color:var(--ink,#EDEDE8);padding:11px 12px 12px;min-width:0}.bb1-k{font:700 10px/1.2 var(--ui,system-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2,#A8ADB6)}.bb1-v{margin-top:5px;font:500 20px/1.15 var(--data,ui-monospace);font-variant-numeric:tabular-nums;color:var(--ink,#EDEDE8)}.bb1-c{font:500 12px/1 var(--data,ui-monospace);margin-left:4px}.bb1-day{font:400 10px/1 var(--ui,system-ui);letter-spacing:0;color:var(--ink-3,#8b909a);margin-left:3px}.bb1-up{color:var(--pos,#3fbf7f)}.bb1-dn{color:var(--neg,#e05a5a)}.bb1-why{margin:8px 0 0;color:var(--ink-2,#C5C8CE);font:400 12px/1.45 var(--ui,system-ui)}.bb1-meta{margin-top:8px;color:var(--ink-3,#8b909a);font:400 10px/1.4 var(--data,ui-monospace)}.front-door-quotes:has(.bb1-sec){display:block;background:transparent;gap:0}.front-door-quotes>.bb1-sec{grid-column:1 / -1}@media(min-width:768px){.bb1-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.bb1-v{font-size:22px}}.rt53-fit-wrap{padding:0}.rt53-fit-hud{display:flex;flex-direction:column;align-items:stretch;gap:8px;min-width:0}.rt53-fit-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;width:100%;min-height:44px;margin:0;padding:12px;text-align:left;background:transparent;border:0;color:inherit;font:inherit;cursor:pointer}.rt53-fit-k{font:700 8px/1.2 var(--mn,ui-monospace);letter-spacing:.15em;color:var(--gd,#d4a64a)}.rt53-fit-v{font:800 22px/1.1 var(--mn,ui-monospace);font-variant-numeric:tabular-nums;color:var(--tx,#eee)}.rt53-fit-card.up .rt53-fit-v{color:var(--gn,#3fbf7f)}.rt53-fit-card.dn .rt53-fit-v{color:var(--rd,#e05a5a)}.rt53-fit-of{font-size:12px;font-weight:700;opacity:.65}.rt53-fit-s{font:400 12px/1.45 var(--sn,system-ui);color:var(--t2,#c3c9d5)}.rt53-fit-ctl{display:none}@media(min-width:1280px){.lab-hud>.rt53-fit-hud{grid-column:1 / -1;flex-direction:row;align-items:center;justify-content:space-between;gap:16px}.lab-hud .rt53-fit-card{flex-direction:row;flex-wrap:wrap;align-items:baseline;gap:6px 14px;width:auto;flex:1;padding:4px 0}.rt53-fit-card{pointer-events:none;cursor:default}.rt53-fit-ctl{display:inline-flex;align-items:center;align-self:center;flex:0 0 auto;pointer-events:auto;cursor:pointer;min-height:44px;padding:8px 12px;background:transparent;border:1px solid var(--gb,#333);border-radius:8px;color:var(--gd,#d4a64a);font:700 11px/1.2 var(--sn,system-ui);white-space:nowrap}#p2body>.rt53-fit-hud{flex-direction:row;align-items:center;justify-content:space-between;gap:16px;padding:8px 12px;border-bottom:1px solid var(--gb,#333)}}.rt53-fit-how{margin:0 0 10px}.rt53-fit-how summary{cursor:pointer;color:var(--gd,#d4a64a);font:700 12px/1.4 var(--sn,system-ui)}.rt53-fit-how p{margin:8px 0 0;color:var(--t2,#c3c9d5)}.latency-strip .rt38-sess{display:inline-block;min-height:18px;vertical-align:middle}.news-impact-score{cursor:pointer}.rt52-tk.rt53-name{letter-spacing:0;text-transform:none;font-size:11px;max-width:9em}'; document.head.appendChild(st); } catch (e) {} })();
+(function () { try { var st = document.createElement("style"); st.setAttribute("data-rt53", ""); st.textContent = '.bb1-sec{margin:16px 0 8px}.bb1-h{margin:0 0 8px;font:800 10px/1.3 var(--mn,ui-monospace);letter-spacing:.16em;text-transform:uppercase;color:var(--ink-3,#8b909a)}.bb1-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--rule,#2a2e36);border:1px solid var(--rule,#2a2e36)}.bb1-tile{background:var(--paper,#14151A);color:var(--ink,#EDEDE8);padding:11px 12px 12px;min-width:0}.bb1-k{font:700 10px/1.2 var(--ui,system-ui);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2,#A8ADB6)}.bb1-v{margin-top:5px;font:500 20px/1.15 var(--data,ui-monospace);font-variant-numeric:tabular-nums;color:var(--ink,#EDEDE8)}.bb1-c{font:500 12px/1 var(--data,ui-monospace);margin-left:4px}.bb1-day{font:400 10px/1 var(--ui,system-ui);letter-spacing:0;color:var(--ink-3,#8b909a);margin-left:3px}.bb1-up{color:var(--pos,#3fbf7f)}.bb1-dn{color:var(--neg,#e05a5a)}.bb1-why{margin:8px 0 0;color:var(--ink-2,#C5C8CE);font:400 12px/1.45 var(--ui,system-ui)}.bb1-meta{margin-top:8px;color:var(--ink-3,#8b909a);font:400 10px/1.4 var(--data,ui-monospace)}.front-door-quotes:has(.bb1-sec){display:block;background:transparent;gap:0}.front-door-quotes>.bb1-sec{grid-column:1 / -1}@media(min-width:768px){.bb1-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.bb1-v{font-size:22px}}.rt53-fit-wrap{padding:0}.rt53-fit-hud{display:flex;flex-direction:column;align-items:stretch;gap:8px;min-width:0}.rt53-fit-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;width:100%;min-height:44px;margin:0;padding:12px;text-align:left;background:transparent;border:0;color:inherit;font:inherit;cursor:pointer}.rt53-fit-k{font:700 8px/1.2 var(--mn,ui-monospace);letter-spacing:.15em;color:var(--gd,#d4a64a)}.rt53-fit-v{font:800 22px/1.1 var(--mn,ui-monospace);font-variant-numeric:tabular-nums;color:var(--tx,#eee)}.rt53-fit-card.up .rt53-fit-v{color:var(--gn,#3fbf7f)}.rt53-fit-card.dn .rt53-fit-v{color:var(--rd,#e05a5a)}.rt53-fit-of{font-size:12px;font-weight:700;opacity:.65}.rt53-fit-s{font:400 12px/1.45 var(--sn,system-ui);color:var(--t2,#c3c9d5)}.rt53-fit-ctl{display:none}@media(min-width:1280px){.lab-hud>.rt53-fit-hud{grid-column:1 / -1;flex-direction:row;align-items:center;justify-content:space-between;gap:16px}.lab-hud .rt53-fit-card{flex-direction:row;flex-wrap:wrap;align-items:baseline;gap:6px 14px;width:auto;flex:1;padding:4px 0}.rt53-fit-card{pointer-events:none;cursor:default}.rt53-fit-ctl{display:inline-flex;align-items:center;align-self:center;flex:0 0 auto;pointer-events:auto;cursor:pointer;min-height:44px;padding:8px 12px;background:transparent;border:1px solid var(--gb,#333);border-radius:8px;color:var(--gd,#d4a64a);font:700 11px/1.2 var(--sn,system-ui);white-space:nowrap}#p2body>.rt53-fit-hud{flex-direction:row;align-items:center;justify-content:space-between;gap:16px;padding:8px 12px;border-bottom:1px solid var(--gb,#333)}}.rt53-fit-how{margin:0 0 10px}.rt53-fit-how summary{cursor:pointer;color:var(--gd,#d4a64a);font:700 12px/1.4 var(--sn,system-ui)}.rt53-fit-how p{margin:8px 0 0;color:var(--t2,#c3c9d5)}.latency-strip .rt38-sess{display:inline-block;min-height:18px;vertical-align:middle}.news-impact-score{cursor:pointer}.rt52-tk.rt53-name{letter-spacing:0;text-transform:none;font-size:11px;max-width:9em}.rt53-fit-skel{display:inline-block;width:3.2em;height:.85em;border-radius:4px;background:linear-gradient(90deg,rgba(255,255,255,.08),rgba(255,255,255,.22),rgba(255,255,255,.08));background-size:200% 100%;animation:rt53sh 1.1s linear infinite;vertical-align:middle}@keyframes rt53sh{0%{background-position:100% 0}100%{background-position:-100% 0}}'; document.head.appendChild(st); } catch (e) {} })();
 '''
 # bb3_fit has already signed the Hormuz oil lines. Leave that text in place.
 for bit in (
