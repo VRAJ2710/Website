@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""patch_rt53.py — sync Academy XP, streak and badges to the signed-in account.
+"""patch_bb4_academy.py — sync Academy XP, streak and badges to the signed-in account.
 
 Uses only the existing /api/prefs route and dispatch_user_prefs.prefs JSON.
 No new table, no new column, no migration, no Stripe, no secrets.
@@ -14,20 +14,21 @@ XP, day or badge is dropped. A settings save that does not send academy leaves
 the stored academy in place. An academy-only save does not reset layout,
 watchlist or the other prefs fields.
 
-Primary base is the plain live site after rt52, rt52s, and rt52ops: chat57, with
-function hasPremiumAccess( already present. bb2 (PR #23) is not required, so
-this also applies after that patch. Requires the rt52 markers, function
-hasPremiumAccess(, and app.js?v=chatNN with NN >= 57. Detects the current bust
-and adds one. It does not hard-code the next number. A later client bust still
-increments whatever it finds. No tier-string checks: sign-in stays on the
-existing /api/prefs route, which uses currentUser. Premium gating, where it
-already exists, stays inside hasPremiumAccess.
+Primary base is live chat58: rt52, rt52s, bb2, and the hasPremiumAccess hotfix.
+Requires those markers, function hasPremiumAccess(, and app.js?v=chatNN with
+NN >= 58. Detects the current bust and adds one. It does not hard-code the
+next number, so a later client bust still increments whatever it finds.
+No tier-string checks: sign-in stays on the existing /api/prefs route, which
+uses currentUser. Premium gating, where it already exists, stays inside
+hasPremiumAccess. The marker is bb4academy, so a Frontend rt53 patch is not
+treated as this one.
 
 Usage:
-    python3 patch_rt53.py --check <dir with app.js, index.html, server.js>
-    python3 patch_rt53.py <dir>
-Refuses a second run. CRLF-safe. node --check before the write; a failed write
-restores backups. Prints md5 and line count of each file before and after.
+    python3 patch_bb4_academy.py --check <dir with app.js, index.html, server.js>
+    python3 patch_bb4_academy.py <dir>
+A second run prints REFUSE and exits 0. CRLF-safe. node --check before the
+write; a failed write restores backups. Prints md5 and line count of each
+file before and after.
 """
 import hashlib, os, re, subprocess, sys, tempfile
 
@@ -67,29 +68,33 @@ for p in (APP, IDX, SRV):
 s, crlf = load(APP)
 h, hcrlf = load(IDX)
 v, vcrlf = load(SRV)
-show("rt53 before app.js", s, crlf)
-show("rt53 before index.html", h, hcrlf)
-show("rt53 before server.js", v, vcrlf)
-# Plain live files after rt52, rt52s, and rt52ops, before bb2. A mismatch warns
-# only; anchors decide, so a later bb2 or home-freeze edit can still apply.
+if "// ── bb4academy ──" in s or "// ── bb4academy ──" in v:
+    print("REFUSE: bb4academy already applied")
+    sys.exit(0)
+show("bb4academy before app.js", s, crlf)
+show("bb4academy before index.html", h, hcrlf)
+show("bb4academy before server.js", v, vcrlf)
+# Live chat58 after bb2 and the hasPremiumAccess hotfix. A mismatch warns only.
 EXPECTED_MD5 = {
-    "app.js": "45107b5b78039f675ffd94646ce4d309",
-    "index.html": "87ee1667f8e6deef4c449ff9a61cce8d",
-    "server.js": "4e8c340439b57d202b6c13711cc7a338",
+    "app.js": "86153acc103ab9bd246fbdf96055ffab",
+    "index.html": "4a680ac27bde0eb044944767ac6838c6",
+    "server.js": "2e04b3c16f8400dc5ea211e676831b23",
 }
 for path, text, use_crlf in ((APP, s, crlf), (IDX, h, hcrlf), (SRV, v, vcrlf)):
     digest = stats(text, use_crlf)[0]
     expect = EXPECTED_MD5.get(os.path.basename(path))
     if expect and digest != expect:
         print("WARN md5 %s: have %s expected live %s (anchors still decide)" % (os.path.basename(path), digest, expect))
-if "// ── rt53a ──" in s or "// ── rt53a ──" in v:
-    die("REFUSE: rt53 already applied")
 
 errors = []
 if "// ── rt52 ──" not in s:
     errors.append("app.js missing rt52 marker (apply patch_rt52.py first)")
+if "// ── bb2 ──" not in s:
+    errors.append("app.js missing bb2 marker (live base is chat58)")
 if "// ── rt52s" not in v:
     errors.append("server.js missing rt52s marker (apply patch_rt52s.py first)")
+if "// ── bb2 ──" not in v:
+    errors.append("server.js missing bb2 marker (live base is chat58)")
 if "function hasPremiumAccess(" not in v:
     errors.append("server.js missing function hasPremiumAccess( (admins share the premium helper; do not compare tier strings)")
 CLIENT_NEEDLES = [
@@ -109,8 +114,8 @@ if len(vers) != 1:
     errors.append("index app.js?v=chatNN matched %d times (need 1)" % len(vers))
 else:
     nver = int(vers[0])
-    if nver < 57:
-        errors.append("index is chat%d; expected chat57 or later (post rt52)" % nver)
+    if nver < 58:
+        errors.append("index is chat%d; expected chat58 or later" % nver)
 PUT = (
     "        const prefs = rt17SanitizePrefs(body && body.prefs);\n"
     "        await sql`INSERT INTO dispatch_user_prefs (user_id, prefs, updated_at) VALUES (${user.id}, ${JSON.stringify(prefs)}::jsonb, NOW())\n"
@@ -267,7 +272,7 @@ function rt53MergeAcademy(a, b, today) {
 /* RT53_PURE_END */
 '''
 
-SERVER = r'''// ── rt53a ── Academy progress inside prefs.academy. No new column.
+SERVER = r'''// ── bb4academy ── Academy progress inside prefs.academy. No new column.
 /* RT53_SERVER_START */
 ''' + PURE + r'''
 function rt53AsObj(v) {
@@ -321,11 +326,11 @@ PUT_NEW = (
 )
 CATCH_NEW = CATCH + '\n    if (error && error.code === "RT53_CONFLICT") return json(res, 409, { error: "Your settings changed in another tab. Nothing was overwritten; try again." }, noStore);'
 v2 = v.replace(READJ, SERVER + READJ, 1).replace(PUT, PUT_NEW, 1).replace(CATCH, CATCH_NEW, 1)
-if v2.count("// ── rt53a ──") != 1 or v2.count(PUT) != 0:
+if v2.count("// ── bb4academy ──") != 1 or v2.count(PUT) != 0:
     die("server edit did not land once")
 
 CLIENT = r'''
-// ── rt53a ── Academy XP, streak and badges sync to the signed-in account via /api/prefs (prefs.academy).
+// ── bb4academy ── Academy XP, streak and badges sync to the signed-in account via /api/prefs (prefs.academy).
 // Logged-out play stays in this browser. Sign-in merges: max XP, streak from the last activity date, union of badges.
 ''' + PURE + r'''
 function _rt53Signed() { try { return typeof _rt17Signed === "function" && _rt17Signed(); } catch (e) { return false; } }
@@ -432,14 +437,14 @@ _rt46Save = function () { const r = _rt53Orig46.apply(this, arguments); _rt53Sch
 setTimeout(() => { try { _rt53Pull(); } catch (e) {} }, 1200);
 '''
 s2 = s2.rstrip("\n") + "\n" + CLIENT
-if s2.count("// ── rt53a ──") != 1:
-    die("client marker count is %d" % s2.count("// ── rt53a ──"))
+if s2.count("// ── bb4academy ──") != 1:
+    die("client marker count is %d" % s2.count("// ── bb4academy ──"))
 nodecheck(s2, "app.js")
 nodecheck(v2, "server.js")
-show("rt53 after app.js", s2, crlf)
-show("rt53 after index.html", h2, hcrlf)
-show("rt53 after server.js", v2, vcrlf)
-print("OK rt53: academy progress in prefs.academy; index chat%d -> chat%d; node --check passed%s" % (nver, nxt, " (dry run, nothing written)" if CHECK else ""))
+show("bb4academy after app.js", s2, crlf)
+show("bb4academy after index.html", h2, hcrlf)
+show("bb4academy after server.js", v2, vcrlf)
+print("OK bb4academy: academy progress in prefs.academy; index chat%d -> chat%d; node --check passed%s" % (nver, nxt, " (dry run, nothing written)" if CHECK else ""))
 if CHECK:
     sys.exit(0)
 
@@ -453,7 +458,7 @@ pairs = [(APP, s2, crlf), (IDX, h2, hcrlf), (SRV, v2, vcrlf)]
 baks = []
 try:
     for path, text, use_crlf in pairs:
-        bak = path + ".rt53abak"
+        bak = path + ".bb4academy.bak"
         open(bak, "wb").write(open(path, "rb").read())
         baks.append((path, bak))
         data = (text.replace("\n", "\r\n") if use_crlf else text).encode("utf-8")

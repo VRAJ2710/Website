@@ -46,14 +46,14 @@ function toCrlf(file) {
 }
 
 const LIVE_UPLOAD = {
-  app: "/home/ubuntu/.cursor/projects/workspace/uploads/app_0092.js",
-  index: "/home/ubuntu/.cursor/projects/workspace/uploads/index_d0e3.html",
-  server: "/home/ubuntu/.cursor/projects/workspace/uploads/server_479b.js",
+  app: "/home/ubuntu/.cursor/projects/workspace/uploads/app_e332.js",
+  index: "/home/ubuntu/.cursor/projects/workspace/uploads/index_6cbb.html",
+  server: "/home/ubuntu/.cursor/projects/workspace/uploads/server_9dca.js",
 };
 const LIVE_MD5 = {
-  app: "45107b5b78039f675ffd94646ce4d309",
-  index: "87ee1667f8e6deef4c449ff9a61cce8d",
-  server: "4e8c340439b57d202b6c13711cc7a338",
+  app: "86153acc103ab9bd246fbdf96055ffab",
+  index: "4a680ac27bde0eb044944767ac6838c6",
+  server: "2e04b3c16f8400dc5ea211e676831b23",
 };
 
 function buildBase() {
@@ -72,11 +72,11 @@ function buildBase() {
   for (const needle of ["// ── rt52 ──", "function _rt47Save()", "Saved in this browser only."]) {
     if (!app.includes(needle)) throw new Error("live app.js missing " + needle);
   }
-  if (app.includes("// ── bb2 ──")) throw new Error("plain live app.js already has bb2");
+  if (!app.includes("// ── bb2 ──")) throw new Error("live app.js missing bb2");
   const foot = app.split("\n").find(line => line.includes("Saved in this browser only."));
   if (!foot || !foot.includes("`")) throw new Error("footer is not inside a template literal");
-  if (!fs.readFileSync(path.join(BASE, "index.html"), "utf8").includes('app.js?v=chat57"')) {
-    throw new Error("live index is not chat57");
+  if (!fs.readFileSync(path.join(BASE, "index.html"), "utf8").includes('app.js?v=chat58"')) {
+    throw new Error("live index is not chat58");
   }
   const server = fs.readFileSync(path.join(BASE, "server.js"), "utf8");
   if (!server.includes("function hasPremiumAccess(") || !server.includes("// ── rt52s")) {
@@ -133,7 +133,7 @@ function loadAcademy(serverText) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "rt53ad-"));
   const sandbox = {
     console, Buffer, URL, URLSearchParams, TextDecoder, TextEncoder, Intl,
-    setTimeout, clearTimeout, AbortSignal, Map, Set, Promise, Date, Math, JSON, RegExp, Error,
+    setTimeout, clearTimeout, AbortSignal, AbortController, Map, Set, Promise, Date, Math, JSON, RegExp, Error,
     encodeURIComponent, decodeURIComponent, isFinite, parseInt, Number, String, Object, Array,
     process: { env: { OPENAI_API_KEY: SECRET, ACADEMY_AI: "on" } },
     require(name) {
@@ -143,7 +143,8 @@ function loadAcademy(serverText) {
       throw new Error("require " + name);
     },
     fetch: async () => { throw new Error("fetch unset"); },
-    generateAi: async () => { throw new Error("ai unset"); },
+    generateAi: async () => { throw new Error("generateAi must not run on the lesson build"); },
+    generateWithAiProvider: async () => { throw new Error("provider unset"); },
     currentUser: async () => null,
     isAdminUser() { return false; },
     approvedRssFeedUrl() { return "https://example.test/rss"; },
@@ -159,6 +160,7 @@ function _rt53TestPrep(patch) {
   if ("lastMem" in patch) _rt53Last = patch.lastMem;
   return { v3: _rt48sFile, last: _rt53LastFile };
 }
+function _rt53TestBusy() { return _rt48sState.busy; }
 `, sandbox);
   sandbox.tmp = tmp;
   return sandbox;
@@ -170,33 +172,36 @@ function noSecret(body) {
 
 buildBase();
 
-test("plain live base is the uploaded post-rt52 trio, before bb2", () => {
+test("live base is the uploaded chat58 trio, after bb2", () => {
   assert.equal(md5(path.join(BASE, "app.js")), LIVE_MD5.app);
   assert.equal(md5(path.join(BASE, "index.html")), LIVE_MD5.index);
   assert.equal(md5(path.join(BASE, "server.js")), LIVE_MD5.server);
   const server = fs.readFileSync(path.join(BASE, "server.js"), "utf8");
   assert.match(server, /\/\/ ── rt52s: 13F v2 ──/);
+  assert.match(server, /\/\/ ── bb2 ──/);
   assert.match(server, /function hasPremiumAccess\(/);
-  assert.equal(server.includes("// ── bb2 ──"), false);
 });
 
 test("dry run writes nothing and a second run refuses", () => {
   const dir = path.join(os.tmpdir(), "rt53-dry");
   copyTree(BASE, dir);
   const before = ["app.js", "index.html", "server.js"].map(name => md5(path.join(dir, name)));
-  const dry = run("patch_rt53.py", ["--check", dir]);
+  const dry = run("patch_bb4_academy.py", ["--check", dir]);
   assert.equal(dry.code, 0, dry.stdout);
-  assert.match(dry.stdout, /chat57 -> chat58/);
+  assert.match(dry.stdout, /chat58 -> chat59/);
   assert.match(dry.stdout, /dry run, nothing written/);
   const after = ["app.js", "index.html", "server.js"].map(name => md5(path.join(dir, name)));
   assert.deepEqual(after, before);
-  const applied = run("patch_rt53.py", [dir]);
+  const applied = run("patch_bb4_academy.py", [dir]);
   assert.equal(applied.code, 0, applied.stdout);
   console.log(applied.stdout);
-  const again = run("patch_rt53.py", [dir]);
-  assert.equal(again.code, 1, again.stdout);
-  assert.match(again.stdout, /REFUSE/);
-  assert.match(fs.readFileSync(path.join(dir, "index.html"), "utf8"), /app\.js\?v=chat58"/);
+  const again = run("patch_bb4_academy.py", ["--check", dir]);
+  assert.equal(again.code, 0, again.stdout);
+  assert.match(again.stdout, /REFUSE: bb4academy already applied/);
+  const againApply = run("patch_bb4_academy.py", [dir]);
+  assert.equal(againApply.code, 0, againApply.stdout);
+  assert.match(againApply.stdout, /REFUSE: bb4academy already applied/);
+  assert.match(fs.readFileSync(path.join(dir, "index.html"), "utf8"), /app\.js\?v=chat59"/);
 });
 
 test("rt53s then rt53, and rt53 then rt53s, leave neighbouring markers in place", () => {
@@ -209,57 +214,62 @@ test("rt53s then rt53, and rt53 then rt53s, leave neighbouring markers in place"
     fs.appendFileSync(path.join(dir, "server.js"), "\n// ── bb2 ──\nasync function bb3RegimeFit(ticker) { return { ticker: ticker, regimeFit: 28 }; }\n");
   }
   const indexBefore = md5(path.join(first, "index.html"));
-  const dailyFirst = run("patch_rt53s.py", [path.join(first, "server.js")]);
+  const dailyFirst = run("patch_bb4_daily.py", [path.join(first, "server.js")]);
   assert.equal(dailyFirst.code, 0, dailyFirst.stdout);
   console.log(dailyFirst.stdout);
   assert.equal(md5(path.join(first, "index.html")), indexBefore);
-  assert.equal(run("patch_rt53.py", [first]).code, 0);
-  const prefsFirst = run("patch_rt53.py", [second]);
+  assert.equal(run("patch_bb4_academy.py", [first]).code, 0);
+  const prefsFirst = run("patch_bb4_academy.py", [second]);
   assert.equal(prefsFirst.code, 0, prefsFirst.stdout);
-  const dailySecond = run("patch_rt53s.py", [path.join(second, "server.js")]);
+  const dailySecond = run("patch_bb4_daily.py", [path.join(second, "server.js")]);
   assert.equal(dailySecond.code, 0, dailySecond.stdout);
   for (const dir of [first, second]) {
     const server = fs.readFileSync(path.join(dir, "server.js"), "utf8");
     const app = fs.readFileSync(path.join(dir, "app.js"), "utf8");
-    assert.match(server, /\/\/ ── rt53s: academy-daily ──/);
-    assert.match(server, /\/\/ ── rt53a ──/);
+    assert.match(server, /\/\/ ── bb4daily ──/);
+    assert.match(server, /\/\/ ── bb4academy ──/);
+    assert.equal(server.includes("// ── rt53 ──"), false);
+    assert.equal(server.includes("// ── rt53s ──"), false);
     assert.match(server, /async function bb3RegimeFit\(ticker\)/);
     assert.match(server, /function hasPremiumAccess\(user\)/);
     assert.match(server, /\/\/ ── bb2 ──/);
     assert.equal(server.includes("ON CONFLICT (user_id) DO UPDATE SET prefs=EXCLUDED.prefs"), false);
-    assert.match(app, /\/\/ ── rt53a ──/);
+    assert.match(app, /\/\/ ── bb4academy ──/);
+    assert.equal(app.includes("// ── rt53 ──"), false);
     assert.match(app, /\/\/ ── bb2 ──/);
-    assert.match(fs.readFileSync(path.join(dir, "index.html"), "utf8"), /app\.js\?v=chat58"/);
+    assert.match(fs.readFileSync(path.join(dir, "index.html"), "utf8"), /app\.js\?v=chat59"/);
     const region = server.slice(server.indexOf("/* RT53_SERVER_START */"), server.indexOf("/* RT53_SERVER_END */"));
     assert.equal(region.includes("user.tier"), false);
-    const daily = server.slice(server.indexOf("// ── rt53s:"), server.indexOf("const MARKET_SYSTEM"));
+    const daily = server.slice(server.indexOf("// ── bb4daily ──"), server.indexOf("const MARKET_SYSTEM"));
     assert.equal(daily.includes("user.tier"), false);
-    const client = app.slice(app.indexOf("// ── rt53a ──"));
+    const clientAt = app.indexOf("// ── bb4academy ──");
+    assert.ok(clientAt >= 0, "client marker");
+    const client = app.slice(clientAt);
     assert.equal(client.includes("user.tier"), false);
     assert.equal(server.split("async function academyDaily(req, res) {").length, 2);
   }
-  const refuse = run("patch_rt53s.py", [path.join(first, "server.js")]);
-  assert.equal(refuse.code, 1);
-  assert.match(refuse.stdout, /REFUSE/);
+  const refuse = run("patch_bb4_daily.py", [path.join(first, "server.js")]);
+  assert.equal(refuse.code, 0, refuse.stdout);
+  assert.match(refuse.stdout, /REFUSE: bb4daily already applied/);
 });
 
-test("a later bust increments, chat56 is refused, a missing anchor writes nothing", () => {
-  const later = path.join(os.tmpdir(), "rt53-chat59");
+test("a later bust increments, chat57 is refused, a missing anchor writes nothing", () => {
+  const later = path.join(os.tmpdir(), "bb4-chat60");
   copyTree(BASE, later);
   const index = path.join(later, "index.html");
-  fs.writeFileSync(index, fs.readFileSync(index, "utf8").replace("chat57", "chat59"));
-  const bumped = run("patch_rt53.py", [later]);
+  fs.writeFileSync(index, fs.readFileSync(index, "utf8").replace("chat58", "chat60"));
+  const bumped = run("patch_bb4_academy.py", [later]);
   assert.equal(bumped.code, 0, bumped.stdout);
-  assert.match(fs.readFileSync(index, "utf8"), /app\.js\?v=chat60"/);
+  assert.match(fs.readFileSync(index, "utf8"), /app\.js\?v=chat61"/);
 
-  const early = path.join(os.tmpdir(), "rt53-chat56");
+  const early = path.join(os.tmpdir(), "bb4-chat57");
   copyTree(BASE, early);
   const earlyIndex = path.join(early, "index.html");
   const earlyHash = md5(path.join(early, "app.js"));
-  fs.writeFileSync(earlyIndex, fs.readFileSync(earlyIndex, "utf8").replace("chat57", "chat56"));
-  const refused = run("patch_rt53.py", [early]);
+  fs.writeFileSync(earlyIndex, fs.readFileSync(earlyIndex, "utf8").replace("chat58", "chat57"));
+  const refused = run("patch_bb4_academy.py", [early]);
   assert.equal(refused.code, 1, refused.stdout);
-  assert.match(refused.stdout, /chat56/);
+  assert.match(refused.stdout, /chat57/);
   assert.equal(md5(path.join(early, "app.js")), earlyHash);
 
   const missing = path.join(os.tmpdir(), "rt53-missing");
@@ -269,21 +279,21 @@ test("a later bust increments, chat56 is refused, a missing anchor writes nothin
   const broken = fs.readFileSync(server, "utf8").split("function hasPremiumAccess(").join("function premiumHelper(");
   fs.writeFileSync(server, broken);
   const stripped = md5(server);
-  const aborted = run("patch_rt53s.py", [server]);
+  const aborted = run("patch_bb4_daily.py", [server]);
   assert.equal(aborted.code, 1, aborted.stdout);
   assert.match(aborted.stdout, /hasPremiumAccess/);
   assert.equal(md5(server), stripped);
   assert.notEqual(stripped, before);
-  assert.equal(fs.readFileSync(path.join(missing, "app.js"), "utf8").includes("// ── rt53a ──"), false);
+  assert.equal(fs.readFileSync(path.join(missing, "app.js"), "utf8").includes("// ── bb4academy ──"), false);
 });
 
 test("CRLF files stay CRLF and still parse", () => {
   const dir = path.join(os.tmpdir(), "rt53-crlf");
   copyTree(BASE, dir);
   for (const name of ["app.js", "index.html", "server.js"]) toCrlf(path.join(dir, name));
-  const prefs = run("patch_rt53.py", [dir]);
+  const prefs = run("patch_bb4_academy.py", [dir]);
   assert.equal(prefs.code, 0, prefs.stdout);
-  const daily = run("patch_rt53s.py", [path.join(dir, "server.js")]);
+  const daily = run("patch_bb4_daily.py", [path.join(dir, "server.js")]);
   assert.equal(daily.code, 0, daily.stdout);
   for (const name of ["app.js", "server.js"]) {
     const bytes = fs.readFileSync(path.join(dir, name));
@@ -295,7 +305,7 @@ test("CRLF files stay CRLF and still parse", () => {
 test("merge rules for xp, badges, and streaks", () => {
   const dir = path.join(os.tmpdir(), "rt53-merge");
   copyTree(BASE, dir);
-  assert.equal(run("patch_rt53.py", [dir]).code, 0);
+  assert.equal(run("patch_bb4_academy.py", [dir]).code, 0);
   const app = fs.readFileSync(path.join(dir, "app.js"), "utf8");
   const server = fs.readFileSync(path.join(dir, "server.js"), "utf8");
   const clientPure = app.slice(app.indexOf("/* RT53_PURE_START */"), app.indexOf("/* RT53_PURE_END */"));
@@ -340,7 +350,7 @@ test("merge rules for xp, badges, and streaks", () => {
 test("prefs writes merge, keep other fields, and retry a clash", async () => {
   const dir = path.join(os.tmpdir(), "rt53-prefs");
   copyTree(BASE, dir);
-  assert.equal(run("patch_rt53.py", [dir]).code, 0);
+  assert.equal(run("patch_bb4_academy.py", [dir]).code, 0);
   const server = fs.readFileSync(path.join(dir, "server.js"), "utf8");
   const box = serverFns(server);
   let db = {
@@ -415,7 +425,7 @@ test("prefs writes merge, keep other fields, and retry a clash", async () => {
 test("academy-daily survives a dead feed, serves the last good lesson, and hides diag", async () => {
   const dir = path.join(os.tmpdir(), "rt53-daily");
   copyTree(BASE, dir);
-  const dailyPatch = run("patch_rt53s.py", [path.join(dir, "server.js")]);
+  const dailyPatch = run("patch_bb4_daily.py", [path.join(dir, "server.js")]);
   assert.equal(dailyPatch.code, 0, dailyPatch.stdout);
   const server = fs.readFileSync(path.join(dir, "server.js"), "utf8");
   const fed = "<rss><item><title>The Federal Reserve cuts rates in a surprise move</title><link>https://example.test/fed</link></item></rss>";
@@ -539,8 +549,10 @@ test("academy-daily survives a dead feed, serves the last good lesson, and hides
   });
   let warmFetch = 0;
   let warmAi = 0;
+  let warmProvider = 0;
   warm.fetch = async () => { warmFetch += 1; throw new Error("warm path must not fetch"); };
   warm.generateAi = () => { warmAi += 1; return new Promise(resolve => setTimeout(() => resolve({ text: "" }), 3800)); };
+  warm.generateWithAiProvider = () => { warmProvider += 1; return new Promise(resolve => setTimeout(() => resolve({ text: "" }), 3800)); };
   const warmStarted = Date.now();
   const warmRes = mockRes();
   await warm.academyDaily({ url: "/api/academy-daily" }, warmRes);
@@ -552,6 +564,7 @@ test("academy-daily survives a dead feed, serves the last good lesson, and hides
   assert.ok(warmMs < 250, "warm response took " + warmMs + "ms");
   assert.equal(warmFetch, 0);
   assert.equal(warmAi, 0);
+  assert.equal(warmProvider, 0);
   noSecret(warmBody);
 
   const swr = loadAcademy(server);
@@ -593,6 +606,87 @@ test("academy-daily survives a dead feed, serves the last good lesson, and hides
     beforeMs: before,
     coldMs: elapsed, warmMs: warmMs, swrMs: swrMs,
   }));
+});
+
+test("lesson build tries gpt-4o-mini then Gemini and never calls generateAi or xAI", async () => {
+  const dir = path.join(os.tmpdir(), "bb4-providers");
+  copyTree(BASE, dir);
+  assert.equal(run("patch_bb4_daily.py", [path.join(dir, "server.js")]).code, 0);
+  const server = fs.readFileSync(path.join(dir, "server.js"), "utf8");
+  const build = server.slice(server.indexOf("async function _rt48sBuild("), server.indexOf("// ── bb4daily ──"));
+  assert.equal(build.includes("generateAi"), false);
+  assert.match(build, /_rt53Gen\(/);
+
+  const box = loadAcademy(server);
+  const calls = [];
+  let genAi = 0;
+  box.generateAi = async () => { genAi += 1; throw new Error("generateAi must not run"); };
+  box.generateWithAiProvider = async (provider, opts) => {
+    calls.push([provider, opts.model]);
+    if (provider === "xai") throw new Error("xai must not run");
+    if (provider === "openai") throw Object.assign(new Error("openai down"), { code: "NO_AI" });
+    return { text: "{}", model: opts.model };
+  };
+  const got = await box._rt53Gen({ maxTokens: 100, temperature: 0.2, system: "s", messages: [] });
+  assert.equal(got.model, "gemini-2.5-flash");
+  assert.deepEqual(calls, [["openai", "gpt-4o-mini"], ["google", "gemini-2.5-flash"]]);
+  assert.equal(genAi, 0);
+
+  const slow = loadAcademy(server);
+  const slowCalls = [];
+  slow.generateAi = async () => { throw new Error("generateAi must not run"); };
+  slow.generateWithAiProvider = (provider, opts) => {
+    slowCalls.push([provider, opts.model, !!(opts && opts.signal)]);
+    if (provider === "openai") return new Promise(() => {});
+    return Promise.resolve({ text: "{}", model: opts.model });
+  };
+  const t0 = Date.now();
+  const slowGot = await slow._rt53Gen({});
+  const dt = Date.now() - t0;
+  assert.equal(slowGot.model, "gemini-2.5-flash");
+  assert.deepEqual(slowCalls.map(row => row[0] + ":" + row[1]), ["openai:gpt-4o-mini", "google:gemini-2.5-flash"]);
+  assert.equal(slowCalls[0][2], true);
+  assert.ok(dt >= 2200 && dt < 4500, "openai cap then Gemini took " + dt + "ms");
+});
+
+test("a burst of academy-daily requests starts one build", async () => {
+  const dir = path.join(os.tmpdir(), "bb4-burst");
+  copyTree(BASE, dir);
+  assert.equal(run("patch_bb4_daily.py", [path.join(dir, "server.js")]).code, 0);
+  const box = loadAcademy(fs.readFileSync(path.join(dir, "server.js"), "utf8"));
+  const fed = "<rss><item><title>The Federal Reserve cuts rates in a surprise move</title><link>https://example.test/fed</link></item></rss>";
+  let fetches = 0;
+  const providers = [];
+  box.fetch = (url, opts) => {
+    fetches += 1;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => resolve({ ok: true, text: async () => fed }), 200);
+      const signal = opts && opts.signal;
+      if (signal) signal.addEventListener("abort", () => {
+        clearTimeout(timer);
+        reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+      });
+    });
+  };
+  box.generateAi = async () => { throw new Error("generateAi must not run"); };
+  box.generateWithAiProvider = (provider, opts) => {
+    providers.push(provider + ":" + opts.model);
+    if (provider === "openai") return new Promise(() => {});
+    return Promise.resolve({ text: "{}", model: opts.model });
+  };
+  const responses = await Promise.all([0, 1, 2, 3, 4].map(async () => {
+    const res = mockRes();
+    await box.academyDaily({ url: "/api/academy-daily" }, res);
+    return res;
+  }));
+  responses.forEach(res => {
+    assert.equal(res.statusCode, 200);
+    noSecret(JSON.parse(res.body));
+  });
+  const busy = box._rt53TestBusy();
+  if (busy) await busy;
+  assert.equal(fetches, 6, "feeds fetched " + fetches + " times");
+  assert.deepEqual(providers, ["openai:gpt-4o-mini", "google:gemini-2.5-flash"]);
 });
 
 async function timeLiveHandler() {

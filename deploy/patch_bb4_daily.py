@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""patch_rt53s.py — make /api/academy-daily resilient. server.js only.
+"""patch_bb4_daily.py — make /api/academy-daily resilient. server.js only.
 
 Stacks on the live rt48c handler (the block patch_rt48c.py installed) and on rt52s.
 No new tables, no cron, no background worker, no Stripe, no secrets.
@@ -11,26 +11,27 @@ What changes, with the same small anchors on the plain live files and after bb2 
 - a cold request, with nothing saved, waits at most 900ms. The build may finish in that
   window (source live) or keep going after the response. The user still gets a last-good
   lesson or the deterministic fallback;
-- each RSS fetch and the AI call have their own timeout. The AI cap stays long enough
-  for a slow model to fill the cache for the next request. bb2 may wrap generateAi;
-  this calls it at request time;
+- the background build does not call generateAi. That helper tries xAI first for 25s.
+  This build tries gpt-4o-mini, then Gemini 2.5 Flash, each with a 2.5s cap, and
+  never starts a second build while one promise is in flight;
 - the last good lesson is kept in memory and in the temp dir, including across the London day;
 - the handler always answers users with JSON. A thrown error becomes that fallback, not a 500;
 - ?diag=1 stays admin-only and is 403 for everyone else. ?refresh=1 still does not rebuild for non-admins;
 - every user response carries asOf and source (live, cache, stale, fallback).
 
 Version: this file does not edit app.js or index.html, so it does not change ?v=chatNN.
-patch_rt53.py detects the current chatNN (plain live is chat57) and adds one.
-Requires the rt52s marker and function hasPremiumAccess(. It does not require the bb2
-marker, so it applies before or after PR #23. It does not compare tier strings.
-Diag stays admin-only via the existing isAdminUser helper.
+patch_bb4_academy.py detects the current chatNN (live is chat58) and adds one.
+Requires the rt52s marker, the bb2 marker, and function hasPremiumAccess(.
+It does not compare tier strings. Diag stays admin-only via isAdminUser.
+The marker is bb4daily, so a Frontend rt53s patch is not treated as this one.
 This file does not edit the rt52s 13F block, Ask/Expert, or the prefs schema.
 
 Usage:
-    python3 patch_rt53s.py --check server.js
-    python3 patch_rt53s.py server.js
-Refuses a second run. CRLF-safe. node --check before the write; a failed write restores the backup.
-Prints md5 and line count before and after. Prints no secrets.
+    python3 patch_bb4_daily.py --check server.js
+    python3 patch_bb4_daily.py server.js
+A second run prints REFUSE and exits 0. CRLF-safe. node --check before the write;
+a failed write restores the backup. Prints md5 and line count before and after.
+Prints no secrets.
 """
 import hashlib, os, subprocess, sys, tempfile
 
@@ -66,15 +67,16 @@ def nodecheck(text, label):
 if not os.path.isfile(P):
     die("not found: " + P)
 s, crlf = load(P)
-show("rt53s before server.js", s, crlf)
+if "// ── bb4daily ──" in s:
+    print("REFUSE: bb4daily already applied")
+    sys.exit(0)
+show("bb4daily before server.js", s, crlf)
 digest = stats(s, crlf)[0]
-LIVE = "4e8c340439b57d202b6c13711cc7a338"
+LIVE = "2e04b3c16f8400dc5ea211e676831b23"
 if digest != LIVE:
-    print("WARN md5 server.js: have %s expected plain live %s (anchors still decide)" % (digest, LIVE))
-if "// ── rt53s:" in s:
-    die("REFUSE: rt53s already applied")
+    print("WARN md5 server.js: have %s expected live %s (anchors still decide)" % (digest, LIVE))
 errors = []
-for need in ("// ── rt52s", "function hasPremiumAccess(", "// ── rt48c:", "async function academyDaily(req, res) {", "function _rt48bValid(", "async function _rt48sBuild(", "const _rt48sFile"):
+for need in ("// ── rt52s", "// ── bb2 ──", "function hasPremiumAccess(", "// ── rt48c:", "async function academyDaily(req, res) {", "function _rt48bValid(", "async function _rt48sBuild(", "const _rt48sFile"):
     if need not in s:
         errors.append("missing %r" % need)
 FETCH = '    const r = await fetch(u, { headers: { "User-Agent": "DispatchMarkets/1.0" }, signal: AbortSignal.timeout(8000) }); if (!r.ok) return; all.push(..._rt48sParse((await r.text()).slice(0, 600000), src)); } catch (e) {} }));'
@@ -100,15 +102,51 @@ if not (0 <= s.find(FETCH) < i and 0 <= s.find(GEN) < i):
 FETCH_NEW = '    const xml = await _rt53Get(u, 1500); if (!xml) return; all.push(..._rt48sParse(xml, src)); } catch (e) {} }));'
 GEN_NEW = "        const r = await _rt53Gen({ maxTokens: 1600, temperature: 0.2,"
 
-HELPERS = r'''// ── rt53s: academy-daily ── timeouts, last-good cache, deterministic fallback. No cron. ?diag=1 is admin-only.
+HELPERS = r'''// ── bb4daily ── timeouts, last-good cache, deterministic fallback. No cron. ?diag=1 is admin-only.
 const _rt53LastFile = require("path").join(require("os").tmpdir(), "dispatch-academy-daily-last.json");
 let _rt53Last = null;
-async function _rt53Gen(opts) {
-  if (typeof generateAi !== "function") { const e = new Error("no generateAi"); e.code = "NO_AI"; throw e; }
+const BB4D_AI = [["openai", "gpt-4o-mini"], ["google", "gemini-2.5-flash"]];
+async function _rt53One(provider, model, opts, ms) {
+  if (provider === "xai" || typeof generateWithAiProvider !== "function") {
+    const e = new Error("provider skipped"); e.code = "NO_AI"; throw e;
+  }
+  const ctrl = typeof AbortController === "function" ? new AbortController() : null;
   let timer;
-  const hung = new Promise((_, rej) => { timer = setTimeout(() => { const e = new Error("academy-daily AI timed out"); e.code = "TIMEOUT"; rej(e); }, 8000); });
-  try { return await Promise.race([Promise.resolve().then(() => generateAi(opts)), hung]); }
+  const run = generateWithAiProvider(provider, {
+    system: opts && opts.system, messages: opts && opts.messages, maxTokens: opts && opts.maxTokens,
+    temperature: opts && opts.temperature, model: model, signal: ctrl ? ctrl.signal : undefined
+  });
+  const cap = new Promise((_, rej) => { timer = setTimeout(() => { try { if (ctrl) ctrl.abort(); } catch (x) {} const e = new Error("academy-daily AI timed out"); e.code = "TIMEOUT"; rej(e); }, ms); });
+  try { return await Promise.race([Promise.resolve(run), cap]); }
   finally { clearTimeout(timer); }
+}
+async function _rt53Gen(opts) {
+  let last;
+  for (let i = 0; i < BB4D_AI.length; i++) {
+    try { return await _rt53One(BB4D_AI[i][0], BB4D_AI[i][1], opts, 2500); }
+    catch (e) { last = e; }
+  }
+  if (!last) { last = new Error("no provider"); last.code = "NO_AI"; }
+  throw last;
+}
+function _bb4dStart(why) {
+  if (_rt48sState.busy) return _rt48sState.busy;
+  let release;
+  const gate = new Promise(r => { release = r; });
+  _rt48sState.busy = gate;
+  if (why === "admin-refresh") _rt48sState.forced = (_rt48sState.forced || 0) + 1;
+  const job = _rt48sBuild(why).finally(() => {
+    if (_rt48sState.busy === job || _rt48sState.busy === gate) _rt48sState.busy = null;
+    release();
+  });
+  _rt48sState.busy = job;
+  job.then(() => {
+    try {
+      const built = _rt53ValidState();
+      if (built && built.items.length) _rt53Remember(built.items, built.generatedAt, built.kind, built.day);
+    } catch (e) {}
+  }, () => {});
+  return job;
 }
 async function _rt53Get(url, ms) {
   let timer;
@@ -224,22 +262,12 @@ NEW = r'''async function academyDaily(req, res) {
     if (forced || ((weak || !fresh) && due)) {
       try {
         const already = !!_rt48sState.busy;
-        if (!_rt48sState.busy) {
-          if (forced) _rt48sState.forced = (_rt48sState.forced || 0) + 1;
-          const why = forced ? "admin-refresh" : (todayGood ? "auto-retry" : "auto");
-          const job = _rt48sBuild(why).finally(() => { _rt48sState.busy = null; });
-          _rt48sState.busy = job;
-          job.then(() => {
-            try {
-              const built = _rt53ValidState();
-              if (built && built.items.length) _rt53Remember(built.items, built.generatedAt, built.kind, built.day);
-            } catch (e) {}
-          }, () => {});
-        }
-        // Anything already saved is sent now. Only a cold miss waits, and only briefly.
-        if (!haveServable && !already && _rt48sState.busy) {
+        const why = forced ? "admin-refresh" : (todayGood ? "auto-retry" : "auto");
+        const job = _bb4dStart(why);
+        // Anything already saved is sent now. Only the request that starts a cold build waits, and only briefly.
+        if (!haveServable && !already && job) {
           let finished = false;
-          const waited = _rt48sState.busy.then(() => { finished = true; }, () => { finished = true; });
+          const waited = job.then(() => { finished = true; }, () => { finished = true; });
           await Promise.race([waited, new Promise(r => setTimeout(r, 900))]);
           builtNow = finished;
         }
@@ -277,21 +305,28 @@ NEW = r'''async function academyDaily(req, res) {
 
 out = s[:i] + HELPERS + NEW + s[j:]
 out = out.replace(FETCH, FETCH_NEW, 1).replace(GEN, GEN_NEW, 1)
+# The lesson build must not consult generateAi: that helper tries xAI first for 25s.
+GATE = 'else if (typeof generateAi !== "function") D.ai = "no-generateAi";'
+if out.count(GATE) != 1:
+    die("generateAi gate matched %d times (need 1)" % out.count(GATE))
+out = out.replace(GATE, 'else if (typeof generateWithAiProvider !== "function") D.ai = "no-provider";', 1)
 # The start index was computed on the original string. The two earlier replaces are before academyDaily,
 # but only if both needles sit before START. Confirm the function was not duplicated and the old end is gone.
 if out.count("async function academyDaily(req, res) {") != 1:
     die("academyDaily count after edit is %d" % out.count("async function academyDaily(req, res) {"))
-if FETCH in out:
-    die("rss fetch anchor still present after edit")
-if out.count("// ── rt53s:") != 1:
-    die("rt53s marker count is %d" % out.count("// ── rt53s:"))
+if FETCH in out or GEN in out:
+    die("rss fetch or generateAi anchor still present after edit")
+if out.count("// ── bb4daily ──") != 1:
+    die("bb4daily marker count is %d" % out.count("// ── bb4daily ──"))
+if "generateAi(" in out[out.find("// ── bb4daily ──"):out.find("const MARKET_SYSTEM")]:
+    die("lesson build still calls generateAi")
 nodecheck(out, "server.js")
-show("rt53s after server.js", out, crlf)
-print("OK rt53s: academy-daily stale-while-revalidate, 900ms cold bound, last-good cache, fallback lesson, diag 403; index bump skipped (server-only); node --check passed" + (" (dry run, nothing written)" if CHECK else ""))
+show("bb4daily after server.js", out, crlf)
+print("OK bb4daily: academy-daily skips xAI, one build at a time, 900ms cold bound, last-good cache, fallback lesson, diag 403; index bump skipped (server-only); node --check passed" + (" (dry run, nothing written)" if CHECK else ""))
 if CHECK:
     sys.exit(0)
 
-bak = P + ".rt53sbak"
+bak = P + ".bb4daily.bak"
 try:
     open(bak, "wb").write(open(P, "rb").read())
     open(P, "wb").write((out.replace("\n", "\r\n") if crlf else out).encode("utf-8"))
