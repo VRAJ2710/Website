@@ -20,11 +20,12 @@ What changes, with the same small anchors on the plain live files and after bb2 
 - every user response carries asOf and source (live, cache, stale, fallback).
 
 Version: this file does not edit app.js or index.html, so it does not change ?v=chatNN.
-patch_bb4_academy.py detects the current chatNN (live is chat58) and adds one.
+patch_bb4_academy.py detects the current chatNN (live is chat59) and adds one.
 Requires the rt52s marker, the bb2 marker, and function hasPremiumAccess(.
 It does not compare tier strings. Diag stays admin-only via isAdminUser.
-The marker is bb4daily, so a Frontend rt53s patch is not treated as this one.
-This file does not edit the rt52s 13F block, Ask/Expert, or the prefs schema.
+The marker is bb4daily, so the home-freeze server patch is not treated as this one.
+This file does not edit generateAi (its provider order stays for the coming
+Ask patch), the Ask stream, the rt52s 13F block, or the prefs schema.
 
 Usage:
     python3 patch_bb4_daily.py --check server.js
@@ -72,7 +73,7 @@ if "// ── bb4daily ──" in s:
     sys.exit(0)
 show("bb4daily before server.js", s, crlf)
 digest = stats(s, crlf)[0]
-LIVE = "2e04b3c16f8400dc5ea211e676831b23"
+LIVE = "6972fdeb0fc892f370ef63fe21b80b55"
 if digest != LIVE:
     print("WARN md5 server.js: have %s expected live %s (anchors still decide)" % (digest, LIVE))
 errors = []
@@ -99,14 +100,14 @@ if s.find(START, i + len(START), j) >= 0:
 if not (0 <= s.find(FETCH) < i and 0 <= s.find(GEN) < i):
     die("rss fetch and generateAi anchors must sit before academyDaily")
 
-FETCH_NEW = '    const xml = await _rt53Get(u, 1500); if (!xml) return; all.push(..._rt48sParse(xml, src)); } catch (e) {} }));'
-GEN_NEW = "        const r = await _rt53Gen({ maxTokens: 1600, temperature: 0.2,"
+FETCH_NEW = '    const xml = await _bb4dGet(u, 1500); if (!xml) return; all.push(..._rt48sParse(xml, src)); } catch (e) {} }));'
+GEN_NEW = "        const r = await _bb4dGen({ maxTokens: 1600, temperature: 0.2,"
 
 HELPERS = r'''// ── bb4daily ── timeouts, last-good cache, deterministic fallback. No cron. ?diag=1 is admin-only.
-const _rt53LastFile = require("path").join(require("os").tmpdir(), "dispatch-academy-daily-last.json");
-let _rt53Last = null;
+const _bb4dLastFile = require("path").join(require("os").tmpdir(), "dispatch-academy-daily-last.json");
+let _bb4dLast = null;
 const BB4D_AI = [["openai", "gpt-4o-mini"], ["google", "gemini-2.5-flash"]];
-async function _rt53One(provider, model, opts, ms) {
+async function _bb4dOne(provider, model, opts, ms) {
   if (provider === "xai" || typeof generateWithAiProvider !== "function") {
     const e = new Error("provider skipped"); e.code = "NO_AI"; throw e;
   }
@@ -120,10 +121,10 @@ async function _rt53One(provider, model, opts, ms) {
   try { return await Promise.race([Promise.resolve(run), cap]); }
   finally { clearTimeout(timer); }
 }
-async function _rt53Gen(opts) {
+async function _bb4dGen(opts) {
   let last;
   for (let i = 0; i < BB4D_AI.length; i++) {
-    try { return await _rt53One(BB4D_AI[i][0], BB4D_AI[i][1], opts, 2500); }
+    try { return await _bb4dOne(BB4D_AI[i][0], BB4D_AI[i][1], opts, 2500); }
     catch (e) { last = e; }
   }
   if (!last) { last = new Error("no provider"); last.code = "NO_AI"; }
@@ -142,13 +143,13 @@ function _bb4dStart(why) {
   _rt48sState.busy = job;
   job.then(() => {
     try {
-      const built = _rt53ValidState();
-      if (built && built.items.length) _rt53Remember(built.items, built.generatedAt, built.kind, built.day);
+      const built = _bb4dState();
+      if (built && built.items.length) _bb4dRemember(built.items, built.generatedAt, built.kind, built.day);
     } catch (e) {}
   }, () => {});
   return job;
 }
-async function _rt53Get(url, ms) {
+async function _bb4dGet(url, ms) {
   let timer;
   const ctrl = typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(ms) : null;
   const r = await fetch(url, { headers: { "User-Agent": "DispatchMarkets/1.0" }, redirect: "follow", signal: ctrl || undefined });
@@ -158,18 +159,18 @@ async function _rt53Get(url, ms) {
   try { return String(await Promise.race([body, cap]) || "").slice(0, 600000); }
   finally { clearTimeout(timer); }
 }
-function _rt53Remember(items, generatedAt, kind, day) {
+function _bb4dRemember(items, generatedAt, kind, day) {
   try {
     const good = (items || []).filter(_rt48bValid).slice(0, 3);
     if (!good.length || kind === "fallback") return;
-    _rt53Last = { v: 1, at: Date.now(), day: day || "", generatedAt: generatedAt || new Date().toISOString(), items: good, kind: kind || "template" };
-    require("fs").writeFileSync(_rt53LastFile, JSON.stringify(_rt53Last));
+    _bb4dLast = { v: 1, at: Date.now(), day: day || "", generatedAt: generatedAt || new Date().toISOString(), items: good, kind: kind || "template" };
+    require("fs").writeFileSync(_bb4dLastFile, JSON.stringify(_bb4dLast));
   } catch (e) {}
 }
-function _rt53ReadFile(file) {
+function _bb4dRead(file) {
   try { return JSON.parse(require("fs").readFileSync(file, "utf8")); } catch (e) { return null; }
 }
-function _rt53Recall() {
+function _bb4dRecall() {
   const take = (o, at) => {
     if (!o || !Array.isArray(o.items)) return null;
     const items = o.items.filter(_rt48bValid).slice(0, 3);
@@ -178,14 +179,14 @@ function _rt53Recall() {
     if (Date.now() - when > 14 * 864e5) return null;
     return { v: 1, at: when, day: o.day || "", generatedAt: o.generatedAt || new Date(when).toISOString(), items, kind: o.kind || "template" };
   };
-  if (_rt53Last && _rt53Last.items && _rt53Last.items.length) return _rt53Last;
-  const saved = take(_rt53ReadFile(_rt53LastFile), null);
-  if (saved) { _rt53Last = saved; return saved; }
-  const v3 = take(_rt53ReadFile(_rt48sFile), null);
-  if (v3) { _rt53Last = v3; return v3; }
+  if (_bb4dLast && _bb4dLast.items && _bb4dLast.items.length) return _bb4dLast;
+  const saved = take(_bb4dRead(_bb4dLastFile), null);
+  if (saved) { _bb4dLast = saved; return saved; }
+  const v3 = take(_bb4dRead(_rt48sFile), null);
+  if (v3) { _bb4dLast = v3; return v3; }
   return null;
 }
-function _rt53ValidState() {
+function _bb4dState() {
   try {
     const st = _rt48sState;
     if (!st || !Array.isArray(st.items) || st.kind === "fallback") return null;
@@ -194,7 +195,7 @@ function _rt53ValidState() {
     return { day: st.day || "", generatedAt: st.generatedAt || "", kind: st.kind || "template", items };
   } catch (e) { return null; }
 }
-function _rt53FallbackItems() {
+function _bb4dFallback() {
   try {
     const H = { h: "The Federal Reserve cuts rates in a surprise move", src: "Dispatch Academy", link: "" };
     const e = "Gold often rises on a surprise Fed cut: lower rates reduce the cost of holding a metal that pays no interest, and the dollar tends to weaken.";
@@ -203,7 +204,7 @@ function _rt53FallbackItems() {
   } catch (e) {}
   return [{ h: "The Federal Reserve cuts rates in a surprise move", src: "Dispatch Academy", link: "", asset: "gold", dir: "up", q: "If this news is a surprise to markets, what is the typical first reaction in the gold price?", o: ["Up", "Down", "Little change"], a: 0, e: "Gold often rises on a surprise Fed cut: lower rates reduce the cost of holding a metal that pays no interest, and the dollar tends to weaken.", kind: "template" }];
 }
-async function _rt53Who(req) {
+async function _bb4dWho(req) {
   if (typeof currentUser !== "function") return null;
   let timer;
   try {
@@ -226,7 +227,7 @@ NEW = r'''async function academyDaily(req, res) {
     } catch (e) {
       try {
         if (res && !res.headersSent) {
-          const fb = _rt53FallbackItems();
+          const fb = _bb4dFallback();
           const now = new Date().toISOString();
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
           res.end(JSON.stringify({ date: "", generatedAt: now, asOf: now, source: "fallback", stale: false, kind: "template", items: fb, v: 3 }));
@@ -241,16 +242,16 @@ NEW = r'''async function academyDaily(req, res) {
     const diag = q.get("diag") === "1", refresh = q.get("refresh") === "1";
     wantDiag = diag || refresh;
     if (wantDiag) {
-      const u = await _rt53Who(req);
+      const u = await _bb4dWho(req);
       try { admin = !!(u && typeof isAdminUser === "function" && isAdminUser(u)); } catch (e) { admin = false; }
       if (diag && !admin) return send(403, { error: "Administrator access required." }, "no-store");
       if (admin && refresh && (_rt48sState.forced || 0) < 6) forced = true;
     }
     try { _rt48sLoad(); } catch (e) {}
     const day = _rt48sDay();
-    const seed = _rt53ValidState();
-    if (seed && seed.items.length) _rt53Remember(seed.items, seed.generatedAt, seed.kind, seed.day);
-    const last = _rt53Recall();
+    const seed = _bb4dState();
+    if (seed && seed.items.length) _bb4dRemember(seed.items, seed.generatedAt, seed.kind, seed.day);
+    const last = _bb4dRecall();
     const freshMs = 2 * 60 * 60 * 1000;
     const ageOf = (st) => { const t = Date.parse(st && st.generatedAt || ""); return isFinite(t) ? Date.now() - t : Infinity; };
     const todayGood = !!(seed && seed.day === day && seed.items.length);
@@ -273,7 +274,7 @@ NEW = r'''async function academyDaily(req, res) {
         }
       } catch (e) {}
     }
-    const nowState = _rt53ValidState();
+    const nowState = _bb4dState();
     let source = "fallback", items = [], asOf = "", kind = "template", contentDay = day;
     if (nowState && nowState.day === day && nowState.items.length && nowState.kind !== "fallback") {
       source = builtNow ? "live" : (ageOf(nowState) < freshMs ? "cache" : "stale");
@@ -283,7 +284,7 @@ NEW = r'''async function academyDaily(req, res) {
       source = "stale"; items = last.items; asOf = last.generatedAt || new Date(last.at || Date.now()).toISOString();
       kind = last.items.some(x => x.kind === "ai") ? "ai" : "template"; contentDay = last.day || day;
     } else {
-      items = _rt53FallbackItems(); source = "fallback"; asOf = new Date().toISOString(); kind = "template"; contentDay = day;
+      items = _bb4dFallback(); source = "fallback"; asOf = new Date().toISOString(); kind = "template"; contentDay = day;
     }
     const out = { date: contentDay, generatedAt: asOf, asOf: asOf, source: source, stale: source === "stale", kind: kind, items: items, v: 3 };
     if (admin && wantDiag) {
@@ -298,7 +299,7 @@ NEW = r'''async function academyDaily(req, res) {
     const now = new Date().toISOString();
     let day = "";
     try { day = _rt48sDay(); } catch (x) {}
-    return send(200, { date: day, generatedAt: now, asOf: now, source: "fallback", stale: false, kind: "template", items: _rt53FallbackItems(), v: 3 }, "no-store");
+    return send(200, { date: day, generatedAt: now, asOf: now, source: "fallback", stale: false, kind: "template", items: _bb4dFallback(), v: 3 }, "no-store");
   }
 }
 '''
@@ -320,6 +321,19 @@ if out.count("// ── bb4daily ──") != 1:
     die("bb4daily marker count is %d" % out.count("// ── bb4daily ──"))
 if "generateAi(" in out[out.find("// ── bb4daily ──"):out.find("const MARKET_SYSTEM")]:
     die("lesson build still calls generateAi")
+def span(text, start, end, label):
+    i = text.find(start)
+    j = text.find(end, i + len(start)) if i >= 0 else -1
+    if i < 0 or j < 0:
+        die("could not bound %s" % label)
+    return text[i:j]
+# generateAi's provider order and the Ask stream belong to the coming Ask patch.
+for label, a, b in (
+    ("generateAi", "async function generateAi(options) {", "function sendAiError(res, error) {"),
+    ("Ask stream", "async function bb2StreamInner(req, res) {", "function bb2StreamChat(req, res) {"),
+):
+    if span(s, a, b, label) != span(out, a, b, label):
+        die("%s changed; leave it for the Ask patch" % label)
 nodecheck(out, "server.js")
 show("bb4daily after server.js", out, crlf)
 print("OK bb4daily: academy-daily skips xAI, one build at a time, 900ms cold bound, last-good cache, fallback lesson, diag 403; index bump skipped (server-only); node --check passed" + (" (dry run, nothing written)" if CHECK else ""))

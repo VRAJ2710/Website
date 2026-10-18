@@ -14,14 +14,16 @@ XP, day or badge is dropped. A settings save that does not send academy leaves
 the stored academy in place. An academy-only save does not reset layout,
 watchlist or the other prefs fields.
 
-Primary base is live chat58: rt52, rt52s, bb2, and the hasPremiumAccess hotfix.
-Requires those markers, function hasPremiumAccess(, and app.js?v=chatNN with
-NN >= 58. Detects the current bust and adds one. It does not hard-code the
-next number, so a later client bust still increments whatever it finds.
+Primary base is live chat59: rt52, rt52s, bb2, bb3_ask, bb3_fit, and
+hasPremiumAccess. Requires those markers, function hasPremiumAccess(, and
+app.js?v=chatNN with NN >= 59. Detects the current bust and adds one. It
+does not hard-code the next number, so a later client bust still increments
+whatever it finds. On the live index that is chat59 -> chat60.
 No tier-string checks: sign-in stays on the existing /api/prefs route, which
 uses currentUser. Premium gating, where it already exists, stays inside
-hasPremiumAccess. The marker is bb4academy, so a Frontend rt53 patch is not
-treated as this one.
+hasPremiumAccess. The marker is bb4academy, so the home-freeze client
+patch is not treated as this one. The inserted names stay in the bb4a
+namespace. Ask's SSE reader and chat list renderer are left byte for byte.
 
 Usage:
     python3 patch_bb4_academy.py --check <dir with app.js, index.html, server.js>
@@ -74,11 +76,11 @@ if "// ── bb4academy ──" in s or "// ── bb4academy ──" in v:
 show("bb4academy before app.js", s, crlf)
 show("bb4academy before index.html", h, hcrlf)
 show("bb4academy before server.js", v, vcrlf)
-# Live chat58 after bb2 and the hasPremiumAccess hotfix. A mismatch warns only.
+# Live chat59: bb3_ask and bb3_fit on the previous bundle. A mismatch warns only.
 EXPECTED_MD5 = {
-    "app.js": "86153acc103ab9bd246fbdf96055ffab",
-    "index.html": "4a680ac27bde0eb044944767ac6838c6",
-    "server.js": "2e04b3c16f8400dc5ea211e676831b23",
+    "app.js": "d38b70eb458091fa69143f9fe3bfe193",
+    "index.html": "b15074aedc3261bf9e2ca611084082ba",
+    "server.js": "6972fdeb0fc892f370ef63fe21b80b55",
 }
 for path, text, use_crlf in ((APP, s, crlf), (IDX, h, hcrlf), (SRV, v, vcrlf)):
     digest = stats(text, use_crlf)[0]
@@ -90,11 +92,11 @@ errors = []
 if "// ── rt52 ──" not in s:
     errors.append("app.js missing rt52 marker (apply patch_rt52.py first)")
 if "// ── bb2 ──" not in s:
-    errors.append("app.js missing bb2 marker (live base is chat58)")
+    errors.append("app.js missing bb2 marker (live base is chat59)")
 if "// ── rt52s" not in v:
     errors.append("server.js missing rt52s marker (apply patch_rt52s.py first)")
 if "// ── bb2 ──" not in v:
-    errors.append("server.js missing bb2 marker (live base is chat58)")
+    errors.append("server.js missing bb2 marker (live base is chat59)")
 if "function hasPremiumAccess(" not in v:
     errors.append("server.js missing function hasPremiumAccess( (admins share the premium helper; do not compare tier strings)")
 CLIENT_NEEDLES = [
@@ -114,8 +116,8 @@ if len(vers) != 1:
     errors.append("index app.js?v=chatNN matched %d times (need 1)" % len(vers))
 else:
     nver = int(vers[0])
-    if nver < 58:
-        errors.append("index is chat%d; expected chat58 or later" % nver)
+    if nver < 59:
+        errors.append("index is chat%d; expected chat59 or later" % nver)
 PUT = (
     "        const prefs = rt17SanitizePrefs(body && body.prefs);\n"
     "        await sql`INSERT INTO dispatch_user_prefs (user_id, prefs, updated_at) VALUES (${user.id}, ${JSON.stringify(prefs)}::jsonb, NOW())\n"
@@ -144,154 +146,154 @@ nxt = nver + 1
 h2 = h.replace('app.js?v=chat%d"' % nver, 'app.js?v=chat%d"' % nxt, 1)
 s2 = s.replace(
     "Saved in this browser only.",
-    'Saved in this browser${typeof _rt53Signed==="function"&&_rt53Signed()?" and your account":""}.',
+    'Saved in this browser${typeof _bb4aSigned==="function"&&_bb4aSigned()?" and your account":""}.',
     1,
 )
 
-PURE = r'''/* RT53_PURE_START */
-const RT53_BADGES = ["start-markets-table", "start-gold-macro", "start-oil", "start-fx", "start-crypto", "start-stocks", "start-charts", "start-risk", "start-data", "start-dispatch", "speed100", "combo", "match", "paper3", "stop", "price", "cal", "pattern", "scen10", "news", "weekly"];
-const RT53_XP_CAP = 20000;
-const RT53_DAY_CAP = 120;
-function rt53Today() {
+PURE = r'''/* BB4A_PURE_START */
+const BB4A_BADGES = ["start-markets-table", "start-gold-macro", "start-oil", "start-fx", "start-crypto", "start-stocks", "start-charts", "start-risk", "start-data", "start-dispatch", "speed100", "combo", "match", "paper3", "stop", "price", "cal", "pattern", "scen10", "news", "weekly"];
+const BB4A_XP_CAP = 20000;
+const BB4A_DAY_CAP = 120;
+function bb4aToday() {
   try { return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date()); }
   catch (e) { return new Date().toISOString().slice(0, 10); }
 }
-function rt53DayShift(iso, delta) {
+function bb4aDayShift(iso, delta) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
   if (!m) return "";
   const t = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + delta));
   return t.toISOString().slice(0, 10);
 }
-function rt53ValidDay(iso, today) {
+function bb4aValidDay(iso, today) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
-  const shift = rt53DayShift(today, 1);
+  const shift = bb4aDayShift(today, 1);
   if (iso < "2024-01-01" || (shift && iso > shift)) return false;
   const y = +iso.slice(0, 4), mo = +iso.slice(5, 7), d = +iso.slice(8, 10);
   const dt = new Date(Date.UTC(y, mo - 1, d));
   return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
 }
-function rt53StreakFromDays(days, today) {
+function bb4aStreakFromDays(days, today) {
   const set = new Set(days);
   const sorted = [...set].sort();
   const last = sorted.length ? sorted[sorted.length - 1] : "";
   let n = 0;
-  const start = set.has(today) ? today : rt53DayShift(today, -1);
+  const start = set.has(today) ? today : bb4aDayShift(today, -1);
   if (start && set.has(start)) {
     let cursor = start;
-    while (set.has(cursor) && n < RT53_DAY_CAP) { n++; cursor = rt53DayShift(cursor, -1); }
+    while (set.has(cursor) && n < BB4A_DAY_CAP) { n++; cursor = bb4aDayShift(cursor, -1); }
   }
-  return { n: n, last: last, days: sorted.slice(-RT53_DAY_CAP) };
+  return { n: n, last: last, days: sorted.slice(-BB4A_DAY_CAP) };
 }
-function rt53StreakPair(n, last, today) {
-  n = Math.max(0, Math.min(RT53_DAY_CAP, Math.round(Number(n) || 0)));
-  if (!last || !rt53ValidDay(last, today)) return { n: 0, last: "", days: [] };
-  const yday = rt53DayShift(today, -1);
+function bb4aStreakPair(n, last, today) {
+  n = Math.max(0, Math.min(BB4A_DAY_CAP, Math.round(Number(n) || 0)));
+  if (!last || !bb4aValidDay(last, today)) return { n: 0, last: "", days: [] };
+  const yday = bb4aDayShift(today, -1);
   if (last !== today && last !== yday) return { n: 0, last: last, days: [last] };
   if (!n) return { n: 0, last: last, days: [last] };
   const days = [];
   let cursor = last;
-  for (let i = 0; i < n; i++) { days.push(cursor); cursor = rt53DayShift(cursor, -1); }
+  for (let i = 0; i < n; i++) { days.push(cursor); cursor = bb4aDayShift(cursor, -1); }
   days.sort();
-  return rt53StreakFromDays(days, today);
+  return bb4aStreakFromDays(days, today);
 }
-function rt53Gap(a, b) {
+function bb4aGap(a, b) {
   const am = /^(\d{4})-(\d{2})-(\d{2})$/.exec(a), bm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(b);
   if (!am || !bm) return 99;
   return Math.round((Date.UTC(+bm[1], +bm[2] - 1, +bm[3]) - Date.UTC(+am[1], +am[2] - 1, +am[3])) / 86400000);
 }
-function rt53CleanAcademy(input, today) {
-  today = today || rt53Today();
+function bb4aClean(input, today) {
+  today = today || bb4aToday();
   const p = input && typeof input === "object" && !Array.isArray(input) ? input : null;
   if (!p) return null;
   let xp = Math.round(Number(p.xp));
   if (!isFinite(xp) || xp < 0) xp = 0;
-  if (xp > RT53_XP_CAP) xp = RT53_XP_CAP;
+  if (xp > BB4A_XP_CAP) xp = BB4A_XP_CAP;
   const badges = [];
   const seenB = new Set();
   const srcB = Array.isArray(p.badges) ? p.badges : [];
-  for (let i = 0; i < srcB.length && badges.length < RT53_BADGES.length; i++) {
+  for (let i = 0; i < srcB.length && badges.length < BB4A_BADGES.length; i++) {
     const id = String(srcB[i] || "");
-    if (RT53_BADGES.indexOf(id) < 0 || seenB.has(id)) continue;
+    if (BB4A_BADGES.indexOf(id) < 0 || seenB.has(id)) continue;
     seenB.add(id); badges.push(id);
   }
-  badges.sort(function (a, b) { return RT53_BADGES.indexOf(a) - RT53_BADGES.indexOf(b); });
+  badges.sort(function (a, b) { return BB4A_BADGES.indexOf(a) - BB4A_BADGES.indexOf(b); });
   const days = [];
   const seenD = new Set();
   const srcD = Array.isArray(p.days) ? p.days : [];
   for (let i = 0; i < srcD.length; i++) {
     const iso = String(srcD[i] || "");
-    if (!rt53ValidDay(iso, today) || seenD.has(iso)) continue;
+    if (!bb4aValidDay(iso, today) || seenD.has(iso)) continue;
     seenD.add(iso); days.push(iso);
   }
   days.sort();
   if (days.length) {
-    const part = rt53StreakFromDays(days.slice(-RT53_DAY_CAP), today);
+    const part = bb4aStreakFromDays(days.slice(-BB4A_DAY_CAP), today);
     return { v: 1, xp: xp, badges: badges, days: part.days, last: part.last, streak: part.n };
   }
-  let last = rt53ValidDay(String(p.last || ""), today) ? String(p.last) : "";
+  let last = bb4aValidDay(String(p.last || ""), today) ? String(p.last) : "";
   let streak = Math.round(Number(p.streak));
   if (!isFinite(streak) || streak < 0) streak = 0;
-  if (streak > RT53_DAY_CAP) streak = RT53_DAY_CAP;
+  if (streak > BB4A_DAY_CAP) streak = BB4A_DAY_CAP;
   if (!last) streak = 0;
   else {
-    const yday = rt53DayShift(today, -1);
+    const yday = bb4aDayShift(today, -1);
     if (last !== today && last !== yday) streak = 0;
   }
   if (!xp && !badges.length && !last) return null;
   return { v: 1, xp: xp, badges: badges, days: [], last: last, streak: streak };
 }
-function rt53MergeStreakOnly(a, b, today) {
+function bb4aMergeStreak(a, b, today) {
   let A = { n: a.streak || 0, last: a.last || "" };
   let B = { n: b.streak || 0, last: b.last || "" };
-  if (!A.last) return rt53StreakPair(B.n, B.last, today);
-  if (!B.last) return rt53StreakPair(A.n, A.last, today);
+  if (!A.last) return bb4aStreakPair(B.n, B.last, today);
+  if (!B.last) return bb4aStreakPair(A.n, A.last, today);
   if (A.last > B.last) { const t = A; A = B; B = t; }
-  if (A.last === B.last) return rt53StreakPair(Math.max(A.n, B.n), A.last, today);
-  if (rt53Gap(A.last, B.last) === 1) return rt53StreakPair(Math.min(RT53_DAY_CAP, Math.max(B.n, A.n + 1)), B.last, today);
-  return rt53StreakPair(B.n, B.last, today);
+  if (A.last === B.last) return bb4aStreakPair(Math.max(A.n, B.n), A.last, today);
+  if (bb4aGap(A.last, B.last) === 1) return bb4aStreakPair(Math.min(BB4A_DAY_CAP, Math.max(B.n, A.n + 1)), B.last, today);
+  return bb4aStreakPair(B.n, B.last, today);
 }
-function rt53MergeAcademy(a, b, today) {
-  today = today || rt53Today();
-  const left = rt53CleanAcademy(a, today) || { v: 1, xp: 0, badges: [], days: [], last: "", streak: 0 };
-  const right = rt53CleanAcademy(b, today) || { v: 1, xp: 0, badges: [], days: [], last: "", streak: 0 };
-  const xp = Math.min(RT53_XP_CAP, Math.max(left.xp || 0, right.xp || 0));
+function bb4aMerge(a, b, today) {
+  today = today || bb4aToday();
+  const left = bb4aClean(a, today) || { v: 1, xp: 0, badges: [], days: [], last: "", streak: 0 };
+  const right = bb4aClean(b, today) || { v: 1, xp: 0, badges: [], days: [], last: "", streak: 0 };
+  const xp = Math.min(BB4A_XP_CAP, Math.max(left.xp || 0, right.xp || 0));
   const badges = [];
   const seen = new Set();
   const src = (left.badges || []).concat(right.badges || []);
-  for (let i = 0; i < src.length; i++) { if (!seen.has(src[i]) && RT53_BADGES.indexOf(src[i]) >= 0) { seen.add(src[i]); badges.push(src[i]); } }
+  for (let i = 0; i < src.length; i++) { if (!seen.has(src[i]) && BB4A_BADGES.indexOf(src[i]) >= 0) { seen.add(src[i]); badges.push(src[i]); } }
   const hasDays = (left.days && left.days.length) || (right.days && right.days.length);
   let part;
   if (hasDays) {
     const bag = (left.days || []).concat(right.days || []);
-    if (!(left.days || []).length) bag.push.apply(bag, rt53StreakPair(left.streak, left.last, today).days);
-    if (!(right.days || []).length) bag.push.apply(bag, rt53StreakPair(right.streak, right.last, today).days);
-    part = rt53StreakFromDays(bag, today);
-  } else part = rt53MergeStreakOnly(left, right, today);
-  return rt53CleanAcademy({ v: 1, xp: xp, badges: badges, days: part.days || [], last: part.last || "", streak: part.n || 0 }, today);
+    if (!(left.days || []).length) bag.push.apply(bag, bb4aStreakPair(left.streak, left.last, today).days);
+    if (!(right.days || []).length) bag.push.apply(bag, bb4aStreakPair(right.streak, right.last, today).days);
+    part = bb4aStreakFromDays(bag, today);
+  } else part = bb4aMergeStreak(left, right, today);
+  return bb4aClean({ v: 1, xp: xp, badges: badges, days: part.days || [], last: part.last || "", streak: part.n || 0 }, today);
 }
-/* RT53_PURE_END */
+/* BB4A_PURE_END */
 '''
 
 SERVER = r'''// ── bb4academy ── Academy progress inside prefs.academy. No new column.
-/* RT53_SERVER_START */
+/* BB4A_SERVER_START */
 ''' + PURE + r'''
-function rt53AsObj(v) {
+function bb4aObj(v) {
   if (!v) return {};
   if (typeof v === "string") { try { v = JSON.parse(v); } catch (e) { return {}; } }
   return v && typeof v === "object" && !Array.isArray(v) ? v : {};
 }
-async function rt53PutPrefs(user, body) {
-  const raw = rt53AsObj(body && body.prefs);
+async function bb4aPutPrefs(user, body) {
+  const raw = bb4aObj(body && body.prefs);
   const academyOnly = raw.academy != null && raw.layout == null && raw.v == null && raw.markets == null && raw.alerts == null && raw.display == null && raw.ask == null && raw.newsletter == null;
   for (let attempt = 0; attempt < 5; attempt++) {
     const rows = await sql`SELECT prefs, updated_at FROM dispatch_user_prefs WHERE user_id=${user.id} LIMIT 1`;
     const row = rows && rows[0];
-    const stored = rt53AsObj(row && row.prefs);
+    const stored = bb4aObj(row && row.prefs);
     const rev = Math.max(0, Math.round(Number(stored.rev) || 0));
     const base = rt17SanitizePrefs(academyOnly ? stored : raw);
-    const prev = rt53CleanAcademy(stored.academy);
+    const prev = bb4aClean(stored.academy);
     let academy = prev;
-    if (raw.academy != null) academy = rt53MergeAcademy(prev, raw.academy);
+    if (raw.academy != null) academy = bb4aMerge(prev, raw.academy);
     if (academy) base.academy = academy;
     else if (base.academy) delete base.academy;
     base.rev = rev + 1;
@@ -299,32 +301,32 @@ async function rt53PutPrefs(user, body) {
     if (payload.length > 48 * 1024) { const e = new Error("too large"); e.code = "RT17_TOO_LARGE"; throw e; }
     if (!row) {
       const ins = await sql`INSERT INTO dispatch_user_prefs (user_id, prefs, updated_at) VALUES (${user.id}, ${payload}::jsonb, NOW()) ON CONFLICT (user_id) DO NOTHING RETURNING prefs, updated_at`;
-      if (ins && ins[0]) return { prefs: rt17SanitizePrefs(rt53AsObj(ins[0].prefs)), updatedAt: ins[0].updated_at };
+      if (ins && ins[0]) return { prefs: rt17SanitizePrefs(bb4aObj(ins[0].prefs)), updatedAt: ins[0].updated_at };
       continue;
     }
     const upd = await sql`UPDATE dispatch_user_prefs SET prefs=${payload}::jsonb, updated_at=NOW() WHERE user_id=${user.id} AND COALESCE((prefs->>'rev')::int, 0)=${rev} RETURNING prefs, updated_at`;
-    if (upd && upd[0]) return { prefs: rt17SanitizePrefs(rt53AsObj(upd[0].prefs)), updatedAt: upd[0].updated_at };
+    if (upd && upd[0]) return { prefs: rt17SanitizePrefs(bb4aObj(upd[0].prefs)), updatedAt: upd[0].updated_at };
   }
-  const err = new Error("conflict"); err.code = "RT53_CONFLICT"; throw err;
+  const err = new Error("conflict"); err.code = "BB4A_CONFLICT"; throw err;
 }
 {
-  const rt53PrefsOrig = rt17SanitizePrefs;
+  const bb4aPrefsOrig = rt17SanitizePrefs;
   rt17SanitizePrefs = function (input) {
-    const out = rt53PrefsOrig(input);
+    const out = bb4aPrefsOrig(input);
     if (!out || typeof out !== "object") return out;
-    const ac = rt53CleanAcademy(input && input.academy);
+    const ac = bb4aClean(input && input.academy);
     if (ac) out.academy = ac;
     return out;
   };
 }
-/* RT53_SERVER_END */
+/* BB4A_SERVER_END */
 '''
 
 PUT_NEW = (
-    "        const rt53Saved = await rt53PutPrefs(user, body);\n"
-    "        return json(res, 200, { ok: true, prefs: rt53Saved.prefs, updatedAt: rt53Saved.updatedAt }, noStore);"
+    "        const bb4aSaved = await bb4aPutPrefs(user, body);\n"
+    "        return json(res, 200, { ok: true, prefs: bb4aSaved.prefs, updatedAt: bb4aSaved.updatedAt }, noStore);"
 )
-CATCH_NEW = CATCH + '\n    if (error && error.code === "RT53_CONFLICT") return json(res, 409, { error: "Your settings changed in another tab. Nothing was overwritten; try again." }, noStore);'
+CATCH_NEW = CATCH + '\n    if (error && error.code === "BB4A_CONFLICT") return json(res, 409, { error: "Your settings changed in another tab. Nothing was overwritten; try again." }, noStore);'
 v2 = v.replace(READJ, SERVER + READJ, 1).replace(PUT, PUT_NEW, 1).replace(CATCH, CATCH_NEW, 1)
 if v2.count("// ── bb4academy ──") != 1 or v2.count(PUT) != 0:
     die("server edit did not land once")
@@ -333,13 +335,13 @@ CLIENT = r'''
 // ── bb4academy ── Academy XP, streak and badges sync to the signed-in account via /api/prefs (prefs.academy).
 // Logged-out play stays in this browser. Sign-in merges: max XP, streak from the last activity date, union of badges.
 ''' + PURE + r'''
-function _rt53Signed() { try { return typeof _rt17Signed === "function" && _rt17Signed(); } catch (e) { return false; } }
-function _rt53Snapshot() {
+function _bb4aSigned() { try { return typeof _rt17Signed === "function" && _rt17Signed(); } catch (e) { return false; } }
+function _bb4aSnapshot() {
   const days = [];
   try { const D = _rt47S && _rt47S.days || {}; Object.keys(D).forEach(k => { if (D[k]) days.push(k); }); } catch (e) {}
   const badges = [];
   try {
-    RT53_BADGES.forEach(id => {
+    BB4A_BADGES.forEach(id => {
       if (id.indexOf("start-") === 0) {
         if (typeof _rt46Passed === "function" && _rt46Passed(id)) badges.push(id);
         else if (_rt47S && _rt47S.done && _rt47S.done[id] && _rt47S.done[id].pass) badges.push(id);
@@ -350,14 +352,14 @@ function _rt53Snapshot() {
   days.forEach(d => { if (!last || d > last) last = d; });
   let streak = 0;
   try { streak = (_rt47Streak().n) || 0; } catch (e) {}
-  const xp = Math.max(0, Math.min(RT53_XP_CAP, Math.round(Number(_rt47S && _rt47S.xp) || 0)));
-  return rt53CleanAcademy({ v: 1, xp: xp, streak: streak, last: last, days: days, badges: badges }) || { v: 1, xp: 0, streak: 0, last: "", days: [], badges: [] };
+  const xp = Math.max(0, Math.min(BB4A_XP_CAP, Math.round(Number(_rt47S && _rt47S.xp) || 0)));
+  return bb4aClean({ v: 1, xp: xp, streak: streak, last: last, days: days, badges: badges }) || { v: 1, xp: 0, streak: 0, last: "", days: [], badges: [] };
 }
-let _rt53Quiet = false, _rt53T = 0, _rt53Flight = null, _rt53Dirty = false;
-function _rt53Apply(ac) {
-  const merged = rt53CleanAcademy(ac);
+let _bb4aQuiet = false, _bb4aT = 0, _bb4aFlight = null, _bb4aDirty = false;
+function _bb4aApply(ac) {
+  const merged = bb4aClean(ac);
   if (!merged || !_rt47S) return;
-  _rt53Quiet = true;
+  _bb4aQuiet = true;
   try {
     _rt47S.xp = Math.max(Number(_rt47S.xp) || 0, merged.xp || 0);
     (merged.days || []).forEach(d => { if (!_rt47S.days[d]) _rt47S.days[d] = 1; });
@@ -375,38 +377,38 @@ function _rt53Apply(ac) {
         if (!_rt48S.bd[id]) _rt48S.bd[id] = Date.now();
       }
     });
-    try { _rt53Orig47(); } catch (e) {}
-    try { _rt53Orig48(); } catch (e) {}
-    try { _rt53Orig46(); } catch (e) {}
+    try { _bb4aOrig47(); } catch (e) {}
+    try { _bb4aOrig48(); } catch (e) {}
+    try { _bb4aOrig46(); } catch (e) {}
     try {
       document.querySelectorAll("[data-rt47xp]").forEach(el => { el.innerHTML = (typeof _rt47Ic === "function" ? _rt47Ic("bolt") : "") + "<span>" + _rt47S.xp + " XP</span>"; });
       if (_rt47L && _rt47L.id && typeof _rt47Redraw === "function") _rt47Redraw();
       else if (typeof pg !== "undefined" && pg === "learn" && typeof _refreshView === "function") _refreshView();
     } catch (e) {}
-  } finally { _rt53Quiet = false; }
+  } finally { _bb4aQuiet = false; }
 }
-function _rt53Schedule() {
-  if (_rt53Quiet || !_rt53Signed()) return;
-  if (_rt53Flight) { _rt53Dirty = true; return; }
-  clearTimeout(_rt53T);
-  _rt53T = setTimeout(_rt53Push, 800);
+function _bb4aSchedule() {
+  if (_bb4aQuiet || !_bb4aSigned()) return;
+  if (_bb4aFlight) { _bb4aDirty = true; return; }
+  clearTimeout(_bb4aT);
+  _bb4aT = setTimeout(_bb4aPush, 800);
 }
-async function _rt53Push() {
-  if (!_rt53Signed() || _rt53Flight) { if (_rt53Flight) _rt53Dirty = true; return; }
-  const snap = _rt53Snapshot();
-  _rt53Flight = (async () => {
+async function _bb4aPush() {
+  if (!_bb4aSigned() || _bb4aFlight) { if (_bb4aFlight) _bb4aDirty = true; return; }
+  const snap = _bb4aSnapshot();
+  _bb4aFlight = (async () => {
     let opts = { method: "PUT", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ prefs: { academy: snap } }) };
     try { opts.signal = AbortSignal.timeout(8000); } catch (e) {}
     const r = await fetch("/api/prefs", opts);
     if (!r.ok) return;
     const d = await r.json();
-    if (d && d.prefs && d.prefs.academy) _rt53Apply(rt53MergeAcademy(snap, d.prefs.academy));
+    if (d && d.prefs && d.prefs.academy) _bb4aApply(bb4aMerge(snap, d.prefs.academy));
   })();
-  try { await _rt53Flight; } catch (e) {}
-  finally { _rt53Flight = null; if (_rt53Dirty) { _rt53Dirty = false; _rt53Schedule(); } }
+  try { await _bb4aFlight; } catch (e) {}
+  finally { _bb4aFlight = null; if (_bb4aDirty) { _bb4aDirty = false; _bb4aSchedule(); } }
 }
-async function _rt53Pull() {
-  if (!_rt53Signed()) return;
+async function _bb4aPull() {
+  if (!_bb4aSigned()) return;
   try {
     let opts = { credentials: "include" };
     try { opts.signal = AbortSignal.timeout(8000); } catch (e) {}
@@ -414,31 +416,47 @@ async function _rt53Pull() {
     if (!r.ok) return;
     const d = await r.json();
     const remote = d && d.prefs ? d.prefs.academy : null;
-    const local = _rt53Snapshot();
-    const merged = rt53MergeAcademy(local, remote);
-    if (merged) _rt53Apply(merged);
-    const after = rt53CleanAcademy(_rt53Snapshot());
-    const srv = rt53CleanAcademy(remote);
-    if (JSON.stringify(after) !== JSON.stringify(srv)) _rt53Schedule();
+    const local = _bb4aSnapshot();
+    const merged = bb4aMerge(local, remote);
+    if (merged) _bb4aApply(merged);
+    const after = bb4aClean(_bb4aSnapshot());
+    const srv = bb4aClean(remote);
+    if (JSON.stringify(after) !== JSON.stringify(srv)) _bb4aSchedule();
   } catch (e) {}
 }
-const _rt53Orig47 = _rt47Save, _rt53Orig48 = _rt48Save, _rt53Orig46 = _rt46Save;
-_rt47Save = function () { const r = _rt53Orig47.apply(this, arguments); _rt53Schedule(); return r; };
-_rt48Save = function () { const r = _rt53Orig48.apply(this, arguments); _rt53Schedule(); return r; };
-_rt46Save = function () { const r = _rt53Orig46.apply(this, arguments); _rt53Schedule(); return r; };
+const _bb4aOrig47 = _rt47Save, _bb4aOrig48 = _rt48Save, _bb4aOrig46 = _rt46Save;
+_rt47Save = function () { const r = _bb4aOrig47.apply(this, arguments); _bb4aSchedule(); return r; };
+_rt48Save = function () { const r = _bb4aOrig48.apply(this, arguments); _bb4aSchedule(); return r; };
+_rt46Save = function () { const r = _bb4aOrig46.apply(this, arguments); _bb4aSchedule(); return r; };
 {
-  const _rt53Ld = _rt17LoadServer;
+  const _bb4aLd = _rt17LoadServer;
   _rt17LoadServer = function () {
-    const p = _rt53Ld.apply(this, arguments);
-    Promise.resolve(p).then(() => { _rt53Pull(); }, () => { _rt53Pull(); });
+    const p = _bb4aLd.apply(this, arguments);
+    Promise.resolve(p).then(() => { _bb4aPull(); }, () => { _bb4aPull(); });
     return p;
   };
 }
-setTimeout(() => { try { _rt53Pull(); } catch (e) {} }, 1200);
+setTimeout(() => { try { _bb4aPull(); } catch (e) {} }, 1200);
 '''
 s2 = s2.rstrip("\n") + "\n" + CLIENT
 if s2.count("// ── bb4academy ──") != 1:
     die("client marker count is %d" % s2.count("// ── bb4academy ──"))
+def span(text, start, end, label):
+    i = text.find(start)
+    j = text.find(end, i + len(start)) if i >= 0 else -1
+    if i < 0 or j < 0:
+        die("could not bound %s" % label)
+    return text[i:j]
+# The coming Ask patch owns the chat list, the SSE reader, and generateAi's
+# provider order. These slices must stay byte for byte.
+for label, src, dst, a, b in (
+    ("chat list", s, s2, "function _renderChatMsgs() {", "async function sendChatMessage(retryText = null) {"),
+    ("Ask SSE reader", s, s2, "async function sendChatMessage(retryText = null) {", "function initChatWidget() {"),
+    ("generateAi", v, v2, "async function generateAi(options) {", "function sendAiError(res, error) {"),
+    ("Ask stream", v, v2, "async function bb2StreamInner(req, res) {", "function bb2StreamChat(req, res) {"),
+):
+    if span(src, a, b, label) != span(dst, a, b, label):
+        die("%s changed; leave it for the Ask patch" % label)
 nodecheck(s2, "app.js")
 nodecheck(v2, "server.js")
 show("bb4academy after app.js", s2, crlf)
