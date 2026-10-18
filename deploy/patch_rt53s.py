@@ -4,20 +4,21 @@
 Keyless CSV (https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFII10). Cached in memory
 for about 6 hours. No new table, no key, no Stripe.
 
-bb2 ships first and rewrites server.js. The base check is that post-bb2 md5
-(2cae99df5d4893059662da419379cdcf). A comment marker would still match a server that had
-drifted elsewhere; the checksum refuses that. The edit itself is anchored on the one
-EIA route line, which bb2 does not touch and which this patch leaves byte-for-byte
-(comment included):
+The expected live chat58 server is md5 2e04b3c16f8400dc5ea211e676831b23
+(8,453 lines: chat57 + bb2's server patch + the premium-access hotfix). A different
+md5 warns and does not abort, matching the bb patches: the anchors decide. Each
+anchor must appear exactly once, or the patch refuses:
   if (rp === "/api/eia-spot") return rt44Eia(res); // rt44: EIA official spot
-Refuses if this route is already present. Finishes with node --check.
-Does not run the server.
+  function json(res
+  the two console sentences that still say "Replit project's private settings"
+The EIA line is left byte-for-byte. A second run refuses because the route is
+already present. Finishes with node --check. Does not run the server.
 
 Usage: python3 patch_rt53s.py [--check] server.js"""
 import sys, os, hashlib, subprocess, shutil
 args = [a for a in sys.argv[1:] if a != "--check"]; check = "--check" in sys.argv
 p = args[0] if args else "server.js"
-EXPECT_MD5 = "2cae99df5d4893059662da419379cdcf"
+EXPECT_MD5 = "2e04b3c16f8400dc5ea211e676831b23"
 
 def refuse(m):
     print("REFUSE:", m); sys.exit(1)
@@ -26,10 +27,22 @@ raw_b = open(p, "rb").read()
 md5 = hashlib.md5(raw_b).hexdigest()
 raw = raw_b.decode("utf-8"); crlf = "\r\n" in raw; s = raw.replace("\r\n", "\n")
 if "// ── rt53s ──" in s or 'rp === "/api/real-yield"' in s: refuse("rt53s already applied")
-if md5 != EXPECT_MD5: refuse("server.js md5 %s != %s" % (md5, EXPECT_MD5))
+if md5 != EXPECT_MD5:
+    print("WARN md5 server.js: have %s expected %s (anchors still decide)" % (md5, EXPECT_MD5))
 ANC = 'if (rp === "/api/eia-spot") return rt44Eia(res); // rt44: EIA official spot'
-if s.count(ANC) != 1: refuse("eia-spot anchor matched %d times" % s.count(ANC))
-if "function json(res" not in s: refuse("json() helper missing")
+def need(needle, label):
+    n = s.count(needle)
+    if n != 1: refuse("%s matched %d times" % (label, n))
+need(ANC, "eia-spot anchor")
+need("function json(res", "json() helper")
+JARGON = [
+    ("save it in your Replit project's private settings in place of the old one.", "add it in your site's private settings in place of the old one."),
+    ("save it in your Replit project's private settings.", "add it in your site's private settings."),
+]
+for old, new in JARGON:
+    need(old, "console sentence")
+    s = s.replace(old, new, 1)
+if "Replit project's private settings" in s: refuse("a Replit settings sentence is still in the console copy")
 BLOCK = r'''
 // ── rt53s ── US 10-year real yield, FRED series DFII10 (a daily Treasury print). Keyless CSV, memory only.
 const RT53_RY = { at: 0, tryAt: 0, v: null, p: null, reason: "" };
@@ -63,5 +76,5 @@ if crlf: out = out.replace("\n", "\r\n")
 tmp = p + ".rt53s.tmp.js"; open(tmp, "wb").write(out.encode("utf-8"))
 r = subprocess.run(["node", "--check", tmp], capture_output=True, text=True)
 if r.returncode: os.remove(tmp); sys.exit("node --check FAILED:\n" + r.stderr)
-if check: os.remove(tmp); print("CHECK OK: rt53s would apply on post-bb2 chat58", md5); sys.exit(0)
-shutil.copy(p, p + ".bak-rt53s"); os.replace(tmp, p); print("APPLIED rt53s on post-bb2 chat58", md5, "; backup at", p + ".bak-rt53s")
+if check: os.remove(tmp); print("CHECK OK: rt53s would apply on live chat58", md5); sys.exit(0)
+shutil.copy(p, p + ".bak-rt53s"); os.replace(tmp, p); print("APPLIED rt53s on live chat58", md5, "; backup at", p + ".bak-rt53s")
