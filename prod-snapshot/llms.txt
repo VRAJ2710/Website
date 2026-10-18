@@ -1,0 +1,14 @@
+# The Dispatch Markets
+
+> The Dispatch Markets is an AI-assisted market intelligence publication covering gold, macro conditions, equities, crypto, foreign exchange, and market news. Its public pages provide research context, conditional scenarios, and conviction-weighted signals for independent analysis. Market data may be delayed, incomplete, or inaccurate; the publication is for educational and research purposes and is not financial advice.
+
+## Public resources
+
+- [The Dispatch Markets](https://thedispatch.uk/): Public landing page for the market intelligence desk.
+- [Dispatch Brief](https://thedispatch.uk/brief/): Daily market view covering the current regime, cross-asset context, and key risks.
+- [Weekly Playbook](https://thedispatch.uk/playbook/): Weekly scenario planning, market structure, and macro catalysts.
+- [Gold Desk](https://thedispatch.uk/gold/): Public analysis of gold structure, catalysts, and conditional paths.
+- [Markets](https://thedispatch.uk/markets/): Market context across equities, foreign exchange, crypto, and other risk assets.
+- [Newsroom](https://thedispatch.uk/news/): Public market-news coverage and editorial context.
+- [Research Desk](https://thedispatch.uk/research/): Market explainers and analysis with visible evidence, assumptions, and scenarios.
+- [Market Signals](https://thedispatch.uk/signals/): Conviction-weighted signals describing macro conditions and cross-asset behavior.
