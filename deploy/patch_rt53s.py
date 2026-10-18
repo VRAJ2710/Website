@@ -1,20 +1,35 @@
 #!/usr/bin/env python3
 """patch_rt53s.py (server only): GET /api/real-yield -> FRED DFII10, the US 10-year real yield.
 
-Keyless CSV (https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFII10). The browser cannot
-read it: FRED sends no Access-Control-Allow-Origin. Cached in memory for about 6 hours.
-No new table, no key, no Stripe.
+Keyless CSV (https://fred.stlouisfed.org/graph/fredgraph.csv?id=DFII10). Cached in memory
+for about 6 hours. No new table, no key, no Stripe.
 
-Refuses if this route is already present. The anchor is the rt44 EIA route, which is on the
-live server and not in the August repo snapshot. Usage: python3 patch_rt53s.py [--check] server.js"""
-import sys, os, subprocess, shutil
+bb2 ships first and rewrites server.js. The base check is that post-bb2 md5
+(2cae99df5d4893059662da419379cdcf). A comment marker would still match a server that had
+drifted elsewhere; the checksum refuses that. The edit itself is anchored on the one
+EIA route line, which bb2 does not touch and which this patch leaves byte-for-byte
+(comment included):
+  if (rp === "/api/eia-spot") return rt44Eia(res); // rt44: EIA official spot
+Refuses if this route is already present. Finishes with node --check.
+Does not run the server.
+
+Usage: python3 patch_rt53s.py [--check] server.js"""
+import sys, os, hashlib, subprocess, shutil
 args = [a for a in sys.argv[1:] if a != "--check"]; check = "--check" in sys.argv
 p = args[0] if args else "server.js"
-raw = open(p, "rb").read().decode("utf-8"); crlf = "\r\n" in raw; s = raw.replace("\r\n", "\n")
-if "// ── rt53s ──" in s or 'rp === "/api/real-yield"' in s: sys.exit("REFUSE: rt53s already applied")
-ANC = 'if (rp === "/api/eia-spot") return rt44Eia(res);'
-if s.count(ANC) != 1: print("SKIPPED: eia-spot anchor matched %d times; nothing changed" % s.count(ANC)); sys.exit(0)
-if "function json(res" not in s: print("SKIPPED: json() helper missing; nothing changed"); sys.exit(0)
+EXPECT_MD5 = "2cae99df5d4893059662da419379cdcf"
+
+def refuse(m):
+    print("REFUSE:", m); sys.exit(1)
+
+raw_b = open(p, "rb").read()
+md5 = hashlib.md5(raw_b).hexdigest()
+raw = raw_b.decode("utf-8"); crlf = "\r\n" in raw; s = raw.replace("\r\n", "\n")
+if "// ── rt53s ──" in s or 'rp === "/api/real-yield"' in s: refuse("rt53s already applied")
+if md5 != EXPECT_MD5: refuse("server.js md5 %s != %s" % (md5, EXPECT_MD5))
+ANC = 'if (rp === "/api/eia-spot") return rt44Eia(res); // rt44: EIA official spot'
+if s.count(ANC) != 1: refuse("eia-spot anchor matched %d times" % s.count(ANC))
+if "function json(res" not in s: refuse("json() helper missing")
 BLOCK = r'''
 // ── rt53s ── US 10-year real yield, FRED series DFII10 (a daily Treasury print). Keyless CSV, memory only.
 const RT53_RY = { at: 0, tryAt: 0, v: null, p: null, reason: "" };
@@ -40,11 +55,13 @@ async function rt53RealYield(res) {
   return json(res, 200, Object.assign({ fetchedAt: new Date(RT53_RY.at).toISOString() }, RT53_RY.v), { "Cache-Control": "public, max-age=900" });
 }
 '''
+# The EIA line stays byte-for-byte so bb2 can anchor on it after this patch.
 out = s.replace(ANC, 'if (rp === "/api/real-yield") return rt53RealYield(res);\n      ' + ANC, 1)
+if out.count(ANC) != 1 or 'rp === "/api/real-yield"' not in out: refuse("real-yield route did not land beside the EIA anchor")
 out = out.rstrip("\n") + "\n" + BLOCK
 if crlf: out = out.replace("\n", "\r\n")
 tmp = p + ".rt53s.tmp.js"; open(tmp, "wb").write(out.encode("utf-8"))
 r = subprocess.run(["node", "--check", tmp], capture_output=True, text=True)
 if r.returncode: os.remove(tmp); sys.exit("node --check FAILED:\n" + r.stderr)
-if check: os.remove(tmp); print("CHECK OK: rt53s would apply"); sys.exit(0)
-shutil.copy(p, p + ".bak-rt53s"); os.replace(tmp, p); print("APPLIED rt53s; backup at", p + ".bak-rt53s")
+if check: os.remove(tmp); print("CHECK OK: rt53s would apply on post-bb2 chat58", md5); sys.exit(0)
+shutil.copy(p, p + ".bak-rt53s"); os.replace(tmp, p); print("APPLIED rt53s on post-bb2 chat58", md5, "; backup at", p + ".bak-rt53s")
