@@ -17,10 +17,16 @@ Regime fit
   Body: { "regimeFit": { ... } }
   Cache-Control: public, max-age=60
   No login check and no new table. Guests and admins share one in-memory
-  snapshot (60 seconds, one in-flight fetch), so the same prices always produce
-  the same JSON. Free Yahoo quotes, plus the desk's existing synthetic dollar
-  index. Missing prices are marked with a null value and add nothing. The score
-  is null only when the symbol is not a usable market name.
+  snapshot, so the same prices always produce the same JSON. Only symbols in
+  the desk table are scored. Any other symbol returns a null score and does
+  not call upstream. The shared market pack (VIX, the S&P 500, oil, Bitcoin,
+  SPY, and the dollar) is fetched at most once per 60 seconds, whatever the
+  ticker. Each ticker result sits in an LRU of 64. A cache hit does not touch
+  the limiter and is the same for every caller. A cache miss uses the existing
+  yahooRateLimiter when that helper is loaded, otherwise a 30-per-minute
+  per-address window. A limited miss returns the last stored score for that
+  symbol, or a null score, and does not fetch. Missing prices on a known
+  symbol are marked with a null value and add nothing.
 
   regimeFit fields, in order:
     ticker, score, reason, label, regime, asOf, method, version,
@@ -122,6 +128,8 @@ NEW_BASIS = (
 SERVER_BLOCK = r'''
 // ── bb3fit ── One regime-fit score for every visitor, from one cached market snapshot.
 // GET /api/regime-fit?ticker=MU returns { regimeFit }. Public cache, 60 seconds. No login check.
+// Only desk symbols are scored. The market pack is one fetch per 60 seconds. Ticker results are an LRU of 64.
+// A cache hit skips the limiter. A miss uses yahooRateLimiter when it is loaded. A limited miss does not fetch.
 // BB3_FIT_JS
 const BB3_VERSION = "bb3";
 const BB3_BASELINE = 50;
@@ -134,7 +142,12 @@ BB3_ROWS.forEach(function (row) { BB3_MAP[row[0]] = { stance: row[1], cat: row[2
 const BB3_ALIAS = {};
 BB3_ALIAS_ROWS.forEach(function (row) { BB3_ALIAS[row[0]] = row[1]; });
 const BB3_METHOD = "The score starts at 50. Each row adds or subtracts its contribution, in points. Weight is the most that row can move the score. If a figure is missing, that row adds nothing, and every visitor looking at the same prices sees the same total. The total is kept between 0 and 100; that correction is the last row, and it is zero when the total was already in range. 68 and above is Tailwind, 45 to 67 is Neutral, and below 45 is Headwind. The market mood is a separate reading that also starts at 50. It uses five figures, rounded to two decimals before the points are chosen: how much traders are paying to insure US shares, the S&P 500's move today, the dollar's level, whether oil is above 95 dollars a barrel, and Bitcoin's move today. If the S&P 500 index print is missing, the S&P 500 fund's move is used instead, for every visitor. The dollar's level is the desk's published dollar index when that is available, and otherwise the exchange dollar index. 55 and above is Risk-On, 40 to 54 is Transition, and below 40 is Risk-Off. A positive desk view adds 18 when the mood is 55 or above. A cautious desk view adds 12 when the mood is below 45. A commodity adds 15 when the mood favours energy or gold, which it does unless the mood is 60 or above and oil is not above 90 dollars. Crypto adds 12 when the mood is 58 or above, and loses 15 when the mood is below 42. A gain of more than 1.5 percent adds 8 when the mood is 55 or above. A fall of more than 2 percent takes off 10. A name that usually moves more than 1.5 times as sharply as the market loses 12 when the mood is below 60. The benchmark value is the S&P 500 fund's own percent change this session.";
-const BB3_BOX = { at: 0, pack: null, pending: null, fits: new Map(), fitPending: new Map() };
+const BB3_FIT_MAX = 64;
+const BB3_MISS_LIMIT = 30;
+const BB3_MISS_WINDOW = 60 * 1000;
+const BB3_MISS_KEYS = 1024;
+const BB3_BOX = { at: 0, pack: null, pending: null, fits: new Map(), fitPending: new Map(), lastGood: new Map() };
+const BB3_LOCAL = { hits: new Map() };
 
 function bb3Reset() {
   BB3_BOX.at = 0;
@@ -142,6 +155,60 @@ function bb3Reset() {
   BB3_BOX.pending = null;
   BB3_BOX.fits = new Map();
   BB3_BOX.fitPending = new Map();
+  BB3_BOX.lastGood = new Map();
+  BB3_LOCAL.hits = new Map();
+}
+function bb3FitMax() { return BB3_FIT_MAX; }
+function bb3CacheSize() { return BB3_BOX.fits.size; }
+function bb3Hot(ticker) { return BB3_BOX.fits.has(ticker); }
+function bb3Tickers() { return Object.keys(BB3_MAP); }
+function bb3DropHot() { BB3_BOX.fits = new Map(); }
+function bb3Known(ticker) { return Object.prototype.hasOwnProperty.call(BB3_MAP, ticker); }
+function bb3LruSet(map, key, value) {
+  if (map.has(key)) map.delete(key);
+  map.set(key, value);
+  while (map.size > BB3_FIT_MAX) map.delete(map.keys().next().value);
+}
+function bb3Client(req) {
+  const headers = (req && req.headers) || {};
+  const fwd = headers["x-forwarded-for"] || headers["X-Forwarded-For"] || "";
+  const ip = String(fwd).split(",")[0].trim();
+  if (ip) return ip.slice(0, 80);
+  const sock = req && req.socket && req.socket.remoteAddress;
+  return sock ? String(sock).slice(0, 80) : "unknown";
+}
+function bb3LocalAllow(ip, now) {
+  const key = ip || "unknown";
+  let row = BB3_LOCAL.hits.get(key);
+  if (!row || now - row.at >= BB3_MISS_WINDOW) row = { at: now, n: 0 };
+  BB3_LOCAL.hits.delete(key);
+  BB3_LOCAL.hits.set(key, row);
+  while (BB3_LOCAL.hits.size > BB3_MISS_KEYS) BB3_LOCAL.hits.delete(BB3_LOCAL.hits.keys().next().value);
+  if (row.n >= BB3_MISS_LIMIT) return false;
+  row.n += 1;
+  return true;
+}
+function bb3AllowMiss(req, now) {
+  const ip = bb3Client(req);
+  if (typeof yahooRateLimiter !== "undefined" && yahooRateLimiter && typeof yahooRateLimiter.allow === "function") {
+    return !!yahooRateLimiter.allow(ip);
+  }
+  return bb3LocalAllow(ip, now);
+}
+function bb3Remember(ticker, fit, now) {
+  bb3LruSet(BB3_BOX.fits, ticker, { fit: fit, at: now, packAt: BB3_BOX.at });
+  bb3LruSet(BB3_BOX.lastGood, ticker, fit);
+}
+function bb3Hit(ticker, now) {
+  const hit = BB3_BOX.fits.get(ticker);
+  if (!hit || !BB3_BOX.pack || hit.packAt !== BB3_BOX.at || now - hit.at >= BB3_TTL) return null;
+  bb3LruSet(BB3_BOX.fits, ticker, hit);
+  return hit.fit;
+}
+function bb3Limited(ticker, now) {
+  if (BB3_BOX.lastGood.has(ticker)) return BB3_BOX.lastGood.get(ticker);
+  const stamp = BB3_BOX.at ? BB3_BOX.at : Math.floor(now / BB3_TTL) * BB3_TTL;
+  return bb3Blank(ticker, "This score is temporarily unavailable. Nothing is shown rather than a different number.", stamp);
 }
 function bb3Round(n, dp) {
   const f = Math.pow(10, dp == null ? 2 : dp);
@@ -354,16 +421,19 @@ async function bb3Compute(ticker, now) {
   });
   return bb3Assemble(ticker, bb3Profile(ticker), mood, bb3QuotePct(q), spyPct, pack.at, q ? bb3QuoteMs(q, pack.at) : pack.at, spyQ ? bb3QuoteMs(spyQ, pack.at) : pack.at);
 }
-function bb3CachedFit(ticker, now) {
-  const hit = BB3_BOX.fits.get(ticker);
-  if (hit && BB3_BOX.pack && hit.packAt === BB3_BOX.at && now - hit.at < BB3_TTL) return Promise.resolve(hit.fit);
+function bb3CachedFit(ticker, req, now) {
+  const hit = bb3Hit(ticker, now);
+  if (hit) return Promise.resolve(hit);
   if (BB3_BOX.fitPending.has(ticker)) return BB3_BOX.fitPending.get(ticker);
-  const pending = bb3Compute(ticker, now).then(function (fit) {
-    BB3_BOX.fits.set(ticker, { fit: fit, at: Date.now(), packAt: BB3_BOX.at });
+  if (!bb3AllowMiss(req, now)) return Promise.resolve(bb3Limited(ticker, now));
+  const job = bb3Compute(ticker, now).then(function (fit) {
+    bb3Remember(ticker, fit, Date.now());
     return fit;
-  }).finally(function () { BB3_BOX.fitPending.delete(ticker); });
-  BB3_BOX.fitPending.set(ticker, pending);
-  return pending;
+  }).finally(function () {
+    if (BB3_BOX.fitPending.get(ticker) === job) BB3_BOX.fitPending.delete(ticker);
+  });
+  BB3_BOX.fitPending.set(ticker, job);
+  return job;
 }
 async function bb3RegimeFit(req, res) {
   const now = Date.now();
@@ -372,14 +442,16 @@ async function bb3RegimeFit(req, res) {
     const host = (req.headers && (req.headers.host || req.headers.Host)) || "localhost";
     const url = new URL(req.url || "/", "http://" + host);
     const raw = url.searchParams.has("ticker") ? url.searchParams.get("ticker") : (url.searchParams.get("t") || "");
-    ticker = String(raw == null ? "" : raw).trim().toUpperCase();
+    const text = String(raw == null ? "" : raw);
+    ticker = text.length > 32 ? "" : text.trim().toUpperCase();
   } catch (e) { ticker = ""; }
-  if (!/^[A-Z0-9.^=-]{1,14}$/.test(ticker)) {
+  if (!/^[A-Z0-9.^=-]{1,14}$/.test(ticker) || !bb3Known(ticker)) {
     const fit = bb3Blank(String(ticker || "").slice(0, 14), "Enter a market symbol such as MU. No score is shown rather than a guessed one.", now);
     return json(res, 200, { regimeFit: fit }, { "Cache-Control": "public, max-age=60" });
   }
-  const fit = await bb3CachedFit(ticker, now);
-  return json(res, 200, { regimeFit: fit }, { "Cache-Control": "public, max-age=60" });
+  const fit = await bb3CachedFit(ticker, req, now);
+  const caching = fit && fit.score == null ? "no-store" : "public, max-age=60";
+  return json(res, 200, { regimeFit: fit }, { "Cache-Control": caching });
 }
 try {
   const bb3Handle0 = handle;

@@ -327,3 +327,133 @@ test("curl against the fit route returns one public JSON body", async () => {
     await new Promise(resolve => server.close(resolve));
   }
 });
+
+function macroQuote(symbols) {
+  const out = {};
+  symbols.forEach(sym => {
+    if (sym === "^VIX") out[sym] = quote(22.5, 0);
+    else if (sym === "^GSPC") out[sym] = quote(5600, -1.09);
+    else if (sym === "CL=F") out[sym] = quote(93, -0.6);
+    else if (sym === "BTC-USD") out[sym] = quote(80000, 0.4);
+    else if (sym === "SPY") out[sym] = quote(560, -1.05);
+    else if (sym === "MU") out[sym] = quote(180, -2.4);
+    else out[sym] = quote(100, -0.2);
+  });
+  return out;
+}
+
+test("an unknown ticker returns a null score and does not fetch", async () => {
+  let quotes = 0;
+  let dollars = 0;
+  const s = loadFit({
+    yahooQuote: async () => { quotes += 1; throw new Error("unknown ticker must not fetch"); },
+    fetchSyntheticDxy: async () => { dollars += 1; throw new Error("unknown ticker must not fetch"); },
+  });
+  const names = ["ZZZZ", "BTC-USD", "^GSPC", "NOTREAL1", "MU;DROP"];
+  const bodies = [];
+  for (const tk of names) {
+    const out = {};
+    await s.bb3RegimeFit({ method: "GET", url: "/api/regime-fit?ticker=" + encodeURIComponent(tk), headers: { "x-forwarded-for": "198.51.100.10" } }, out);
+    assert.equal(out.statusCode, 200);
+    assert.equal(out.body.regimeFit.score, null);
+    assert.equal(out.body.regimeFit.inputs.length, 0);
+    bodies.push(out.body);
+  }
+  const again = {};
+  await s.bb3RegimeFit({ method: "GET", url: "/api/regime-fit?ticker=ZZZZ", headers: { cookie: "dispatch_session=admin", "x-forwarded-for": "198.51.100.11" } }, again);
+  assert.equal(again.body.regimeFit.score, null);
+  assert.equal(again.body.regimeFit.inputs.length, 0);
+  assert.equal(quotes, 0);
+  assert.equal(dollars, 0);
+  assert.equal(s.bb3CacheSize(), 0);
+  assert.equal(s.bb3Known("MU"), true);
+  assert.equal(s.bb3Known("ZZZZ"), false);
+  assert.equal(s.bb3Known("BTC-USD"), false);
+});
+
+test("the per-ticker cache stays inside its LRU bound and the market pack is fetched once", async () => {
+  const fetched = [];
+  const s = loadFit({
+    yahooQuote: async (symbols) => {
+      fetched.push(symbols.slice());
+      return macroQuote(symbols);
+    },
+    fetchSyntheticDxy: async () => ({ p: 101.81, ts: QUOTE_TS }),
+    yahooRateLimiter: { allow() { return true; } },
+  });
+  const names = s.bb3Tickers();
+  assert.ok(names.length > s.bb3FitMax());
+  assert.equal(s.bb3FitMax(), 64);
+  for (let i = 0; i < s.bb3FitMax() + 1; i++) {
+    const out = {};
+    await s.bb3RegimeFit({ method: "GET", url: "/api/regime-fit?ticker=" + names[i], headers: {} }, out);
+    assert.equal(out.statusCode, 200);
+    assert.equal(typeof out.body.regimeFit.score, "number");
+    assert.ok(s.bb3CacheSize() <= s.bb3FitMax());
+  }
+  assert.equal(s.bb3CacheSize(), s.bb3FitMax());
+  assert.equal(s.bb3Hot(names[0]), false);
+  assert.equal(s.bb3Hot(names[s.bb3FitMax()]), true);
+  const packs = fetched.filter(symbols => symbols.indexOf("^VIX") !== -1);
+  assert.equal(packs.length, 1);
+  const before = fetched.length;
+  const evicted = {};
+  await s.bb3RegimeFit({ method: "GET", url: "/api/regime-fit?ticker=" + names[0], headers: {} }, evicted);
+  assert.equal(typeof evicted.body.regimeFit.score, "number");
+  assert.equal(fetched.length, before);
+  assert.equal(fetched.filter(symbols => symbols.indexOf("^VIX") !== -1).length, 1);
+  assert.equal(s.bb3CacheSize(), s.bb3FitMax());
+  assert.equal(s.bb3Hot(names[0]), true);
+  const hot = {};
+  const mid = fetched.length;
+  await s.bb3RegimeFit({ method: "GET", url: "/api/regime-fit?ticker=" + names[s.bb3FitMax()], headers: { cookie: "dispatch_session=admin" } }, hot);
+  assert.equal(fetched.length, mid);
+  assert.equal(hot.body.regimeFit.ticker, names[s.bb3FitMax()]);
+});
+
+test("a limited miss returns the last score or a null score and does not fetch", async () => {
+  let quotes = 0;
+  let allows = 0;
+  let open = true;
+  const s = loadFit({
+    yahooQuote: async (symbols) => {
+      quotes += 1;
+      return macroQuote(symbols);
+    },
+    fetchSyntheticDxy: async () => ({ p: 101.81, ts: QUOTE_TS }),
+    yahooRateLimiter: {
+      allow() { allows += 1; return open; },
+    },
+  });
+  const first = {};
+  await s.bb3RegimeFit({ method: "GET", url: "/api/regime-fit?ticker=MU", headers: { "x-forwarded-for": "203.0.113.8" } }, first);
+  assert.equal(first.body.regimeFit.score, 28);
+  const afterScore = quotes;
+  const allowsAfterScore = allows;
+  open = false;
+  const guest = {};
+  const admin = {};
+  await Promise.all([
+    s.bb3RegimeFit({ method: "GET", url: "/api/regime-fit?ticker=MU", headers: {} }, guest),
+    s.bb3RegimeFit({ method: "GET", url: "/api/regime-fit?ticker=MU", headers: { cookie: "dispatch_session=admin", "x-forwarded-for": "203.0.113.9" } }, admin),
+  ]);
+  assert.deepEqual(guest.body, first.body);
+  assert.deepEqual(admin.body, first.body);
+  assert.equal(quotes, afterScore);
+  assert.equal(allows, allowsAfterScore);
+  const unseen = {};
+  const unseenAdmin = {};
+  await s.bb3RegimeFit({ method: "GET", url: "/api/regime-fit?ticker=AAPL", headers: { "x-forwarded-for": "203.0.113.8" } }, unseen);
+  await s.bb3RegimeFit({ method: "GET", url: "/api/regime-fit?ticker=AAPL", headers: { cookie: "dispatch_session=admin", "x-forwarded-for": "198.51.100.4" } }, unseenAdmin);
+  assert.equal(unseen.body.regimeFit.score, null);
+  assert.equal(unseen.body.regimeFit.inputs.length, 0);
+  assert.deepEqual(unseen.body, unseenAdmin.body);
+  assert.equal(unseen.headers["Cache-Control"], "no-store");
+  assert.equal(quotes, afterScore);
+  s.bb3DropHot();
+  const stale = {};
+  await s.bb3RegimeFit({ method: "GET", url: "/api/regime-fit?ticker=MU", headers: { "x-forwarded-for": "203.0.113.8" } }, stale);
+  assert.equal(stale.body.regimeFit.score, 28);
+  assert.deepEqual(stale.body.regimeFit, first.body.regimeFit);
+  assert.equal(quotes, afterScore);
+});
