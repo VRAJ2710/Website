@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""patch_bb2.py — Ask/Expert on the live chat56 client.
+"""patch_bb2.py — Ask/Expert on the post-rt52 client (chat57 -> chat58).
 
 First streamed tokens under 3s, inline citations for sources that were actually
 fed in, and server-side peer comparisons (the MU 11.8x vs WDC 12.3x bug).
@@ -26,11 +26,31 @@ is capped at 800ms so an out-of-credits provider is skipped quickly. OpenAI
 gpt-4o-mini is tried first, then Gemini 2.5 Flash. If neither key is configured,
 the request falls through to the existing JSON handler.
 
+Stacks on rt52 + rt52s. Refuses unless these markers are present:
+  app.js      // ── rt52 ──
+  app.js      function _rt52Render13f(
+  server.js   // ── rt52s: 13F v2 ──
+  server.js   async function institutional13fV2(
+  index.html  app.js?v=chat57
+Already-applied (// ── bb2 ──) exits 0. A missing rt52 marker exits 1 and writes nothing.
+
 Usage: python3 patch_bb2.py [--check] <dir containing app.js, index.html, server.js>
-Refuses with exit 0 when the bb2 marker is already present. CRLF-safe.
-node --check runs before anything is written; a later failure restores backups.
+CRLF-safe. node --check runs before anything is written; a later failure restores backups.
+Prints md5 and line count of each file before and after. EXPECTED_MD5 is a warning only.
 """
-import os, re, sys, subprocess, tempfile
+import hashlib, os, sys, subprocess, tempfile
+
+# Post-rt52 input fingerprints. Paste the CTO's real md5s here. A blank value
+# skips the warning for that file. Mismatch warns and does not abort.
+# app.js and index.html below are simulated 2026-10-18 from live chat56
+# (app.js b9d3d0a3) plus deploy/patch_rt52.py. server.js is blank: the pre-rt52
+# prod file (md5 e4a4a1f0e18d192357b8dd6c07928ade, 7581 lines) is not in the repo,
+# so patch_rt52s.py cannot be reproduced from this tree.
+EXPECTED_MD5 = {
+    "app.js": "45107b5b78039f675ffd94646ce4d309",
+    "index.html": "79e238e4313762fbcff2bbfac358616a",
+    "server.js": "",
+}
 
 CHECK = "--check" in sys.argv
 args = [a for a in sys.argv[1:] if a != "--check"]
@@ -44,6 +64,18 @@ def load(p):
 def die(m):
     print("ABORT (nothing written):", m)
     sys.exit(1)
+
+def show(phase, path, data=None):
+    raw = open(path, "rb").read() if data is None else data
+    if isinstance(raw, str):
+        raw = raw.encode("utf-8")
+    name = os.path.basename(path)
+    digest = hashlib.md5(raw).hexdigest()
+    print("bb2 %s %s md5=%s lines=%d" % (phase, name, digest, len(raw.splitlines())))
+    return digest
+
+def encode(text, use_crlf):
+    return (text.replace("\n", "\r\n") if use_crlf else text).encode("utf-8")
 
 def nodecheck(src, label):
     with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8") as t:
@@ -59,13 +91,32 @@ s, crlf = load(APP)
 h, hcrlf = load(IDX)
 v, vcrlf = load(SRV)
 
+for path in (APP, IDX, SRV):
+    digest = show("before", path)
+    expect = EXPECTED_MD5.get(os.path.basename(path)) or ""
+    if expect and digest != expect:
+        print("WARN md5 %s: have %s expected %s (anchors still decide)" % (os.path.basename(path), digest, expect))
+
 if "// \u2500\u2500 bb2 \u2500\u2500" in s or "// \u2500\u2500 bb2 \u2500\u2500" in v:
     print("REFUSE: bb2 already applied")
     sys.exit(0)
 
-for need in ["async function generateAi(", "async function handle(", "function json(", "async function currentUser(", "async function readBody(", '"/api/chat"']:
-    if need not in v:
-        die("server.js missing " + need)
+rt52_miss = []
+if "// \u2500\u2500 rt52 \u2500\u2500" not in s:
+    rt52_miss.append("app.js marker missing: // ── rt52 ──")
+if "function _rt52Render13f(" not in s:
+    rt52_miss.append("app.js marker missing: function _rt52Render13f(")
+if "// \u2500\u2500 rt52s: 13F v2 \u2500\u2500" not in v:
+    rt52_miss.append("server.js marker missing: // ── rt52s: 13F v2 ──")
+if "async function institutional13fV2(" not in v:
+    rt52_miss.append("server.js marker missing: async function institutional13fV2(")
+if h.count('app.js?v=chat57"') != 1:
+    rt52_miss.append('index.html marker missing: app.js?v=chat57" (found %d)' % h.count('app.js?v=chat57"'))
+if rt52_miss:
+    print("REFUSE: rt52/rt52s base not detected (nothing written)")
+    for item in rt52_miss:
+        print("REFUSE:", item)
+    sys.exit(1)
 
 OLD_SEND = r'''async function sendChatMessage(retryText = null) {
   if (_chatLoad) return;
@@ -259,37 +310,55 @@ NEW_SEND = r'''async function sendChatMessage(retryText = null) {
   }
 }'''
 
-if s.count(OLD_SEND) != 1:
-    die("sendChatMessage anchor matched %d times" % s.count(OLD_SEND))
-s = s.replace(OLD_SEND, NEW_SEND, 1)
-print("APPLY sendChatMessage stream + 200ms prefetch cap")
-
 OLD_ROW = r"return v ? `${t}: P/E ${f(v.pe)} · forward P/E ${f(v.forwardPe)} · market cap ${_rt33Mc(v.marketCap)}` : `${t}: valuation not available`;"
 NEW_ROW = r"return v ? `${t}: trailing P/E (TTM) ${f(v.pe)} · forward P/E ${f(v.forwardPe)} · market cap ${_rt33Mc(v.marketCap)}` : `${t}: valuation not available`;"
 OLD_ROW2 = r"return v ? `${t} P/E ${f(v.pe)} · fwd P/E ${f(v.forwardPe)} · mkt cap ${_rt33Mc(v.marketCap)}` : `${t} valuation unavailable`;"
 NEW_ROW2 = r"return v ? `${t}: trailing P/E (TTM) ${f(v.pe)} · forward P/E ${f(v.forwardPe)} · mkt cap ${_rt33Mc(v.marketCap)}` : `${t}: valuation unavailable`;"
-if s.count(OLD_ROW) != 1:
-    die("live peer row matched %d times" % s.count(OLD_ROW))
-s = s.replace(OLD_ROW, NEW_ROW, 1)
-if s.count(OLD_ROW2) != 1:
-    die("earlier peer row matched %d times" % s.count(OLD_ROW2))
-s = s.replace(OLD_ROW2, NEW_ROW2, 1)
 OLD_PEER_NOTE = "Use these figures when comparing valuation; do not substitute an index or ETF for a peer:"
 NEW_PEER_NOTE = "Trailing P/E (TTM) and forward P/E are different bases and are not compared with each other. Use these figures when comparing valuation; do not substitute an index or ETF for a peer:"
-if s.count(OLD_PEER_NOTE) != 1:
-    die("peer note matched %d times" % s.count(OLD_PEER_NOTE))
-s = s.replace(OLD_PEER_NOTE, NEW_PEER_NOTE, 1)
-print("APPLY trailing P/E (TTM) labels in peer context")
-
 copies = [
     ("Synthesising view (usually 20" + EN + "60 seconds)" + EL, "Synthesising view" + EL),
     ("Typical response: 20" + EN + "60 seconds.", "Typical response: first words within a few seconds."),
     ("typically 20" + EN + "60s", "streams as it writes"),
 ]
-for old, new in copies:
-    n = s.count(old)
+# Small signatures that exist on the prod server and survive rt52s. Checked
+# before any edit so a miss names every anchor and leaves the tree untouched.
+SERVER_ANCHORS = [
+    "async function generateAi(",
+    "async function handle(",
+    "function json(",
+    "async function currentUser(",
+    "async function readBody(",
+    '"/api/chat"',
+    "return json(res, 200, await institutional13fV2());",
+]
+miss = []
+def need_one(hay, needle, label):
+    n = hay.count(needle)
     if n != 1:
-        die("copy %r matched %d times" % (old, n))
+        miss.append("%s matched %d times" % (label, n))
+need_one(s, OLD_SEND, "app.js anchor sendChatMessage")
+need_one(s, OLD_ROW, "app.js anchor live peer row")
+need_one(s, OLD_ROW2, "app.js anchor earlier peer row")
+need_one(s, OLD_PEER_NOTE, "app.js anchor peer note")
+for old, _new in copies:
+    need_one(s, old, "app.js anchor %r" % old)
+for anchor in SERVER_ANCHORS:
+    if anchor not in v:
+        miss.append("server.js anchor missing: %s" % anchor)
+if miss:
+    print("ABORT (nothing written):")
+    for item in miss:
+        print("ABORT:", item)
+    sys.exit(1)
+
+s = s.replace(OLD_SEND, NEW_SEND, 1)
+print("APPLY sendChatMessage stream + 200ms prefetch cap")
+s = s.replace(OLD_ROW, NEW_ROW, 1)
+s = s.replace(OLD_ROW2, NEW_ROW2, 1)
+s = s.replace(OLD_PEER_NOTE, NEW_PEER_NOTE, 1)
+print("APPLY trailing P/E (TTM) labels in peer context")
+for old, new in copies:
     s = s.replace(old, new, 1)
 print("APPLY chat timing copy")
 
@@ -350,15 +419,8 @@ function _bb2CommitJson(data, tickers) {
 s = s.rstrip("\n") + "\n" + CLIENT
 print("APPLY client citation helpers")
 
-vers = re.findall(r'app\.js\?v=chat(\d+)"', h)
-if len(vers) != 1:
-    die("index app.js?v=chatN bust not found exactly once")
-nver = int(vers[0])
-if nver < 56:
-    die("index is chat%d; expected chat56 or later" % nver)
-nxt = nver + 1
-h = re.sub(r'app\.js\?v=chat%d"' % nver, 'app.js?v=chat%d"' % nxt, h, count=1)
-print("APPLY index chat%d -> chat%d" % (nver, nxt))
+h = h.replace('app.js?v=chat57"', 'app.js?v=chat58"', 1)
+print("APPLY index chat57 -> chat58")
 
 SERVER = r'''
 // ── bb2 ── Ask: stream a precomputed peer comparison first, then validate comparison words per sentence.
@@ -966,7 +1028,15 @@ print("APPLY server comparison stream")
 nodecheck(s, "app.js")
 nodecheck(v, "server.js")
 print("node --check passed" + (" (dry run)" if CHECK else ""))
+after = {
+    APP: encode(s, crlf),
+    IDX: encode(h, hcrlf),
+    SRV: encode(v, vcrlf),
+}
+for path in (APP, IDX, SRV):
+    show("after", path, after[path])
 if CHECK:
+    print("dry run, nothing written")
     sys.exit(0)
 
 def restore(baks):
@@ -975,14 +1045,13 @@ def restore(baks):
             open(path, "wb").write(open(bak, "rb").read())
             os.unlink(bak)
 
-pairs = [(APP, s, crlf), (IDX, h, hcrlf), (SRV, v, vcrlf)]
+pairs = [(APP, after[APP]), (IDX, after[IDX]), (SRV, after[SRV])]
 baks = []
 try:
-    for path, text, use_crlf in pairs:
+    for path, data in pairs:
         bak = path + ".bb2bak"
         open(bak, "wb").write(open(path, "rb").read())
         baks.append((path, bak))
-        data = (text.replace("\n", "\r\n") if use_crlf else text).encode("utf-8")
         open(path, "wb").write(data)
     for path in (APP, SRV):
         r = subprocess.run(["node", "--check", path], capture_output=True, text=True)
