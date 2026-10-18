@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""patch_bb2.py — Ask/Expert on the post-rt52 client (chat57 -> chat58).
+"""patch_bb2.py — Ask/Expert on the post-rt52 client (chatNN -> chatNN+1, NN >= 57).
 
 First streamed tokens under 3s, inline citations for sources that were actually
 fed in, and server-side peer comparisons (the MU 11.8x vs WDC 12.3x bug).
@@ -26,29 +26,41 @@ is capped at 800ms so an out-of-credits provider is skipped quickly. OpenAI
 gpt-4o-mini is tried first, then Gemini 2.5 Flash. If neither key is configured,
 the request falls through to the existing JSON handler.
 
-Stacks on rt52 + rt52s. Refuses unless these markers are present:
+Stacks on rt52 + rt52s. rt53 (home freeze and the macro grid) may already
+have run and bumped the cache buster; this patch does not require its marker.
+Refuses unless these are present:
   app.js      // ── rt52 ──
   app.js      function _rt52Render13f(
   server.js   // ── rt52s: 13F v2 ──
   server.js   async function institutional13fV2(
-  index.html  app.js?v=chat57
-Already-applied (// ── bb2 ──) exits 0. A missing rt52 marker exits 1 and writes nothing.
+  index.html  app.js?v=chatNN with NN >= 57, exactly once
+Then the index bust becomes chatNN+1. On rt52 alone that is chat57 -> chat58.
+On rt52 then rt53 (PR #25, which takes chat57 -> chat58) it is chat58 -> chat59.
+Already-applied (// ── bb2 ──) exits 0. A missing rt52 marker, or a bust below
+chat57, exits 1 and writes nothing.
 
 Usage: python3 patch_bb2.py [--check] <dir containing app.js, index.html, server.js>
 CRLF-safe. node --check runs before anything is written; a later failure restores backups.
 Prints md5 and line count of each file before and after. EXPECTED_MD5 is a warning only.
 """
-import hashlib, os, sys, subprocess, tempfile
+import hashlib, os, re, sys, subprocess, tempfile
 
 # Post-rt52 input fingerprints. Paste the CTO's real md5s here. A blank value
 # skips the warning for that file. Mismatch warns and does not abort.
-# app.js and index.html below are simulated 2026-10-18 from live chat56
-# (app.js b9d3d0a3) plus deploy/patch_rt52.py. server.js is blank: the pre-rt52
-# prod file (md5 e4a4a1f0e18d192357b8dd6c07928ade, 7581 lines) is not in the repo,
-# so patch_rt52s.py cannot be reproduced from this tree.
+# The values below are simulated 2026-10-18, not a live post-rt53 capture:
+#   live chat56 app.js b9d3d0a3
+#   + deploy/patch_rt52.py (chat56 -> chat57)
+#   + PR #25 deploy/patch_rt53.py at 8ec5ffd, with only the two retarget lines
+#     the script itself names (MIN_CHAT = 57, EXPECT_SHA16 = 8ff6cbb3d5c9e91a,
+#     the post-rt52 sha256 prefix). That takes chat57 -> chat58.
+# Without rt53 the same client is app.js 45107b5b78039f675ffd94646ce4d309
+# (25265 lines) and index.html 79e238e4313762fbcff2bbfac358616a (331 lines, chat57).
+# server.js is blank: pre-rt52 prod (md5 e4a4a1f0e18d192357b8dd6c07928ade, 7581
+# lines) is not in the repo, so patch_rt52s.py and patch_rt53s.py cannot be
+# reproduced from this tree.
 EXPECTED_MD5 = {
-    "app.js": "45107b5b78039f675ffd94646ce4d309",
-    "index.html": "79e238e4313762fbcff2bbfac358616a",
+    "app.js": "45fabc9dc66d372cc55b6c789f34d7fe",
+    "index.html": "a1453a45a198b31bebeb71ef94ea4dcf",
     "server.js": "",
 }
 
@@ -110,8 +122,14 @@ if "// \u2500\u2500 rt52s: 13F v2 \u2500\u2500" not in v:
     rt52_miss.append("server.js marker missing: // ── rt52s: 13F v2 ──")
 if "async function institutional13fV2(" not in v:
     rt52_miss.append("server.js marker missing: async function institutional13fV2(")
-if h.count('app.js?v=chat57"') != 1:
-    rt52_miss.append('index.html marker missing: app.js?v=chat57" (found %d)' % h.count('app.js?v=chat57"'))
+chat_n = None
+chat_hits = re.findall(r'app\.js\?v=chat(\d+)"', h)
+if len(chat_hits) != 1:
+    rt52_miss.append('index.html marker missing: app.js?v=chatNN" (found %d)' % len(chat_hits))
+else:
+    chat_n = int(chat_hits[0])
+    if chat_n < 57:
+        rt52_miss.append("index.html is chat%d; need chat57 or later" % chat_n)
 if rt52_miss:
     print("REFUSE: rt52/rt52s base not detected (nothing written)")
     for item in rt52_miss:
@@ -419,8 +437,9 @@ function _bb2CommitJson(data, tickers) {
 s = s.rstrip("\n") + "\n" + CLIENT
 print("APPLY client citation helpers")
 
-h = h.replace('app.js?v=chat57"', 'app.js?v=chat58"', 1)
-print("APPLY index chat57 -> chat58")
+bust_from, bust_to = "chat%d" % chat_n, "chat%d" % (chat_n + 1)
+h = h.replace('app.js?v=%s"' % bust_from, 'app.js?v=%s"' % bust_to, 1)
+print("APPLY index %s -> %s" % (bust_from, bust_to))
 
 SERVER = r'''
 // ── bb2 ── Ask: stream a precomputed peer comparison first, then validate comparison words per sentence.
