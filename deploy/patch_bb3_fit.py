@@ -8,7 +8,8 @@ md5 warns and does not abort, so the patch still applies after rt53.
 
 Does not modify /api/chat or the Ask client. A separate patch_bb3_ask.py may
 change those. The two patches apply in either order: this one only appends a
-/api/regime-fit route and rewrites the Hormuz oil lines.
+/api/regime-fit route and rewrites the Hormuz oil lines. A second run prints
+"REFUSE: bb3fit already applied" and exits 0, before any md5 warning.
 
 Regime fit
   GET /api/regime-fit?ticker=MU
@@ -407,13 +408,14 @@ def main():
     s, crlf = load(APP)
     h, hcrlf = load(IDX)
     v, vcrlf = load(SRV)
+    if "// \u2500\u2500 bb3fit \u2500\u2500" in v or "// bb3fit:" in s:
+        print("REFUSE: bb3fit already applied")
+        return 0
     for path in (APP, IDX, SRV):
         digest = show("before", path)
         expect = EXPECTED_MD5.get(os.path.basename(path)) or ""
         if expect and digest != expect:
             print("WARN md5 %s: have %s expected %s (anchors still decide)" % (os.path.basename(path), digest, expect))
-    if "// \u2500\u2500 bb3fit \u2500\u2500" in v or "// bb3fit:" in s:
-        die("bb3fit already applied")
     miss = []
     def need(hay, needle, label, n=None):
         c = hay.count(needle)
