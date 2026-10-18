@@ -45,23 +45,13 @@ Prints md5 and line count of each file before and after. EXPECTED_MD5 is a warni
 """
 import hashlib, os, re, sys, subprocess, tempfile
 
-# Post-rt52 input fingerprints. Paste the CTO's real md5s here. A blank value
-# skips the warning for that file. Mismatch warns and does not abort.
-# The values below are simulated 2026-10-18, not a live post-rt53 capture:
-#   live chat56 app.js b9d3d0a3
-#   + deploy/patch_rt52.py (chat56 -> chat57)
-#   + PR #25 deploy/patch_rt53.py at 8ec5ffd, with only the two retarget lines
-#     the script itself names (MIN_CHAT = 57, EXPECT_SHA16 = 8ff6cbb3d5c9e91a,
-#     the post-rt52 sha256 prefix). That takes chat57 -> chat58.
-# Without rt53 the same client is app.js 45107b5b78039f675ffd94646ce4d309
-# (25265 lines) and index.html 79e238e4313762fbcff2bbfac358616a (331 lines, chat57).
-# server.js is blank: pre-rt52 prod (md5 e4a4a1f0e18d192357b8dd6c07928ade, 7581
-# lines) is not in the repo, so patch_rt52s.py and patch_rt53s.py cannot be
-# reproduced from this tree.
+# Live no-rt53 base (post rt52, rt52s, and rt52ops). Paste a newer set here if
+# the files move. A blank value skips the warning for that file. Mismatch warns
+# and does not abort, so an rt53 base (chat58) still applies and becomes chat59.
 EXPECTED_MD5 = {
-    "app.js": "45fabc9dc66d372cc55b6c789f34d7fe",
-    "index.html": "a1453a45a198b31bebeb71ef94ea4dcf",
-    "server.js": "",
+    "app.js": "45107b5b78039f675ffd94646ce4d309",
+    "index.html": "87ee1667f8e6deef4c449ff9a61cce8d",
+    "server.js": "4e8c340439b57d202b6c13711cc7a338",
 }
 
 CHECK = "--check" in sys.argv
@@ -339,8 +329,8 @@ copies = [
     ("Typical response: 20" + EN + "60 seconds.", "Typical response: first words within a few seconds."),
     ("typically 20" + EN + "60s", "streams as it writes"),
 ]
-# Small signatures that exist on the prod server and survive rt52s. Checked
-# before any edit so a miss names every anchor and leaves the tree untouched.
+# Small signatures checked on the live server (4e8c3404, post rt52s and rt52ops).
+# Checked before any edit so a miss names every anchor and leaves the tree untouched.
 SERVER_ANCHORS = [
     "async function generateAi(",
     "async function handle(",
