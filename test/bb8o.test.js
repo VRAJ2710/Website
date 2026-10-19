@@ -77,6 +77,10 @@ async function _rt48sHeads() { return HEADS.map(function (h) { return Object.ass
 var SENT = [];
 function json(res, status, body, extra) { SENT.push({ status: status, body: body }); return body; }
 async function handle(req, res) { return "base"; }
+var RT32 = { cache: new Map() };
+async function rt32Yahoo(sym) { return { financialData: { currentPrice: { raw: 100 }, targetMeanPrice: { raw: 250 }, targetHighPrice: { raw: 300 }, targetLowPrice: { raw: 150 }, targetMedianPrice: { raw: 240 }, recommendationKey: "buy", recommendationMean: { raw: 1.8 }, numberOfAnalystOpinions: { raw: 40 }, profitMargins: { raw: 0.5 } }, recommendationTrend: { trend: [{ strongBuy: 10 }] }, upgradeDowngradeHistory: { history: [{ firm: "X", toGrade: "Buy" }] }, price: { regularMarketPrice: { raw: 100 } } }; }
+async function readBody(req) { return JSON.parse(JSON.stringify(req.__body)); }
+var bb2Read0 = typeof readBody === "function" ? readBody : async function () { return {}; };
 `;
 function load() {
   const ctx = { console: { warn() {} }, Date, JSON, Math, Object, String, Number, Array, RegExp, Promise, URL, Map, Intl, isFinite, crypto };
@@ -257,6 +261,33 @@ test("Taiwan listings use the Taipei session", () => {
   assert.equal(s.tz, "Asia/Taipei"); assert.equal(s.o, 540); assert.equal(s.c, 810); assert.equal(s.label, "Taiwan");
   assert.equal(c.bb5eSpec("6488.TWO").label, "Taiwan");
   assert.equal(c.bb5eSpec("AAPL").label, "US");
+});
+
+const BANNED = /^(target(High|Low|Mean|Median)(Price)?|priceTargets?|targetPrice|recommendation(Key|Mean|Trend|s)?|upgradeDowngradeHistory|upgrades|downgrades|numberOfAnalystOpinions|(average|consensus)?(analyst)?ratings?|analystRatings?|ra)$/i;
+function keyScan(o, path, hits) { if (!o || typeof o !== "object") return hits; for (const k of Object.keys(o)) { if (BANNED.test(k)) hits.push(path + "." + k); keyScan(o[k], path + "." + k, hits); } return hits; }
+test("ratings: one sanitizer strips analyst ratings and price targets at the source, the cache, responses and AI bodies", async () => {
+  const c = load();
+  const y = await c.rt32Yahoo("NVDA");
+  assert.deepEqual(keyScan(y, "y", []), []);
+  assert.equal(y.financialData.profitMargins.raw, 0.5, "other fields kept");
+  c.RT32.cache.set("NVDA", { at: 1, data: { valuation: { price: 100, pe: 30, targetMean: 250, recommendation: "buy" }, metrics: { peRatio: 30 } } });
+  assert.deepEqual(keyScan(c.RT32.cache.get("NVDA"), "cache", []), []);
+  assert.equal(c.RT32.cache.get("NVDA").data.valuation.pe, 30);
+  const body = { symbol: "BP.L", valuation: { price: 619.5, targetMean: 638.06, recommendation: "buy" }, priceTarget: { targetHigh: 1 }, recommendations: [{ buy: 3 }], upgrades: [], nested: [{ deep: { rating: "Buy", averageAnalystRating: "1.8 - Buy", ok: 1 } }] };
+  const out = c.bb8oShape({ bb8oPath: "/api/financials" }, 200, body);
+  assert.deepEqual(keyScan(out, "body", []), []);
+  assert.equal(out.valuation.price, 619.5); assert.equal(out.nested[0].deep.ok, 1);
+  const ask = { messages: [{ role: "user", content: "Why is NVDA moving?" }], context: "Ticker: NVDA (NVIDIA)\nAI score: 76/100 | Sentiment: Bullish | Rating: Strong Buy\nActive ticker: NVDA NVIDIA · Score 76/100 · Bullish · Strong Buy · $182.10 · Beta 1.72 · 52.8x\nAnalysts' mean price target is $250.00 (40 analysts), consensus rating Buy. Revenue grew 50%. The street recommendation is Outperform.", tickers: [{ tk: "NVDA", ra: "Strong Buy", targetMean: 250, sc: 76 }] };
+  const b1 = await c.readBody({ __body: ask }), b2 = await c.bb2Read0({ __body: ask });
+  for (const b of [b1, b2]) {
+    assert.deepEqual(keyScan(b, "ask", []), []);
+    assert.equal(/Strong Buy|Rating:|rating Buy|Outperform|price target|\$250/i.test(JSON.stringify(b)), false, JSON.stringify(b));
+    assert.match(b.context, /Sentiment: Bullish/); assert.match(b.context, /Score 76\/100 · Bullish · \$182\.10/); assert.match(b.context, /Revenue grew 50%/);
+    assert.equal(b.messages[0].content, "Why is NVDA moving?"); assert.equal(b.tickers[0].sc, 76);
+  }
+  // cycles and non-objects are safe
+  const cyc = { a: 1 }; cyc.self = cyc; c.bb8oStripRatings(cyc); assert.equal(cyc.a, 1);
+  assert.equal(c.bb8oStripRatings(null), null);
 });
 
 test("protocol: names, no timers, anchors, refuse marker, dry run", () => {

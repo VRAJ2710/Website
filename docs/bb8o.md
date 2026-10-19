@@ -1,9 +1,10 @@
 # bb8o: quote fallback, insider trade dates, LSE profile, canonical feed status, brief edition
 
 Server only (`deploy/patch_bb8o.py`), stacked on bb8n (server.js md5 `9b48a917c654891a50e7c7c6bd8c9a49`, 16308 lines)
-giving md5 `773e60e7698cbe24c9cde260d15028db` (16878 lines). The block is appended at the end of server.js. Its 25 anchors are
+giving md5 `4354704c92cf75f9d79f1181d14abc31` (16952 lines). The block is appended at the end of server.js. Its 25 anchors are
 long-standing declarations (json, handle, yahooQuote, fetchYahooQuote, bb5e/bb5g specs, bb7 Form 4 parser, parseForm4,
-bb8lRowDates, rt32Crumb/rt32Get, _rt48sHeads, bb8cUnit, bb8dUk) plus the `// BB8N_JS_END` marker. It doesn't wrap or anchor
+bb8lRowDates, rt32Crumb/rt32Get, rt32Yahoo, RT32, readBody, the `var bb2Read0 = …` alias, _rt48sHeads, bb8cUnit,
+bb8dUk) and the `// BB8N_JS_END` marker, 29 in all. It doesn't wrap or anchor
 on Ask grounding, the numeric guard, news-source relevance or chat meta, so it rebases cleanly onto bb8p.
 No tables, timers, intervals, dependencies, secrets, paid feeds or Stripe changes, and no new SEC requests. The shared sec.gov
 limiter is untouched (itest_f: max 10 starts in any rolling second).
@@ -165,6 +166,51 @@ the same feeds, but they can differ for up to one 5-minute read window.
 
 Frontend: the guest "Headline focus" (`_buildLocalBrief`, NEWS[0]) should use `edition.lead.headline` and `updatedAtUk`.
 
+## 6. Analyst ratings and price targets (approved by Jack)
+
+There is one sanitizer, `bb8oStripRatings`. It deletes these keys, case-insensitively, at any depth:
+
+- `targetHighPrice targetLowPrice targetMeanPrice targetMedianPrice targetHigh targetLow targetMean targetMedian`
+- `priceTarget(s) targetPrice analystTarget(s) consensusTarget`
+- `recommendationKey recommendationMean recommendation recommendations recommendationTrend upgradeDowngradeHistory
+  upgrades downgrades numberOfAnalystOpinions`
+- `analystRating(s) averageAnalystRating consensusRating rating ratings ra`
+
+Where it runs:
+
+- **Response layer:** `json()`, so every JSON route. Live NVDA, MU, BP.L, AAPL, HSBA.L, MSFT, 0700.HK, SHEL.L and BTC-USD
+  replays on 16 routes each, plus 7 general routes (151 responses), had 0 banned keys after. Before, `/api/financials`
+  carried `valuation.targetMean` and `valuation.recommendation` for 8 of the 9 symbols. That was the only route that did.
+- **Source:** the `rt32Yahoo` quoteSummary result. It removes `financialData.target*Price`, `recommendationKey/Mean`,
+  `numberOfAnalystOpinions`, and the `recommendationTrend` / `upgradeDowngradeHistory` modules if present. So
+  `rt32Build` (valuation), the Ask valuation and peer facts, the card beta/earnings lookups and bb8c's builds never get them.
+- **Cache:** `RT32.cache.set` strips each stored entry, and existing entries are stripped once at load. So anything reading
+  the fundamentals cache, including the numeric guard and peer blocks, never sees them.
+- **AI request bodies:** `readBody` (/api/chat, /api/brief, committee and the other AI routes) and `bb2Read0` (Ask paths).
+  Keys are stripped, and the scrubber `bb8oScrubText` removes three kinds of rating/target text before any fact or prompt
+  builder runs:
+  - "Rating: …" labels, for example the client's "AI score … | Rating: Strong Buy";
+  - rating words between `·`/`|` separators, for example "Active ticker: NVDA … · Bullish · Strong Buy · $182.10";
+  - price-target sentences with a figure, and "consensus/analyst/street rating X".
+  Sentiment, score, price, beta and P/E are kept, and the user's question is untouched.
+- **Finnhub:** `/api/finnhub` serves only `endpoint=quote`. Recommendation, price-target and upgrade-downgrade endpoints
+  return `[]` and were checked in the scan.
+- **AI JSON outputs:** a `recommendation` field in an AI JSON output (committee) is also removed from the response.
+
+Client (Frontend's job, not changed here):
+
+- `ra:` ratings ("Strong Buy", "Buy", "Hold", "Accumulate", "Avoid") are in the built-in asset list `A` (app.js lines
+  228–466, about 200 entries) and in the RT43_INTL loop at line 19706 (`ra: "Hold"`). Other `ra:` lines are at 1182, 1185,
+  1224, 4072, 4083 and 21322.
+- The rating is shown or sent at line 584 (Ask context "Rating: …"), 9305 ("Rating:"), 13284 (badge), 20804 (Ask
+  "Active ticker" line), and 1229/2964 ("Avoid" counts toward bearish weight).
+- `renderFinancials` (line 10215 on) reads `priceTarget`, `recommendations` and `upgrades` and draws "ANALYST PRICE
+  TARGETS" and Buy/Hold/Sell counts. Those fields are no longer sent, so those panels stay empty. Frontend should remove
+  them.
+
+Not stripped: consensus EPS and revenue estimates (`epsEstimate`, `earningsAverage`, `earningsTrend`, the forward P/E basis).
+These are estimates, not ratings or targets.
+
 ## Tests
 
-`node --test test/bb8o.test.js`: 10 tests, offline, using vm with stubs.
+`node --test test/bb8o.test.js`: 11 tests, offline, using vm with stubs.

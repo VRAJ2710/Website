@@ -4,6 +4,8 @@ timestamp and session, flagged fallback; Taiwan listings get the Taipei session.
 to deemedExecutionDate then periodOfReport (same XML, no extra SEC request); never the filing date. (3) /api/search
 returns result[] in the client's shape plus an LSE listing profile (GBp handled); GET /api/listing-profile.
 (4) One canonical feed object {v,status,ageSec,asOf,...} on every quote row of every quote route.
+(6) Analyst ratings and price targets are stripped by one sanitizer (bb8oStripRatings) on every JSON response, the
+Yahoo quoteSummary source, the fundamentals cache and AI request bodies (rating / target text scrubbed).
 (5) GET /api/brief/edition and brief.edition: a stable, request-driven edition, memory only.
 Server.js only. Stacked on bb8n (server md5 9b48a917c654891a50e7c7c6bd8c9a49). Appended at the end of the file;
 anchors are long-standing declarations only. See docs/bb8o.md.
@@ -94,6 +96,10 @@ REQUIRED = [
     ("bb8lRowDates", "function bb8lRowDates(body) {"),
     ("bb8cUnit", "function bb8cUnit(ccy) {"),
     ("bb8dUk", "function bb8dUk(ms) {"),
+    ("rt32Yahoo", "async function rt32Yahoo(sym) {"),
+    ("RT32", "const RT32 = { cache: new Map(),"),
+    ("readBody", "async function readBody(req) {"),
+    ("bb2Read0", 'var bb2Read0 = typeof readBody === "function" ? readBody : async function () { return {}; };'),
 ]
 for a, _b in REPLACE:
     REQUIRED.append(("replace: " + a.strip()[:60], a))
@@ -576,7 +582,62 @@ function bb8oValuation(body) {
   else { v.price = null; v.priceMissing = true; }
   return body;
 }
+// ── Analyst ratings and price targets: stripped everywhere (keys), and scrubbed from prompt context (text) ──
+var BB8O_RATING_KEYS = {
+  targethighprice: 1, targetlowprice: 1, targetmeanprice: 1, targetmedianprice: 1, targethigh: 1, targetlow: 1, targetmean: 1, targetmedian: 1,
+  pricetarget: 1, pricetargets: 1, targetprice: 1, analysttarget: 1, analysttargets: 1, consensustarget: 1,
+  recommendationkey: 1, recommendationmean: 1, recommendation: 1, recommendations: 1, recommendationtrend: 1,
+  upgradedowngradehistory: 1, upgrades: 1, downgrades: 1, numberofanalystopinions: 1,
+  analystrating: 1, analystratings: 1, averageanalystrating: 1, consensusrating: 1, rating: 1, ratings: 1, ra: 1
+};
+var BB8O_RATING_WORDS = "Strong Buy|Strong Sell|Moderate Buy|Moderate Sell|Buy|Sell|Hold|Accumulate|Avoid|Reduce|Outperform|Underperform|Market Perform|Overweight|Underweight|Equal[- ]Weight";
+var BB8O_RATING_SEP_RE = new RegExp("\\s[·|]\\s(?:" + BB8O_RATING_WORDS + ")(?=\\s[·|]|\\s*$)", "gim");
+var BB8O_RATING_LABEL_RE = /\s*[|·]?\s*\b(?:Analyst\s+)?(?:Rating|Recommendation|Consensus rating)s?:\s*[^|·\n]*/gi;
+var BB8O_TARGET_RE = /[^.\n|·]*\b(?:price targets?|target prices?|analyst(?:s'?)? (?:price )?targets?|consensus targets?|mean targets?|target (?:mean|median|high|low)(?: price)?)\b(?:[^.\n|·]|\.(?=\d))*\d(?:[^.\n|·]|\.(?=\d))*\.?/gi;
+var BB8O_CONSENSUS_RE = new RegExp(",?\\s*\\b(?:consensus|average analyst|analyst|street)\\s+(?:rating|recommendation)s?\\s*(?:of|is|was|:)?\\s*(?:" + BB8O_RATING_WORDS + ")\\b\\.?", "gi");
+var bb8oStripStats = { keys: 0, text: 0 };
+function bb8oRatingKey(k) { return Object.prototype.hasOwnProperty.call(BB8O_RATING_KEYS, String(k).toLowerCase()); }
+// The single sanitizer: removes every analyst-rating / price-target key, recursively, in place.
+function bb8oStripRatings(x, seen, depth) {
+  if (!x || typeof x !== "object") return x;
+  depth = depth || 0;
+  if (depth > 14) return x;
+  seen = seen || new WeakSet();
+  if (seen.has(x)) return x;
+  seen.add(x);
+  if (Array.isArray(x)) { for (var i = 0; i < x.length; i++) bb8oStripRatings(x[i], seen, depth + 1); return x; }
+  if (x instanceof Map) { x.forEach(function (v) { bb8oStripRatings(v, seen, depth + 1); }); return x; }
+  if (typeof Buffer !== "undefined" && Buffer.isBuffer && Buffer.isBuffer(x)) return x;
+  Object.keys(x).forEach(function (k) {
+    if (bb8oRatingKey(k)) { try { delete x[k]; bb8oStripStats.keys++; } catch (e) {} return; }
+    bb8oStripRatings(x[k], seen, depth + 1);
+  });
+  return x;
+}
+function bb8oScrubText(s) {
+  if (typeof s !== "string" || !s) return s;
+  var out = s.replace(BB8O_RATING_LABEL_RE, "").replace(BB8O_RATING_SEP_RE, "").replace(BB8O_TARGET_RE, "").replace(BB8O_CONSENSUS_RE, "");
+  if (out !== s) bb8oStripStats.text++;
+  return out;
+}
+// Request bodies for AI routes: keys stripped and rating / target text scrubbed before any fact or prompt builder sees them.
+function bb8oScrubBody(b, seen, depth) {
+  if (!b || typeof b !== "object") return b;
+  depth = depth || 0;
+  if (depth > 14) return b;
+  seen = seen || new WeakSet();
+  if (seen.has(b)) return b;
+  seen.add(b);
+  if (Array.isArray(b)) { for (var i = 0; i < b.length; i++) { if (typeof b[i] === "string") b[i] = bb8oScrubText(b[i]); else bb8oScrubBody(b[i], seen, depth + 1); } return b; }
+  Object.keys(b).forEach(function (k) {
+    if (bb8oRatingKey(k)) { try { delete b[k]; bb8oStripStats.keys++; } catch (e) {} return; }
+    if (typeof b[k] === "string") b[k] = bb8oScrubText(b[k]);
+    else bb8oScrubBody(b[k], seen, depth + 1);
+  });
+  return b;
+}
 function bb8oShape(res, status, body) {
+  try { bb8oStripRatings(body); } catch (e) {}
   var path = res && res.bb8oPath;
   if (!path || !body || typeof body !== "object") return body;
   if (BB8O_ROUTES[path]) return bb8oQuoteBody(body, path, res.bb8oQuery);
@@ -647,6 +708,25 @@ try {
       var out = bb8oRowDates0.apply(this, arguments);
       try { return bb8oInsiderBody(out); } catch (e) { return out; }
     };
+  }
+  if (typeof rt32Yahoo === "function") {
+    var bb8oRt32Y0 = rt32Yahoo;
+    rt32Yahoo = function () {
+      return Promise.resolve(bb8oRt32Y0.apply(this, arguments)).then(function (r) { try { return bb8oStripRatings(r); } catch (e) { return r; } });
+    };
+  }
+  if (typeof RT32 === "object" && RT32 && RT32.cache && typeof RT32.cache.set === "function") {
+    var bb8oCacheSet0 = RT32.cache.set;
+    RT32.cache.set = function (k, v) { try { bb8oStripRatings(v); } catch (e) {} return bb8oCacheSet0.apply(this, arguments); };
+    try { RT32.cache.forEach(function (v) { bb8oStripRatings(v); }); } catch (e) {}
+  }
+  if (typeof readBody === "function") {
+    var bb8oReadBody0 = readBody;
+    readBody = async function () { var b = await bb8oReadBody0.apply(this, arguments); try { return bb8oScrubBody(b); } catch (e) { return b; } };
+  }
+  if (typeof bb2Read0 === "function") {
+    var bb8oRead0 = bb2Read0;
+    bb2Read0 = async function () { var b = await bb8oRead0.apply(this, arguments); try { return bb8oScrubBody(b); } catch (e) { return b; } };
   }
   if (typeof json === "function") {
     var bb8oJson0 = json;
