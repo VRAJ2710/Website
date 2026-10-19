@@ -708,6 +708,41 @@ def qa_client(app):
         'try { setTimeout(function () { try { fetch("/api/brief/edition", { signal: AbortSignal.timeout(8000) }).then(function (res) { if (!res || !res.ok) return null; return res.json(); }).then(function (j) { if (j) fe76_noteEdition(j); }).catch(function () {}); } catch (e) {} }, 600); } catch (e) {}',
         "edition fetch",
     )
+    app = once(
+        app,
+        'const fx4=d.p<50&&tk!=="TNX"&&typeof TICKER_CATS!=="undefined"&&TICKER_CATS[tk]==="fx";',
+        'const fx4=typeof fe77_fxPair==="function"&&!!fe77_fxPair(tk)&&fe77_fxPair(tk).indexOf("JPY")<0;',
+        "fx dp exact",
+    )
+    app = once(
+        app,
+        ': (b && b.date ? ` (brief for ${b.date})` : "");',
+        ': "";',
+        "brief iso kicker",
+    )
+    app = times(
+        app,
+        'd.macro?.tnx?.px != null ? d.macro.tnx.px + "%" : "—"',
+        'd.macro?.tnx?.px != null ? fe77_yieldText(d.macro.tnx.px) : "—"',
+        "gold yield 2dp",
+        2,
+    )
+    app = once(
+        app,
+        """    const candleSeries = chart.addCandlestickSeries({
+      upColor: upCol, downColor: dnCol,
+      borderVisible: false,
+      wickUpColor: upCol, wickDownColor: dnCol,
+    });""",
+        """    const fe77Fmt = typeof fe77_chartFmt === "function" ? fe77_chartFmt(tk) : null;
+    const candleSeries = chart.addCandlestickSeries({
+      upColor: upCol, downColor: dnCol,
+      borderVisible: false,
+      wickUpColor: upCol, wickDownColor: dnCol,
+      ...(fe77Fmt ? { priceFormat: fe77Fmt } : {}),
+    });""",
+        "chart dp",
+    )
     return app
 
 

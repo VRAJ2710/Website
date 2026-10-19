@@ -250,6 +250,66 @@ function fe77_dxyTitle(ice, fallback, label) {
   if (ice) return label || "US Dollar Index (ICE, Yahoo DX-Y.NYB)";
   return "Dispatch FX basket";
 }
+function fe77_fxPair(raw) {
+  var s = String(raw || "").toUpperCase().replace(/^\$/, "").trim();
+  if (!s) return "";
+  var known = fe77_fxKey(s);
+  if (known) return known;
+  var yahoo = {
+    "GBP=X": "GBPUSD", "EUR=X": "EURUSD", "AUD=X": "AUDUSD", "NZD=X": "NZDUSD",
+    "CAD=X": "USDCAD", "CHF=X": "USDCHF", "MXN=X": "USDMXN", "BRL=X": "USDBRL", "INR=X": "USDINR",
+    "AUDUSD=X": "AUDUSD", "USDCAD=X": "USDCAD", "USDCHF=X": "USDCHF", "NZDUSD=X": "NZDUSD",
+    "EURGBP=X": "EURGBP", "USDMXN=X": "USDMXN", "USDBRL=X": "USDBRL", "USDINR=X": "USDINR"
+  };
+  if (yahoo[s]) return yahoo[s];
+  var bare = s.replace(/=X$/, "");
+  var iso = " USD EUR GBP JPY CHF AUD CAD NZD HKD CNH CNY SEK NOK MXN BRL INR ZAR TRY SGD DKK PLN ";
+  if (/^[A-Z]{6}$/.test(bare)) {
+    var a = bare.slice(0, 3), b = bare.slice(3);
+    if (iso.indexOf(" " + a + " ") >= 0 && iso.indexOf(" " + b + " ") >= 0 && a !== b) return bare;
+  }
+  return "";
+}
+function fe77_isYield(raw) {
+  var s = String(raw || "").toUpperCase().replace(/^\$/, "").replace(/^\^/, "").trim();
+  var bare = s.replace(/=X$/, "");
+  if (/^(TNX|IRX|FVX|TYX|US2Y|US02Y|US5Y|US05Y|US10Y|US30Y|DFII5|DFII10|DFII30|DFF|FEDFUNDS|SOFR|SONIA|ESTR|TONAR|UK10Y|GB10Y|DE10Y|JP10Y|GILT|BUND|JGB)$/.test(bare)) return true;
+  if (/YIELD|GILT|BUND|JGB|TIPS|REALYIELD|POLICY|BANKRATE|FEDFUND/.test(bare)) return true;
+  return false;
+}
+function fe77_yieldText(n) {
+  var v = Number(n);
+  if (!isFinite(v)) return "";
+  return v.toFixed(2) + "%";
+}
+function fe77_pxDp(tk, n) {
+  if (fe77_isYield(tk)) return 2;
+  var pair = fe77_fxPair(tk);
+  if (pair) return pair.indexOf("JPY") >= 0 ? 2 : 4;
+  var v = Math.abs(Number(n));
+  if (!(v > 0)) return 2;
+  if (v >= 10000) return 0;
+  if (v >= 1) return 2;
+  return 4;
+}
+function fe77_pxText(tk, n) {
+  var v = Number(n);
+  if (!isFinite(v)) return "";
+  if (fe77_isYield(tk)) return fe77_yieldText(v);
+  var dp = fe77_pxDp(tk, v);
+  if (dp === 0) return String(Math.round(v));
+  return v.toFixed(dp);
+}
+function fe77_kicker(s) {
+  return String(s == null ? "" : s).replace(/\s*\(\s*brief\s+for\s+[^)]*\)/ig, "").replace(/[ \t]{2,}/g, " ").trim();
+}
+function fe77_chartFmt(tk) {
+  if (fe77_isYield(tk)) return { type: "custom", minMove: 0.01, formatter: function (p) { return fe77_yieldText(p); } };
+  var pair = fe77_fxPair(tk);
+  if (!pair) return null;
+  var dp = pair.indexOf("JPY") >= 0 ? 2 : 4;
+  return { type: "price", precision: dp, minMove: Math.pow(10, -dp) };
+}
 function fe77_quotePreview(meta) {
   if (typeof fe76_quoteBlock === "function") {
     try { var html = fe76_quoteBlock(meta); if (html) return html; } catch (e) {}
@@ -859,6 +919,64 @@ try {
     return d;
   };
 } catch (e) {}
+try { fe76_isFx = function (tk) { return !!fe77_fxPair(tk); }; } catch (eFx) {}
+try {
+  var fe77_plain1 = fe76_plain;
+  fe76_plain = function (tk, n) {
+    if (fe77_isYield(tk)) return fe77_yieldText(n);
+    return fe77_plain1.apply(this, arguments);
+  };
+} catch (ePlain) {}
+try {
+  var fe77_money1 = fe66_money;
+  fe66_money = function (tk, n) {
+    if (fe77_isYield(tk)) return fe77_yieldText(n);
+    return fe77_money1.apply(this, arguments);
+  };
+} catch (eMoney) {}
+try {
+  var fe77_ccy1 = fe73_ccy;
+  fe73_ccy = function (tk, hint) {
+    if (fe77_isYield(tk)) return "PCT";
+    if (fe77_fxPair(tk)) return "FX";
+    var c = fe77_ccy1.apply(this, arguments);
+    if (c === "FX") return "USD";
+    return c;
+  };
+} catch (eCcy) {}
+try {
+  var fe77_abs1 = fe73_absText;
+  fe73_absText = function (ccy, n) {
+    var tk = "";
+    try { tk = fe76_absTk || ""; } catch (eA) { tk = ""; }
+    if (fe77_isYield(tk)) {
+      var v = Number(n);
+      if (!isFinite(v)) return "";
+      var sign = v < 0 ? "-" : (v > 0 ? "+" : "");
+      return sign + Math.abs(v).toFixed(2);
+    }
+    return fe77_abs1.apply(this, arguments);
+  };
+} catch (eAbs) {}
+try {
+  var fe77_qb1 = fe76_quoteBlock;
+  fe76_quoteBlock = function (meta) {
+    var q = null;
+    try { q = fe76_quoteOf(meta); } catch (eQ) { q = null; }
+    var sym = q && (q.symbol || q.ticker || q.feedSymbol || "");
+    if (q && (fe77_isYield(sym) || fe77_fxPair(sym))) {
+      var price = q.price != null ? q.price : (q.px != null ? q.px : q.last);
+      var n = typeof price === "number" ? price : Number(String(price).replace(/[^0-9.\-]/g, ""));
+      var label = q.name || sym;
+      var px = fe77_isYield(sym) ? fe77_yieldText(n) : fe77_pxText(sym, n);
+      var asOf = "";
+      try { asOf = fe76_quoteAsOf(q); } catch (eAs) { asOf = ""; }
+      var line = String(label) + " " + px + (asOf ? " \u00b7 " + asOf : "");
+      return '<div class="fe76-qlines"><div class="fe76-qline">' + fe76_esc(line) + "</div></div>";
+    }
+    return fe77_qb1.apply(this, arguments);
+  };
+} catch (eQb) {}
 
 try {
   var fe77_chg1 = fe73_chgLine;
@@ -889,10 +1007,14 @@ try {
     try { edition = (b && (b.edition || null)) || (typeof fe76_edition !== "undefined" ? fe76_edition : null); } catch (e3) {}
     var title = fe77_briefTitle(edition || b, hour);
     var date = fe77_ukStamp(when);
-    if (edition && (edition.label || (edition.lead && edition.lead.label))) return title + (date ? " · " + date : "");
-    raw = raw.replace(/\bMorning\b/g, fe77_dayPart(hour));
-    if (date && raw.indexOf(date) < 0) raw = raw + " · " + date;
-    return raw;
+    var out;
+    if (edition && (edition.label || (edition.lead && edition.lead.label))) out = title + (date ? " · " + date : "");
+    else {
+      raw = raw.replace(/\bMorning\b/g, fe77_dayPart(hour));
+      if (date && raw.indexOf(date) < 0) raw = raw + " · " + date;
+      out = raw;
+    }
+    return fe77_kicker(out);
   };
 } catch (e) {}
 

@@ -127,4 +127,48 @@ assert(follow.indexOf("sendChatMessage()") < 0, "follow-ups do not send");
 assert(app.indexOf('if (t === "chat") { toggleChat(); const inp = document.getElementById("chatInp"); if (inp && v) { inp.value = v; sendChatMessage();') < 0, "chat action does not send");
 assert(app.indexOf("function fe77_chatWipeAll(") === app.lastIndexOf("function fe77_chatWipeAll("), "one wipe");
 
+assert(ctx.fe77_fxPair("TNX") === "", "tnx is not fx");
+assert(ctx.fe77_fxPair("DXY") === "", "dxy is not fx");
+assert(ctx.fe77_fxPair("EURUSD") === "EURUSD", "eur pair");
+assert(ctx.fe77_fxPair("USDJPY") === "USDJPY", "jpy pair");
+assert(ctx.fe77_pxText("TNX", 5.1) === "5.10%", "us10 2dp");
+assert(ctx.fe77_pxText("^TYX", 4.5) === "4.50%", "us30 2dp");
+assert(ctx.fe77_pxText("US2Y", 4.25) === "4.25%", "us2 2dp");
+assert(ctx.fe77_pxText("DFII10", 1.8) === "1.80%", "real yield 2dp");
+assert(ctx.fe77_pxText("GILT", 4.2) === "4.20%", "gilt 2dp");
+assert(ctx.fe77_pxText("BUND", 2.4) === "2.40%", "bund 2dp");
+assert(ctx.fe77_pxText("JGB", 0.85) === "0.85%", "jgb 2dp");
+assert(ctx.fe77_pxText("SONIA", 4) === "4.00%", "policy 2dp");
+assert(ctx.fe77_pxText("EURUSD", 1.1212) === "1.1212", "fx 4dp");
+assert(ctx.fe77_pxText("USDJPY", 154.32) === "154.32", "jpy 2dp");
+assert(ctx.fe77_pxText("GBPJPY", 190.5) === "190.50", "gbpjpy 2dp");
+assert(ctx.fe77_pxText("DXY", 104.25) === "104.25", "dxy 2dp");
+assert(ctx.fe77_pxText("AAPL", 227.4) === "227.40", "stock 2dp");
+assert(ctx.fe77_pxText("VIX", 18.4) === "18.40", "vix 2dp");
+assert(ctx.fe77_kicker("Afternoon stance: Defensive (brief for 2026-10-19) · Mon 19 Oct") === "Afternoon stance: Defensive · Mon 19 Oct", "kicker iso");
+assert(ctx.fe77_kicker("AFTERNOON STANCE: DEFENSIVE (BRIEF FOR 2026-10-19) · MON 19 OCT") === "AFTERNOON STANCE: DEFENSIVE · MON 19 OCT", "kicker upper");
+assert(app.indexOf("(brief for ${b.date})") < 0, "brief for source gone");
+assert(app.indexOf('TICKER_CATS[tk]==="fx"') < 0, "old fx4 gate gone");
+
+const cats = app.match(/const TICKER_CATS=\{[\s\S]*?\};/);
+assert(cats, "ticker cats present");
+const table = [];
+const bad = [];
+vm.runInContext("var TICKER_CATS=" + cats[0].replace(/^const TICKER_CATS=/, "").replace(/;$/, ""), ctx);
+Object.keys(ctx.TICKER_CATS).forEach(function (tk) {
+  const cat = ctx.TICKER_CATS[tk];
+  const yieldTk = ctx.fe77_isYield(tk);
+  const pair = ctx.fe77_fxPair(tk);
+  const sample = yieldTk ? 5.1 : (pair ? (pair.indexOf("JPY") >= 0 ? 154.32 : 1.1212) : 100.5);
+  const text = ctx.fe77_pxText(tk, sample);
+  const dp = yieldTk ? 2 : pair ? (pair.indexOf("JPY") >= 0 ? 2 : 4) : 2;
+  const frac = (String(text).match(/\.(\d+)/) || ["", ""])[1];
+  table.push(tk + " " + cat + " " + text + " dp" + frac.length);
+  if (frac.length !== dp) bad.push(tk + " got " + text + " want " + dp);
+  if (yieldTk && text.slice(-1) !== "%") bad.push(tk + " missing %");
+  if (!yieldTk && !pair && /\d\.\d{4}/.test(text)) bad.push(tk + " leaked 4dp " + text);
+});
+assert(!bad.length, "built-in dp " + bad.join("; "));
+console.log("dp table " + table.length + " instruments");
+
 console.log("fe77 tests passed");
