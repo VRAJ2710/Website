@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* Mocked badge check for the chat64 quote wrappers.
-   7a: delayed, stale, fresh, absent, closed, closed without a note, quiet FX.
+   7a: delayed, stale, fresh, absent, closed, closed without a note, quiet status.
    7b: CoinGecko stale headers, and a reply with no headers.
    Reads the helpers out of deploy/patch_rt54.py. Does not start the server. */
 "use strict";
@@ -62,17 +62,30 @@ ctx.fe64_keepYq("MSFT", { status: "closed", nextOpen: "2026-07-01T13:30:00.000Z"
 out = ctx.fe64_quoteApply("MSFT", aged);
 ok(out.status === "closed" && out.label === "CLOSED" && out.fe64Note === "opens 14:30 UK", "closed without a note builds opens HH:MM UK");
 
-ctx.fe64_keepYq("USDSEK", { status: "fresh", note: "quiet · local market opens 08:00 UK" });
+ctx.fe64_keepYq("USDSEK", { status: "quiet", note: "local market opens 08:00 UK" });
 out = ctx.fe64_quoteApply("USDSEK", aged);
-ok(out.status !== "stale" && out.label === "quiet · local market opens 08:00 UK" && out.detail === out.label, "quiet FX shows the note");
-ok(ctx.fe64_allowAgeStale("USDSEK") === false, "quiet FX is not aged");
+ok(out.status === "quiet" && out.label === "local market opens 08:00 UK" && out.detail === out.label, "quiet status shows the note");
+ok(!/stale/i.test(out.status + out.label), "quiet status is not STALE");
+ok(ctx.fe64_allowAgeStale("USDSEK") === false, "quiet status is not aged");
+
+ctx.fe64_keepYq("USDJPY", { status: "quiet" });
+out = ctx.fe64_quoteApply("USDJPY", aged);
+ok(out.status === "quiet" && out.label === "Quiet", "quiet without a note is never STALE");
+
+ctx.fe64_keepYq("GBPUSD", { status: "stale", note: "quiet · local market opens 08:00 UK" });
+out = ctx.fe64_quoteApply("GBPUSD", aged);
+ok(out.status === "stale" && out.label === "STALE", "a stale quote stays STALE when the note says quiet");
+
+ctx.fe64_keepYq("EURGBP", { status: "fresh", note: "quiet · local market opens 08:00 UK" });
+out = ctx.fe64_quoteApply("EURGBP", aged);
+ok(out.status === "live" && out.label === "LIVE", "fresh ignores a quiet note");
 
 ctx.fe64_keepYq("EURUSD", { status: "closed", note: "quiet · local market opens 07:00 UK" });
 out = ctx.fe64_quoteApply("EURUSD", aged);
 ok(out.status === "closed" && out.label === "CLOSED" && out.fe64Note === "quiet · local market opens 07:00 UK", "closed beats a quiet note");
 
 ok(ctx.fe64_quoteApply("AAPL", aged).status === "closed", "AAPL stays closed");
-ok(ctx.fe64_quoteApply("USDSEK", aged).label.indexOf("quiet") === 0, "USDSEK stays on its own note");
+ok(ctx.fe64_quoteApply("USDSEK", aged).label === "local market opens 08:00 UK", "USDSEK stays on its own note");
 ok(ctx.fe64_quoteApply("MU", aged) === aged, "MU is untouched by the other names");
 
 function headers(map, body) {

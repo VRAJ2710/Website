@@ -31,17 +31,19 @@ entity such as "Micron Technology (MU)" stays one inline run.
 with the title and the paragraph.
 
 6) Guest home. An inline head script marks the document when JS runs, and CSS
-hides the static fallback. The nodes stay in the DOM for no-JS visitors.
+hides the static fallback. The nodes stay in the DOM for no-JS visitors. The
+mounted app does not paint the unstyled front-door letter; guests get the
+styled home.
 
 7) Quote badges, per instrument. A /api/yahoo-quote item may carry status
-(closed, stale, delayed or fresh), delayMin, note and nextOpen. fe64_ wrappers
-sit on _quoteMetaBase and on the quote-meta function after the rt43 wrapper.
-Closed shows a CLOSED badge plus that item's note, and is never aged into
-STALE. With no note, nextOpen becomes "opens HH:MM UK" (Europe/London). A
-quiet note is shown as written and is never aged into STALE. Delayed shows
-the note. Stale shows STALE. Fresh keeps today's live or as-of label. No
-status keeps today's behaviour. Priority is closed, then a quiet note, then
-stale, delayed, fresh. This never paints a site-wide "markets closed".
+(fresh, delayed, stale, closed or quiet), delayMin, note and nextOpen.
+fe64_ wrappers sit on _quoteMetaBase and on the quote-meta function after
+the rt43 wrapper. Closed shows CLOSED plus that item's note, or
+"opens HH:MM UK" from nextOpen (Europe/London). Quiet shows the note.
+Delayed shows the note. Only stale shows STALE. Fresh keeps today's live
+or as-of label. A missing status keeps today's behaviour, including when
+the note happens to contain the word quiet. This never paints a site-wide
+"markets closed".
 
 8) CoinGecko. A stale /api/coingecko reply keeps its JSON and sets
 X-Dispatch-Data-Status: stale plus X-Dispatch-As-Of (the older
@@ -58,8 +60,8 @@ desk figures (the 1.62 map, a forced SPY 1.0, a fallback of 1) are not shown.
 
 10) The markets panel subtitle uses the same trading-now sentence as the header.
 
-No server file is changed. The client reads bb5c, bb5d and the upcoming bb5e
-fields when they are present. Guest ?diag=1 returning 200 is a server item.
+No server file is changed. The client reads bb5c, bb5d and bb5e fields when
+they are present. Guest ?diag=1 returning 200 is a server item.
 deploy/check_rt54_quote.js mocks the badge and the CoinGecko headers.
 
 Usage: python3 patch_rt54.py [--check] <dir containing app.js and index.html>"""
@@ -98,6 +100,11 @@ def sub1(src, old, new, label):
     if c != 1: die('%s matched %d times' % (label, c))
     return src.replace(old, new, 1)
 
+def subn(src, old, new, label, n):
+    c = src.count(old)
+    if c != n: die('%s matched %d times, wanted %d' % (label, c, n))
+    return src.replace(old, new)
+
 # 1) Tags. Crypto only when the story is really about crypto. A company-stock
 # story is Stocks before a commodity keyword (oil, crude, brent) can win.
 s = sub1(s,
@@ -122,11 +129,17 @@ s = sub1(s,
   ov.innerHTML = `
     <div class="premium-gate" style="width:min(480px,100%);max-width:480px;box-sizing:border-box;margin:auto;flex:0 0 auto;padding:22px 20px 18px;text-align:left">
       <div class="eyebrow" style="margin:0 0 8px;padding:0;font-family:var(--mn);font-size:10px;font-weight:700;letter-spacing:0.16em;line-height:1.2;color:var(--gd);text-align:left">PREMIUM</div>
-      <h2 id="login-gate-title" tabindex="-1" style="margin:0;padding:0;font-size:22px;line-height:1.25;letter-spacing:-0.02em;text-align:left">${featureName}</h2>
+      <h2 id="login-gate-title" tabindex="-1" style="margin:0;padding:0;font-size:22px;line-height:1.25;letter-spacing:-0.02em;text-align:left;outline:none">${featureName}</h2>
       <p style="color:var(--text-secondary);max-width:none;margin:10px 0 16px;text-align:left;line-height:1.5">
-        Free users keep tape, regime, desk brief &amp; Lab. This feature needs Premium (£15/mo · live Stripe).
+        Free users keep tape, regime, desk brief &amp; Lab. This feature needs Premium (£15/month, cancel anytime).
       </p>''',
 'ask paywall header')
+s = sub1(s,
+'''  _openA11yDialog(ov,()=>_closeA11yDialog(ov),"#login-gate-title");''',
+'''  ov.tabIndex=-1;ov.style.outline="none";
+  _openA11yDialog(ov,()=>_closeA11yDialog(ov),null);
+  setTimeout(function(){ try { ov.focus(); } catch (e) {} }, 40);''',
+'paywall focus stays on the dialog')
 
 # 3) Beta. Sensitivity row: a null value is an em dash, never a desk constant.
 s = sub1(s,
@@ -375,7 +388,24 @@ s = sub1(s,
 '''    acc = fe64_joinChunk(acc, chunk);''',
 'ask token join')
 
-# Paint the guest home before the boot veil lifts, so the hidden fallback is not a blank gap.
+# The static article stays in the page for no-JS. The mounted app uses the styled home,
+# not the unstyled front-door letter.
+s = sub1(s,
+'''function renderHome() {
+  _syncFrontDoorMode();
+  if (_isVisitor()) return renderPublicHome();''',
+'''function renderHome() {
+  _syncFrontDoorMode();
+  if (false) return renderPublicHome();''',
+'styled home replaces the unstyled letter')
+s = sub1(s,
+'''        if (main) main.innerHTML = renderPublicHome();''',
+'''        if (main) main.innerHTML = renderHome();''',
+'mobile home uses the styled home')
+s = sub1(s,
+'''        if(main) main.innerHTML=renderPublicHome();''',
+'''        if(main) main.innerHTML=renderHome();''',
+'price refresh uses the styled home')
 s = sub1(s,
 '''  if (pg === "home") {
     _syncFrontDoorMode();
@@ -388,11 +418,11 @@ s = sub1(s,
     if (IS_DESKTOP()) _desktopRoute("home");
     else if (typeof _isPublicDocumentVisitor === "function" && _isPublicDocumentVisitor()) {
       var fe64Main = document.getElementById("main");
-      if (fe64Main) fe64Main.innerHTML = renderPublicHome();
+      if (fe64Main) fe64Main.innerHTML = renderHome();
     } else renderMain();
   }
   _finishAppBoot();''',
-'guest home paints before the veil lifts')
+'guest home paints the styled home before the veil lifts')
 
 # Guest home: JS hides the static fallback before first paint. No-JS still shows it.
 h = sub1(h,
@@ -405,6 +435,19 @@ h = sub1(h,
 '''@media(max-width:760px){.seo-public-sections{grid-template-columns:1fr}.seo-public{padding-top:20px}.seo-public-hero{padding:24px 20px}}
 html.fe64-js .seo-public,html.fe64-js .seo-panel-copy{display:none!important}''',
 'guest fallback hidden once js runs')
+s = subn(s,
+'''title="Open Stripe billing to cancel your subscription"''',
+'''title="Cancel this subscription"''',
+'billing button wording', 3)
+s = sub1(s,
+'''Admin account: Premium is included and there is no Stripe subscription, so there is no billing to manage.''',
+'''Admin account: Premium is included, so there is no billing to manage.''',
+'admin billing sentence')
+s = sub1(s,
+'''Premium is already active on this account (no Stripe billing to manage)''',
+'''Premium is already active on this account.''',
+'checkout toast wording')
+
 
 # 7a) Keep server quote status on the instrument. Callers that pass only p/c/prev
 # still forward status, note, delayMin and nextOpen.
@@ -629,11 +672,11 @@ function fe64_keepYq(tk, q) {
   var key = fe64_yqKey(tk);
   if (!key) return;
   var st = q && typeof q.status === "string" ? q.status : "";
-  var known = st === "closed" || st === "stale" || st === "delayed" || st === "fresh";
+  var known = st === "closed" || st === "quiet" || st === "stale" || st === "delayed" || st === "fresh";
   var note = q && typeof q.note === "string" ? q.note : "";
   var nextOpen = q && (typeof q.nextOpen === "string" || typeof q.nextOpen === "number") ? q.nextOpen : "";
   var delayMin = q && typeof q.delayMin === "number" && isFinite(q.delayMin) ? q.delayMin : null;
-  if (known || fe64_isQuiet(note)) fe64_keepYq.map[key] = { status: known ? st : "", delayMin: delayMin, note: note, nextOpen: nextOpen };
+  if (known) fe64_keepYq.map[key] = { status: st, delayMin: delayMin, note: note, nextOpen: nextOpen };
   else delete fe64_keepYq.map[key];
 }
 function fe64_yqBag(tk) {
@@ -644,7 +687,7 @@ function fe64_yqBag(tk) {
 function fe64_yqFields(q) {
   var o = {};
   if (!q) return o;
-  if (q.status === "closed" || q.status === "stale" || q.status === "delayed" || q.status === "fresh") o.status = q.status;
+  if (q.status === "closed" || q.status === "quiet" || q.status === "stale" || q.status === "delayed" || q.status === "fresh") o.status = q.status;
   if (typeof q.delayMin === "number" && isFinite(q.delayMin)) o.delayMin = q.delayMin;
   if (typeof q.note === "string" && q.note) o.note = q.note;
   if (typeof q.nextOpen === "string" && q.nextOpen) o.nextOpen = q.nextOpen;
@@ -656,9 +699,6 @@ function fe64_plainNote(note) {
   if (!s) return "";
   if (/x-dispatch|\basof\b|bb5|json|\bheader\b|status===|delaymin|nextopen|api\//i.test(s)) return "";
   return s;
-}
-function fe64_isQuiet(note) {
-  return /\bquiet\b/i.test(fe64_plainNote(note));
 }
 function fe64_ukHm(iso) {
   var ms = typeof iso === "number" ? iso : Date.parse(iso || "");
@@ -687,8 +727,7 @@ function fe64_delayWords(bag) {
 function fe64_allowAgeStale(tk) {
   var bag = fe64_yqBag(tk);
   if (!bag) return true;
-  if (bag.status === "closed" || bag.status === "delayed" || bag.status === "fresh") return false;
-  if (fe64_isQuiet(bag.note)) return false;
+  if (bag.status === "closed" || bag.status === "quiet" || bag.status === "delayed" || bag.status === "fresh") return false;
   return true;
 }
 function fe64_freshUndo(m) {
@@ -708,9 +747,9 @@ function fe64_quoteApply(tk, m) {
     var words = fe64_closedWords(bag);
     return Object.assign({}, m, { status: "closed", label: "CLOSED", detail: words || "Market closed", fe64Note: words });
   }
-  if (fe64_isQuiet(bag.note)) {
-    var quiet = fe64_plainNote(bag.note);
-    return Object.assign({}, m, { status: "delayed", label: quiet, detail: quiet, fe64Note: quiet });
+  if (bag.status === "quiet") {
+    var quiet = fe64_plainNote(bag.note) || "Quiet";
+    return Object.assign({}, m, { status: "quiet", label: quiet, detail: quiet, fe64Note: quiet });
   }
   if (bag.status === "stale") return Object.assign({}, m, { status: "stale", label: "STALE", detail: "This price is not current." });
   if (bag.status === "delayed") {
@@ -742,7 +781,7 @@ function fe64_cgAsOf(kind) {
   try {
     var st = document.createElement("style");
     st.setAttribute("data-fe64", "chat");
-    st.textContent = ".chat-panel{position:fixed;z-index:940;right:16px;bottom:16px;width:min(420px,calc(100vw - 24px));height:min(640px,calc(100vh - 32px));display:flex;flex-direction:column;background:var(--bg,#14151a);border:1px solid var(--gb,rgba(255,255,255,.14));border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.45);overflow:hidden}.chat-panel.hide{display:none!important}.chat-msg,.chat-body,.chat-headline,.chat-body p,.chat-h2,.chat-h3,.chat-li{word-break:normal!important;overflow-wrap:break-word}.fe64-ent{display:inline!important;white-space:nowrap;word-break:keep-all}@media(max-width:767px){.chat-panel{right:0;bottom:0;width:100%;height:min(78vh,640px);border-radius:14px 14px 0 0}}";
+    st.textContent = ".chat-panel{position:fixed;z-index:940;right:16px;bottom:16px;width:min(420px,calc(100vw - 24px));height:min(640px,calc(100vh - 32px));display:flex;flex-direction:column;background:var(--bg,#14151a);border:1px solid var(--gb,rgba(255,255,255,.14));border-radius:14px;box-shadow:0 18px 50px rgba(0,0,0,.45);overflow:hidden}.chat-panel.hide{display:none!important}.chat-msg,.chat-body,.chat-headline,.chat-body p,.chat-h2,.chat-h3,.chat-li{word-break:normal!important;overflow-wrap:break-word}.fe64-ent{display:inline!important;white-space:nowrap;word-break:keep-all}#loginGateOv:focus,#login-gate-title:focus{outline:none}#loginGateOv button:focus-visible,#loginGateOv a:focus-visible{outline:2px solid var(--gd);outline-offset:3px}@media(max-width:767px){.chat-panel{right:0;bottom:0;width:100%;height:min(78vh,640px);border-radius:14px 14px 0 0}}";
     document.head.appendChild(st);
   } catch (e) {}
   try {
