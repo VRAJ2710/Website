@@ -113,3 +113,180 @@ test("replies, brief text and notes are UK; machine fields stay ISO", () => {
   assert.equal(c.bb8lGoldHm(new Date(Date.parse("2026-10-19T08:49:00Z"))), "Mon 19 Oct, 09:49 UK");
   assert.equal(c.bb8lGoldHm(new Date(Date.parse("2026-12-01T08:49:00Z"))), "Tue 1 Dec, 08:49 UK");
 });
+
+// ── chat73 items (next-earnings line; insiders span and UK dates) ──
+const B8 = read("patch_bb8.py"), B8I = read("patch_bb8i.py");
+const WIN = B8.slice(B8.indexOf("function bb8Day(s)"), B8.indexOf("function bb8Window(pack, premium)"));
+const SPEC = B8I.slice(B8I.indexOf("var BB8I_SPEC = ["), B8I.indexOf("var BB8I_STOP"));
+assert.match(WIN, /function bb8WindowLabel/); assert.match(SPEC, /BB8I_SPEC/);
+const STUBS2 = `
+var store = { chat: true };
+var yahooCalls = 0, yahooNext = { date: "2026-12-23", est: true };
+var RT32 = { cache: new Map() };
+function bb8dStore() { return store; }
+async function generateAi(options) { return bb3bGenerateAi(options); }
+function bb8Late(ms) { return new Promise(function () {}); }
+function bb8bYahooSym(s) { return s; }
+async function rt32Yahoo(sym) { yahooCalls++; await null; return { calendarEvents: { earnings: { earningsDate: yahooNext.date ? [{ fmt: yahooNext.date }] : [], isEarningsDateEstimate: yahooNext.est } } }; }
+function bb2Question(b) { return b.q; }
+function bb8eStrip(q) { return String(q || "").replace(/\\s*\\[Answer[^\\]]*\\]\\s*$/, ""); }
+function bb8eBaseOf(q, b) { return "MU"; }
+async function bb2Read0(req) { return req; }
+async function bb8eMovePack(base) { return { base: base, ysym: base }; }
+function bb8eLead(pack, card, n0) {
+  var text = "Why MU reads Headwind:\\nMU fell 5.63% to $878.84. [" + (n0 + 1) + "]\\nIn the news, not confirmed as the cause: \\"Chip stocks rebound\\" [" + (n0 + 2) + "]";
+  return { text: text, paint: text, prompt: "CARD AND MOVE FACTS:\\n" + text.split("\\n").slice(1).join("\\n") + "\\n\\nAnswer.", sources: [{ name: "Yahoo Finance quote" }, { name: "Stocktwits", detail: "Chip stocks rebound after worst week" }] };
+}
+function bb8eFull(st) { var f = (st.clientSources || []).slice(); if (st.peerSource) f.push(st.peerSource); if (st.bb8eMove) f.push.apply(f, st.bb8eMove.sources); return f; }
+function bb8eCites(text, full) { return { text: text, keep: null }; }
+function bb8dIsFact(line) { return /^MU .*x/.test(line); }
+function bb8hIndex(st, facts) { return { n: bb8eFull(st).length, text: {}, fact: {}, factFigs: {}, known: {} }; }
+function bb8hFigs(t) { var o = {}; String(t).replace(/\\[\\d+\\]/g, "").replace(/\\$(\\d+(?:\\.\\d+)?)|(\\d+(?:\\.\\d+)?)\\s*(?:%|x\\b)/g, function (m, a, b) { o[Number(a || b).toFixed(2)] = 1; return m; }); return o; }
+function bb8hFixSentence(sent, idx) { return "ORIG:" + sent; }
+function bb8iCiteNums(s) { var o = []; String(s).replace(/\\[(\\d{1,2}(?:\\s*,\\s*\\d{1,2})*)\\]/g, function (m, g) { g.split(/\\s*,\\s*/).forEach(function (x) { o.push(Number(x)); }); return m; }); return o; }
+function bb8iKeep(sent, resolve, st) { for (var i = 0; i < BB8I_SPEC.length; i++) if (BB8I_SPEC[i].test(sent)) return false; return true; }
+var mem = new Map();
+function bb7TickerKeys(t) { return [String(t || "").toUpperCase()]; }
+function bb7Recall(k) { return mem.get(k) || null; }
+function bb8hKey(t, mode) { return "f4:" + t + (mode === "full" ? "" : ":free"); }
+function bb7FormList(sub) { return sub.list; }
+function bb7IsoDate(v) { var m = /^(\\d{1,2})\\/(\\d{1,2})\\/(\\d{4})$/.exec(String(v)); return m ? m[3] + "-" + ("0" + m[1]).slice(-2) + "-" + ("0" + m[2]).slice(-2) : String(v); }
+var shapeOut = null;
+function bb7Shape(pack, opts) { return JSON.parse(JSON.stringify(shapeOut)); }
+async function bb8Older(ticker, before, opts) { return { status: 200, body: bb7Shape() }; }
+`;
+function load2() {
+  const ctx = { console: { warn() {} }, Date, Intl, JSON, Math, Object, String, Number, Array, RegExp, Promise, Map, WeakSet };
+  ctx.globalThis = ctx;
+  vm.createContext(ctx);
+  vm.runInContext(FMT + STUBS + SPEC + WIN + STUBS2, ctx);
+  vm.runInContext(B8L, ctx, { filename: "bb8l.js" });
+  return ctx;
+}
+const NOW = Date.parse("2026-10-19T09:20:00Z");
+
+test("earnings line: UK calendar date, (estimated) only when isEstimate, none when missing or past", () => {
+  const c = load2();
+  assert.equal(c.bb8lDay("2026-12-23", true), "Wed 23 Dec 2026");
+  assert.equal(c.bb8lDay("2025-10-15"), "15 Oct 2025");
+  assert.equal(c.bb8lDay("9/21/2026"), "21 Sep 2026");
+  assert.equal(c.bb8lDay(""), "");
+  assert.equal(c.bb8lDay("n/a"), "");
+  const est = c.bb8lEarnFrom({ date: "2026-12-23", isEstimate: true }, "2026-10-19T09:20:00.000Z", "MU", NOW);
+  assert.equal(c.bb8lEarnLine(est), "Next earnings: Wed 23 Dec 2026 (estimated)");
+  assert.equal(c.bb8lEarnLine(c.bb8lEarnFrom({ date: "2026-12-23", isEstimate: false }, "", "MU", NOW)), "Next earnings: Wed 23 Dec 2026");
+  assert.equal(c.bb8lEarnFrom({ date: "2026-10-18", isEstimate: false }, "", "MU", NOW), null);          // yesterday (UK)
+  assert.ok(c.bb8lEarnFrom({ date: "2026-10-19", isEstimate: false }, "", "MU", NOW));                    // today still shown
+  assert.equal(c.bb8lEarnFrom({ date: "", isEstimate: true }, "", "MU", NOW), null);
+  assert.equal(c.bb8lEarnFrom(null, "", "MU", NOW), null);
+  // UK "today" at 00:30 BST on 20 Oct is still 19 Oct in UTC: a 19 Oct date is past for UK readers.
+  assert.equal(c.bb8lEarnFrom({ date: "2026-10-19" }, "", "MU", Date.parse("2026-10-19T23:30:00Z")), null);
+  const src = c.bb8lEarnSrc(est, "MU", "MU");
+  assert.equal(src.link, "https://finance.yahoo.com/quote/MU/");
+  assert.equal(src.asOf, "2026-10-19T09:20:00.000Z");
+  assert.match(src.detail, /calendarEvents, estimated/);
+});
+
+test("earnings source: /api/financials nextEarnings (RT32 cache) first, else Yahoo calendarEvents; one shared Yahoo call", async () => {
+  const c = load2();
+  c.RT32.cache.set("MU", { at: Date.now(), data: { earnings: { source: "Yahoo Finance", asOf: "2026-10-19T08:00:00.000Z", next: { date: "2026-12-23", isEstimate: true } }, nextEarnings: { date: "2026-12-23", estimate: 1.2, isEstimate: true } } });
+  const a = await c.bb8lEarnGet("MU");
+  assert.equal(a.date, "2026-12-23"); assert.equal(a.isEstimate, true); assert.equal(a.asOf, "2026-10-19T08:00:00.000Z"); assert.equal(c.yahooCalls, 0);
+  const b = await c.bb8lEarnGet("NVDA");
+  assert.equal(b.date, "2026-12-23"); assert.equal(c.yahooCalls, 1);
+  await Promise.all([c.rt32Yahoo("AMD"), c.rt32Yahoo("AMD")]);
+  assert.equal(c.yahooCalls, 2, "concurrent quoteSummary calls for one symbol share one request");
+  c.yahooNext.date = "2026-01-20";
+  assert.equal(await c.bb8lEarnGet("AVGO"), null, "past date: no line");
+  c.yahooNext.date = "";
+  assert.equal(await c.bb8lEarnGet("WDC"), null, "no date: no line");
+});
+
+test("card lead: Next earnings line with its own [n], Yahoo source, prompt updated; none without a date", async () => {
+  const c = load2();
+  c.store.bb8eCard = true; c.store.bb8eBody = { q: "What matters most about MU — Headwind?" };
+  const pack = await c.bb8eMovePack("MU");
+  assert.equal(pack.bb8lEarn.date, "2026-12-23");
+  const out = c.bb8eLead(pack, true, 7);
+  const lines = out.text.split("\n");
+  assert.equal(lines[2], "Next earnings: Wed 23 Dec 2026 (estimated) [10]");
+  assert.match(lines[3], /^In the news/);
+  assert.equal(out.sources[2].name, "Yahoo Finance"); assert.equal(out.sources[2].link, "https://finance.yahoo.com/quote/MU/");
+  assert.match(out.prompt, /Next earnings: Wed 23 Dec 2026 \(estimated\) \[10\]/);
+  assert.match(out.prompt, /say it is estimated when the line says so/);
+  assert.equal(out.paint.includes("[10]"), false);
+  const none = c.bb8eLead({ base: "MU", ysym: "MU", bb8lEarn: null }, true, 7);
+  assert.equal(none.text.includes("Next earnings"), false);
+  // Non-card move question that does not ask about earnings: no lookup.
+  const c2 = load2(); c2.store.bb8eCard = false; c2.store.bb8eBody = { q: "Why is MU down today?" };
+  assert.equal((await c2.bb8eMovePack("MU")).bb8lEarn, undefined);
+  c2.store.bb8eBody = { q: "When does MU report earnings?" };
+  assert.equal((await c2.bb8eMovePack("MU")).bb8lEarn.date, "2026-12-23");
+});
+
+test("filters: a cited earnings-date sentence stays (bb8h and bb8i); wrong dates, 'confirmed' and attributed views go", async () => {
+  const c = load2();
+  c.store.bb8eCard = true; c.store.bb8eBody = { q: "x" };
+  const pack = await c.bb8eMovePack("MU");
+  c.store.bb8eMove = c.bb8eLead(pack, true, 0);
+  const idx = c.bb8hIndex(c.store, []);
+  assert.equal(idx.bb8lEarnN, 3);
+  assert.equal(c.bb8hFixSentence("Micron is set to report its next quarterly results on 23 Dec [3].", idx), "Micron is set to report its next quarterly results on 23 Dec [3].");
+  assert.equal(c.bb8hFixSentence("Its next earnings date is 23 December [2].", idx), "Its next earnings date is 23 December [3].");
+  assert.equal(c.bb8hFixSentence("MU's next earnings date is 23 Dec.", idx), "MU's next earnings date is 23 Dec [3].");
+  assert.equal(c.bb8hFixSentence("MU reports earnings on 18 Nov [3].", idx), "");
+  assert.equal(c.bb8hFixSentence("MU has confirmed it reports results on 23 Dec [3].", idx), "");
+  assert.equal(c.bb8hFixSentence("MU has not confirmed the results date of 23 Dec [3].", idx), "MU has not confirmed the results date of 23 Dec [3].");
+  assert.equal(c.bb8hFixSentence("MU shares fell 5.63% [3].", idx), "ORIG:MU shares fell 5.63% [99].", "not about earnings: may not cite the line");
+  assert.equal(c.bb8hFixSentence("Results are due on 23 Dec with EPS of $2.10 [3].", idx), "ORIG:Results are due on 23 Dec with EPS of $2.10 [3].", "a figure the line does not carry is bb8h's call");
+  const R = n => c.bb8eFull(c.store)[n - 1] || null;
+  assert.equal(c.bb8iKeep("Micron is set to report its next quarterly results on 23 Dec [3].", R, c.store), true);
+  assert.equal(c.bb8iKeep("Micron is set to report its next quarterly results on 23 Dec [2].", R, c.store), false, "cites the news line, not the earnings line");
+  assert.equal(c.bb8iKeep("Analysts expect strong results when MU reports on 23 Dec [3].", R, c.store), false);
+  assert.equal(c.bb8iKeep("MU could see a rally when it reports results on 23 Dec [3].", R, c.store), false);
+});
+
+test("valuation answers: line goes before In short with the final [n]; prompt numbered like the source list", async () => {
+  const c = load2();
+  c.store.bb8eMode = "valuation"; c.store.bb8eBody = { q: "Is MU expensive versus peers ahead of earnings?" };
+  await c.bb2Read0({ q: "Is MU expensive versus peers ahead of earnings?" });
+  c.store.clientSources = [{ name: "Reuters" }]; c.store.peerSource = { name: "Yahoo Finance" };
+  await c.generateAi({ system: "SYS", messages: [{ role: "user", content: "q" }] });
+  const sys = c.calls[c.calls.length - 1].system;
+  assert.match(sys, /NEXT EARNINGS[^\n]*\[3\][^\n]*\nNext earnings: Wed 23 Dec 2026 \(estimated\) \[3\]/);
+  assert.equal(c.bb8eFull(c.store).length, 3);
+  const text = "Peer comparisons:\nMU forward P/E 4.9x is lower than NVDA 15.3x. [2]\n\nIn short: MU is the cheapest. [2]";
+  const seen = c.bb8eCites(text, c.bb8eFull(c.store)).text;
+  assert.match(seen, /\[2\]\n\nNext earnings: Wed 23 Dec 2026 \(estimated\) \[3\]\n\nIn short:/);
+  assert.equal(c.bb8eCites(seen, c.bb8eFull(c.store)).text.split("Next earnings").length, 2, "inserted once");
+  const c2 = load2(); c2.store.bb8eMode = "valuation"; c2.store.bb8eBody = { q: "How does MU compare with peers on valuation?" };
+  await c2.bb2Read0({}); assert.equal(c2.store.bb8lEarnP, undefined, "valuation question without earnings: no line");
+});
+
+test("insiders: meta.window stays the page window; meta.span is the whole loaded span; UK display dates everywhere", async () => {
+  const c = load2();
+  c.shapeOut = { cik: "0001045810", insider: [{ insiderName: "A", transactionDate: "2026-09-21", filingDate: "2026-09-23" }, { insiderName: "B", transactionDate: "", filingDate: "2025-10-15" }],
+    house: { items: [{ member: "M", filingDate: "2026-10-15", trades: [{ date: "2026-09-30" }] }] },
+    meta: { window: { label: "Last 7 months", from: "2026-03-20", to: "2026-10-13", filings: 40, more: true, next: "before=2026-03-20" } } };
+  const p1 = c.bb7Shape();
+  assert.deepEqual(JSON.parse(JSON.stringify(p1.insider[0])), { insiderName: "A", transactionDate: "2026-09-21", filingDate: "2026-09-23", transactionDateUk: "21 Sep 2026", filingDateUk: "23 Sep 2026" });
+  assert.equal(p1.insider[1].transactionDateUk, ""); assert.equal(p1.insider[1].filingDateUk, "15 Oct 2025");
+  assert.equal(p1.house.items[0].filingDateUk, "15 Oct 2026"); assert.equal(p1.house.items[0].trades[0].dateUk, "30 Sep 2026");
+  assert.equal(p1.meta.window.fromUk, "20 Mar 2026"); assert.equal(p1.meta.window.toUk, "13 Oct 2026");
+  assert.deepEqual(JSON.parse(JSON.stringify(p1.meta.span)), { from: "2026-03-20", to: "2026-10-13", label: "Last 7 months", fromUk: "20 Mar 2026", toUk: "13 Oct 2026", before: null, toSource: "page" });
+  // The first page's full scan is cached (bb8h key); the older page's window covers only that page.
+  c.mem.set("f4:NVDA", { at: Date.now(), body: { newestFiling: "2026-10-13", complete: true } });
+  c.shapeOut.meta.window = { label: "Last 5 months", from: "2025-10-15", to: "2026-03-19", filings: 40, more: true, next: "before=2025-10-15" };
+  const p2 = await c.bb8Older("NVDA", "2026-03-20", { codes: "PS" });
+  assert.equal(p2.body.meta.window.label, "Last 5 months", "meta.window unchanged (compat)");
+  assert.equal(p2.body.meta.window.from, "2025-10-15");
+  assert.deepEqual(JSON.parse(JSON.stringify(p2.body.meta.span)), { from: "2025-10-15", to: "2026-10-13", label: "Last 1 year", fromUk: "15 Oct 2025", toUk: "13 Oct 2026", before: "2026-03-20", toSource: "newest-filing" });
+  // Without the cached first page, the newest filing recorded from the SEC submissions list is used.
+  c.mem.clear();
+  c.bb7FormList({ cik: "1045810", tickers: ["NVDA"], list: [{ filingDate: "2026-10-13" }, { filingDate: "2026-03-20" }] });
+  assert.equal((await c.bb8Older("NVDA", "2026-03-20", {})).body.meta.span.to, "2026-10-13");
+  // Nothing known: the span falls back to the page.
+  const c3 = load2(); c3.shapeOut = c.shapeOut;
+  const p3 = await c3.bb8Older("NVDA", "2026-03-20", {});
+  assert.equal(p3.body.meta.span.to, "2026-03-19"); assert.equal(p3.body.meta.span.toSource, "page");
+});
