@@ -4,11 +4,12 @@ timestamp and session, flagged fallback; Taiwan listings get the Taipei session.
 to deemedExecutionDate then periodOfReport (same XML, no extra SEC request); never the filing date. (3) /api/search
 returns result[] in the client's shape plus an LSE listing profile (GBp handled); GET /api/listing-profile.
 (4) One canonical feed object {v,status,ageSec,asOf,...} on every quote row of every quote route.
-(6) Analyst ratings and price targets are stripped by one sanitizer (bb8oStripRatings) on every JSON response, the
-Yahoo quoteSummary source, the fundamentals cache and AI request bodies (rating / target text scrubbed).
 (5) GET /api/brief/edition and brief.edition: a stable, request-driven edition, memory only.
-Server.js only. Stacked on bb8n (server md5 9b48a917c654891a50e7c7c6bd8c9a49). Appended at the end of the file;
-anchors are long-standing declarations only. See docs/bb8o.md.
+(6) Analyst ratings and price targets: one sanitizer (bb8oStripRatings) removes target / analyst keys from every JSON
+response and AI body; generic keys (rating, ra, recommendation...) only on the BB8O_MARKET_ROUTES allowlist, the Yahoo
+quoteSummary source, the fundamentals cache and AI context / fact fields. User questions and messages pass untouched.
+Server.js only. Stacked on bb8p (server md5 92cdce800208671ab32ded68d15e24d1). Appended after // BB8P_JS_END;
+anchors are long-standing declarations only (no in-place edits). See docs/bb8o.md.
 No tables, intervals, timers, dependencies, secrets or Stripe changes.
 Usage: python3 patch_bb8o.py [--check] <dir with server.js>
 """
@@ -17,7 +18,7 @@ import hashlib, os, re, sys, subprocess, tempfile
 EXPECTED_MD5 = {
     "app.js": "843c42b73f671d80c6e563d2edddb829",
     "index.html": "07137d3795c694d726cb9a295719849e",
-    "server.js": "9b48a917c654891a50e7c7c6bd8c9a49",
+    "server.js": "92cdce800208671ab32ded68d15e24d1",
 }
 
 CHECK = "--check" in sys.argv
@@ -68,10 +69,11 @@ if "// BB8O_JS" in v:
     print("REFUSE: bb8o already applied")
     sys.exit(0)
 
-REPLACE = [
-]
+REPLACE = []
+
 REQUIRED = [
     ("bb8n end marker", "// BB8N_JS_END"),
+    ("bb8p end marker (bb8o is appended after it)", "// BB8P_JS_END"),
     ("crypto", 'const crypto = require("crypto");'),
     ("json", "function json(res, status, body, extraHeaders = {}) {"),
     ("handle", "async function handle(req, res) {"),
@@ -582,63 +584,94 @@ function bb8oValuation(body) {
   else { v.price = null; v.priceMissing = true; }
   return body;
 }
-// ── Analyst ratings and price targets: stripped everywhere (keys), and scrubbed from prompt context (text) ──
-var BB8O_RATING_KEYS = {
+// ── Analyst ratings and price targets ──
+// Target / analyst keys are unambiguous and are stripped from every JSON response and every AI request body.
+var BB8O_TARGET_KEYS = {
   targethighprice: 1, targetlowprice: 1, targetmeanprice: 1, targetmedianprice: 1, targethigh: 1, targetlow: 1, targetmean: 1, targetmedian: 1,
   pricetarget: 1, pricetargets: 1, targetprice: 1, analysttarget: 1, analysttargets: 1, consensustarget: 1,
-  recommendationkey: 1, recommendationmean: 1, recommendation: 1, recommendations: 1, recommendationtrend: 1,
-  upgradedowngradehistory: 1, upgrades: 1, downgrades: 1, numberofanalystopinions: 1,
-  analystrating: 1, analystratings: 1, averageanalystrating: 1, consensusrating: 1, rating: 1, ratings: 1, ra: 1
+  recommendationkey: 1, recommendationmean: 1, recommendationtrend: 1, upgradedowngradehistory: 1, numberofanalystopinions: 1,
+  analystrating: 1, analystratings: 1, averageanalystrating: 1, consensusrating: 1
 };
+// Generic keys mean something else outside market data (a quiz rating, an editorial "recommendation"), so they are
+// stripped only inside market / security payloads: the routes in BB8O_MARKET_ROUTES, the fundamentals source and cache,
+// and the client-supplied context / fact fields of AI request bodies (BB8O_CTX_FIELDS).
+var BB8O_GENERIC_KEYS = { rating: 1, ratings: 1, ra: 1, recommendation: 1, recommendations: 1, upgrades: 1, downgrades: 1 };
+var BB8O_MARKET_ROUTES = {
+  "/api/financials": 1, "/api/earnings": 1, "/api/holders": 1, "/api/insiders": 1, "/api/institutional-data": 1,
+  "/api/openbb/fundamentals": 1, "/api/openbb/summary": 1, "/api/openbb/historical": 1,
+  "/api/yahoo-quote": 1, "/api/yahoo-chart": 1, "/api/market-reference-quotes": 1, "/api/twelve-data-quote": 1, "/api/finnhub": 1,
+  "/api/ext-hours": 1, "/api/coingecko": 1, "/api/spot-energy": 1, "/api/eia-spot": 1, "/api/gold-desk": 1, "/api/real-yield": 1,
+  "/api/search": 1, "/api/listing-profile": 1, "/api/screener": 1, "/api/regime-fit": 1, "/api/ticker-news": 1, "/api/news-scores": 1,
+  "/api/brief": 1, "/api/brief/edition": 1
+};
+// Client-supplied context / fact fields of AI request bodies. Never messages, question, userThesis or any other user-typed field.
+var BB8O_CTX_FIELDS = { context: 1, terminalcontext: 1, contextnotes: 1, notes: 1, facts: 1, fact: 1, tickers: 1, assets: 1, asset: 1, sources: 1, marketdata: 1, quotes: 1, portfolio: 1, watchlist: 1 };
 var BB8O_RATING_WORDS = "Strong Buy|Strong Sell|Moderate Buy|Moderate Sell|Buy|Sell|Hold|Accumulate|Avoid|Reduce|Outperform|Underperform|Market Perform|Overweight|Underweight|Equal[- ]Weight";
 var BB8O_RATING_SEP_RE = new RegExp("\\s[·|]\\s(?:" + BB8O_RATING_WORDS + ")(?=\\s[·|]|\\s*$)", "gim");
 var BB8O_RATING_LABEL_RE = /\s*[|·]?\s*\b(?:Analyst\s+)?(?:Rating|Recommendation|Consensus rating)s?:\s*[^|·\n]*/gi;
 var BB8O_TARGET_RE = /[^.\n|·]*\b(?:price targets?|target prices?|analyst(?:s'?)? (?:price )?targets?|consensus targets?|mean targets?|target (?:mean|median|high|low)(?: price)?)\b(?:[^.\n|·]|\.(?=\d))*\d(?:[^.\n|·]|\.(?=\d))*\.?/gi;
 var BB8O_CONSENSUS_RE = new RegExp(",?\\s*\\b(?:consensus|average analyst|analyst|street)\\s+(?:rating|recommendation)s?\\s*(?:of|is|was|:)?\\s*(?:" + BB8O_RATING_WORDS + ")\\b\\.?", "gi");
+var BB8O_TALLY_RE = /\s*\|?\s*\bAnalyst:\s*\d+\s*buy\s*\/\s*\d+\s*hold\s*\/\s*\d+\s*sell\b/gi;
+var BB8O_PT_RE = /\s*\|?\s*\bPT\s+(?:mean|median|high|low)\s*\$?\d[\d,]*(?:\.\d+)?/gi;
 var bb8oStripStats = { keys: 0, text: 0 };
-function bb8oRatingKey(k) { return Object.prototype.hasOwnProperty.call(BB8O_RATING_KEYS, String(k).toLowerCase()); }
-// The single sanitizer: removes every analyst-rating / price-target key, recursively, in place.
-function bb8oStripRatings(x, seen, depth) {
+function bb8oHas(o, k) { return Object.prototype.hasOwnProperty.call(o, String(k).toLowerCase()); }
+function bb8oRatingKey(k, generic) { return bb8oHas(BB8O_TARGET_KEYS, k) || (!!generic && bb8oHas(BB8O_GENERIC_KEYS, k)); }
+function bb8oMarketRoute(path) { return !!path && bb8oHas(BB8O_MARKET_ROUTES, path); }
+// The single sanitizer: removes target / analyst keys everywhere, plus the generic keys when generic is true (market payloads only).
+function bb8oStripRatings(x, generic, seen, depth) {
   if (!x || typeof x !== "object") return x;
   depth = depth || 0;
   if (depth > 14) return x;
   seen = seen || new WeakSet();
   if (seen.has(x)) return x;
   seen.add(x);
-  if (Array.isArray(x)) { for (var i = 0; i < x.length; i++) bb8oStripRatings(x[i], seen, depth + 1); return x; }
-  if (x instanceof Map) { x.forEach(function (v) { bb8oStripRatings(v, seen, depth + 1); }); return x; }
+  if (Array.isArray(x)) { for (var i = 0; i < x.length; i++) bb8oStripRatings(x[i], generic, seen, depth + 1); return x; }
+  if (x instanceof Map) { x.forEach(function (v) { bb8oStripRatings(v, generic, seen, depth + 1); }); return x; }
   if (typeof Buffer !== "undefined" && Buffer.isBuffer && Buffer.isBuffer(x)) return x;
   Object.keys(x).forEach(function (k) {
-    if (bb8oRatingKey(k)) { try { delete x[k]; bb8oStripStats.keys++; } catch (e) {} return; }
-    bb8oStripRatings(x[k], seen, depth + 1);
+    if (bb8oRatingKey(k, generic)) { try { delete x[k]; bb8oStripStats.keys++; } catch (e) {} return; }
+    bb8oStripRatings(x[k], generic, seen, depth + 1);
   });
   return x;
 }
 function bb8oScrubText(s) {
   if (typeof s !== "string" || !s) return s;
-  var out = s.replace(BB8O_RATING_LABEL_RE, "").replace(BB8O_RATING_SEP_RE, "").replace(BB8O_TARGET_RE, "").replace(BB8O_CONSENSUS_RE, "");
+  var out = s.replace(BB8O_RATING_LABEL_RE, "").replace(BB8O_RATING_SEP_RE, "").replace(BB8O_TARGET_RE, "").replace(BB8O_CONSENSUS_RE, "").replace(BB8O_TALLY_RE, "").replace(BB8O_PT_RE, "");
   if (out !== s) bb8oStripStats.text++;
   return out;
 }
-// Request bodies for AI routes: keys stripped and rating / target text scrubbed before any fact or prompt builder sees them.
-function bb8oScrubBody(b, seen, depth) {
-  if (!b || typeof b !== "object") return b;
+// Context / fact values: every rating key (target and generic) removed and rating / target text scrubbed.
+function bb8oScrubCtx(v, seen, depth) {
+  if (typeof v === "string") return bb8oScrubText(v);
+  if (!v || typeof v !== "object") return v;
   depth = depth || 0;
-  if (depth > 14) return b;
+  if (depth > 14) return v;
   seen = seen || new WeakSet();
-  if (seen.has(b)) return b;
-  seen.add(b);
-  if (Array.isArray(b)) { for (var i = 0; i < b.length; i++) { if (typeof b[i] === "string") b[i] = bb8oScrubText(b[i]); else bb8oScrubBody(b[i], seen, depth + 1); } return b; }
+  if (seen.has(v)) return v;
+  seen.add(v);
+  if (Array.isArray(v)) { for (var i = 0; i < v.length; i++) v[i] = bb8oScrubCtx(v[i], seen, depth + 1); return v; }
+  Object.keys(v).forEach(function (k) {
+    if (bb8oRatingKey(k, true)) { try { delete v[k]; bb8oStripStats.keys++; } catch (e) {} return; }
+    v[k] = bb8oScrubCtx(v[k], seen, depth + 1);
+  });
+  return v;
+}
+// AI request bodies: messages and every other user-typed field pass through byte-identical (only target / analyst keys
+// are removed from non-message objects); the client-supplied context / fact fields are sanitized in full.
+function bb8oScrubBody(b) {
+  if (!b || typeof b !== "object" || Array.isArray(b)) return b;
   Object.keys(b).forEach(function (k) {
-    if (bb8oRatingKey(k)) { try { delete b[k]; bb8oStripStats.keys++; } catch (e) {} return; }
-    if (typeof b[k] === "string") b[k] = bb8oScrubText(b[k]);
-    else bb8oScrubBody(b[k], seen, depth + 1);
+    var lk = String(k).toLowerCase();
+    if (lk === "messages") return;
+    if (bb8oRatingKey(k, false)) { try { delete b[k]; bb8oStripStats.keys++; } catch (e) {} return; }
+    if (bb8oHas(BB8O_CTX_FIELDS, lk)) { b[k] = bb8oScrubCtx(b[k]); return; }
+    if (b[k] && typeof b[k] === "object") bb8oStripRatings(b[k], false);
   });
   return b;
 }
 function bb8oShape(res, status, body) {
-  try { bb8oStripRatings(body); } catch (e) {}
   var path = res && res.bb8oPath;
+  try { bb8oStripRatings(body, bb8oMarketRoute(path)); } catch (e) {}
   if (!path || !body || typeof body !== "object") return body;
   if (BB8O_ROUTES[path]) return bb8oQuoteBody(body, path, res.bb8oQuery);
   if (path === "/api/search") return bb8oSearchBody(body, res.bb8oProfile || null);
@@ -712,13 +745,13 @@ try {
   if (typeof rt32Yahoo === "function") {
     var bb8oRt32Y0 = rt32Yahoo;
     rt32Yahoo = function () {
-      return Promise.resolve(bb8oRt32Y0.apply(this, arguments)).then(function (r) { try { return bb8oStripRatings(r); } catch (e) { return r; } });
+      return Promise.resolve(bb8oRt32Y0.apply(this, arguments)).then(function (r) { try { return bb8oStripRatings(r, true); } catch (e) { return r; } });
     };
   }
   if (typeof RT32 === "object" && RT32 && RT32.cache && typeof RT32.cache.set === "function") {
     var bb8oCacheSet0 = RT32.cache.set;
-    RT32.cache.set = function (k, v) { try { bb8oStripRatings(v); } catch (e) {} return bb8oCacheSet0.apply(this, arguments); };
-    try { RT32.cache.forEach(function (v) { bb8oStripRatings(v); }); } catch (e) {}
+    RT32.cache.set = function (k, v) { try { bb8oStripRatings(v, true); } catch (e) {} return bb8oCacheSet0.apply(this, arguments); };
+    try { RT32.cache.forEach(function (v) { bb8oStripRatings(v, true); }); } catch (e) {}
   }
   if (typeof readBody === "function") {
     var bb8oReadBody0 = readBody;

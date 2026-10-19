@@ -1,13 +1,17 @@
 # bb8o: quote fallback, insider trade dates, LSE profile, canonical feed status, brief edition
 
-Server only (`deploy/patch_bb8o.py`), stacked on bb8n (server.js md5 `9b48a917c654891a50e7c7c6bd8c9a49`, 16308 lines)
-giving md5 `4354704c92cf75f9d79f1181d14abc31` (16952 lines). The block is appended at the end of server.js. Its 25 anchors are
-long-standing declarations (json, handle, yahooQuote, fetchYahooQuote, bb5e/bb5g specs, bb7 Form 4 parser, parseForm4,
-bb8lRowDates, rt32Crumb/rt32Get, rt32Yahoo, RT32, readBody, the `var bb2Read0 = …` alias, _rt48sHeads, bb8cUnit,
-bb8dUk) and the `// BB8N_JS_END` marker, 29 in all. It doesn't wrap or anchor
-on Ask grounding, the numeric guard, news-source relevance or chat meta, so it rebases cleanly onto bb8p.
+Server only (`deploy/patch_bb8o.py`), stacked on bb8p (PR #67, branch `cursor/bb8p-grounding-guard-p0`, server.js md5
+`92cdce800208671ab32ded68d15e24d1`, 16956 lines) giving md5 `71adc9f155bf95020c3430bc50139574` (17631 lines). The block is
+appended after the `// BB8P_JS_END` marker, so the first 16956 lines are byte-identical to bb8p, with no in-place edits.
+Its 30 anchors are long-standing declarations (json, handle, yahooQuote, fetchYahooQuote, bb5e/bb5g specs, bb7 Form 4 parser,
+parseForm4, bb8lRowDates, rt32Crumb/rt32Get, rt32Yahoo, RT32, readBody, the `var bb2Read0 = …` alias, _rt48sHeads, bb8cUnit,
+bb8dUk, crypto) plus the `// BB8N_JS_END` and `// BB8P_JS_END` markers. bb8o doesn't wrap or anchor on bb8p's grounding rule,
+numeric guard, source relevance, provider/model, meta.quote or timeframe code. bb8o's hooks are installed after bb8p's, so
+they're the outer wrappers on `json` and `handle`.
 No tables, timers, intervals, dependencies, secrets, paid feeds or Stripe changes, and no new SEC requests. The shared sec.gov
 limiter is untouched (itest_f: max 10 starts in any rolling second).
+Gold spot / headline gold and the Ask answer fixes (brief direct answer, paragraph breaks, "Live:" full stop, move-pack
+fallback) are not in bb8o. They moved to bb8q.
 
 ## 1. Zero / null / non-finite prices
 
@@ -166,36 +170,52 @@ the same feeds, but they can differ for up to one 5-minute read window.
 
 Frontend: the guest "Headline focus" (`_buildLocalBrief`, NEWS[0]) should use `edition.lead.headline` and `updatedAtUk`.
 
-## 6. Analyst ratings and price targets (approved by Jack)
+## 6. Analyst ratings and price targets (approved by Jack; narrowed per Jack's 12:13 request)
 
-There is one sanitizer, `bb8oStripRatings`. It deletes these keys, case-insensitively, at any depth:
+There is one sanitizer, `bb8oStripRatings(x, generic)`. It uses two key lists (case-insensitive, any depth):
 
-- `targetHighPrice targetLowPrice targetMeanPrice targetMedianPrice targetHigh targetLow targetMean targetMedian`
-- `priceTarget(s) targetPrice analystTarget(s) consensusTarget`
-- `recommendationKey recommendationMean recommendation recommendations recommendationTrend upgradeDowngradeHistory
-  upgrades downgrades numberOfAnalystOpinions`
-- `analystRating(s) averageAnalystRating consensusRating rating ratings ra`
+- **Target / analyst keys (`BB8O_TARGET_KEYS`, stripped globally):** `targetHighPrice targetLowPrice targetMeanPrice
+  targetMedianPrice targetHigh targetLow targetMean targetMedian priceTarget(s) targetPrice analystTarget(s) consensusTarget
+  recommendationKey recommendationMean recommendationTrend upgradeDowngradeHistory numberOfAnalystOpinions analystRating(s)
+  averageAnalystRating consensusRating`.
+- **Generic keys (`BB8O_GENERIC_KEYS`, market / security payloads only):** `rating ratings ra recommendation recommendations
+  upgrades downgrades`.
 
-Where it runs:
+The generic keys are stripped only where the payload really is market or security data. That's an explicit allowlist,
+not the global JSON helper:
 
-- **Response layer:** `json()`, so every JSON route. Live NVDA, MU, BP.L, AAPL, HSBA.L, MSFT, 0700.HK, SHEL.L and BTC-USD
-  replays on 16 routes each, plus 7 general routes (151 responses), had 0 banned keys after. Before, `/api/financials`
-  carried `valuation.targetMean` and `valuation.recommendation` for 8 of the 9 symbols. That was the only route that did.
-- **Source:** the `rt32Yahoo` quoteSummary result. It removes `financialData.target*Price`, `recommendationKey/Mean`,
-  `numberOfAnalystOpinions`, and the `recommendationTrend` / `upgradeDowngradeHistory` modules if present. So
-  `rt32Build` (valuation), the Ask valuation and peer facts, the card beta/earnings lookups and bb8c's builds never get them.
-- **Cache:** `RT32.cache.set` strips each stored entry, and existing entries are stripped once at load. So anything reading
-  the fundamentals cache, including the numeric guard and peer blocks, never sees them.
-- **AI request bodies:** `readBody` (/api/chat, /api/brief, committee and the other AI routes) and `bb2Read0` (Ask paths).
-  Keys are stripped, and the scrubber `bb8oScrubText` removes three kinds of rating/target text before any fact or prompt
-  builder runs:
-  - "Rating: …" labels, for example the client's "AI score … | Rating: Strong Buy";
-  - rating words between `·`/`|` separators, for example "Active ticker: NVDA … · Bullish · Strong Buy · $182.10";
-  - price-target sentences with a figure, and "consensus/analyst/street rating X".
-  Sentiment, score, price, beta and P/E are kept, and the user's question is untouched.
-- **Finnhub:** `/api/finnhub` serves only `endpoint=quote`. Recommendation, price-target and upgrade-downgrade endpoints
-  return `[]` and were checked in the scan.
-- **AI JSON outputs:** a `recommendation` field in an AI JSON output (committee) is also removed from the response.
+- **Routes (`BB8O_MARKET_ROUTES`, exact path match):** `/api/financials /api/earnings /api/holders /api/insiders
+  /api/institutional-data /api/openbb/fundamentals /api/openbb/summary /api/openbb/historical /api/yahoo-quote /api/yahoo-chart
+  /api/market-reference-quotes /api/twelve-data-quote /api/finnhub /api/ext-hours /api/coingecko /api/spot-energy /api/eia-spot
+  /api/gold-desk /api/real-yield /api/search /api/listing-profile /api/screener /api/regime-fit /api/ticker-news
+  /api/news-scores /api/brief /api/brief/edition`.
+- **Payload builders:** the `rt32Yahoo` quoteSummary result and every `RT32.cache` entry (the fundamentals source and cache
+  behind /api/financials, Ask valuation and peer facts, card beta/earnings and the numeric guard). Existing cache entries are
+  stripped once at load.
+- **AI request bodies (`readBody`, `bb2Read0`):** only the client-supplied context / fact fields (`BB8O_CTX_FIELDS`: context,
+  terminalContext, contextNotes, notes, facts, fact, tickers, assets, asset, sources, marketData, quotes, portfolio,
+  watchlist) are sanitized in full. That covers both key lists and the text scrubber `bb8oScrubText`, which removes
+  "Rating: …" labels, rating words between `·`/`|` separators, price-target sentences with a figure, "consensus/analyst/street
+  rating X", "Analyst: n buy / n hold / n sell" and "PT mean $x". `messages` is skipped entirely. `question`, `userThesis` and
+  every other user-typed field keep their text; only target / analyst keys are removed from non-context objects. So the user's
+  question reaches the model byte-identical. "Should I buy MU?" arrives unchanged on both Ask paths with bb8p's guard in
+  front, and the answer still gives no buy/sell advice: bb8p's grounding rule, the system rule "No buy or sell recommendation
+  and no price target" and the base advice rewrite still apply.
+
+Everywhere else (`/api/me`, Academy/quiz, prefs, account export, admin and Console routes, `/api/ai-status`, editorial
+content, the Stripe webhook), only target / analyst keys are removed. A quiz `rating`, an editorial `recommendation` or a
+`ra` field passes through. The replay against bb8p is byte-identical (see Tests).
+
+**AI committee / lenses / intelligence / chat outputs are not in the generic allowlist.** Their JSON is the AI's own analysis.
+In the server's output normaliser (`recognizedKeys`, server line 3973), `recommendation` is a prose section of that analysis
+(next to `summary`, `verdict`, `thesis`), not a market rating field, so stripping it would delete the AI's text, not a rating.
+The no-advice / no-target rules for those outputs live in their prompts. Target / analyst keys are still removed from them.
+
+- **Finnhub:** `/api/finnhub` serves only `endpoint=quote`. Recommendation, price-target and upgrade-downgrade endpoints return
+  `[]` and were checked in the scan.
+- **Scan:** live NVDA, MU, BP.L, AAPL, HSBA.L, MSFT, 0700.HK, SHEL.L and BTC-USD replays on 16 market routes each, plus 7
+  general routes (151 responses), had 0 target keys and 0 generic keys after. On bb8p, `/api/financials` carried
+  `valuation.targetMean` and `valuation.recommendation` for 8 of the 9 symbols.
 
 Client (Frontend's job, not changed here):
 
@@ -213,4 +233,14 @@ These are estimates, not ratings or targets.
 
 ## Tests
 
-`node --test test/bb8o.test.js`: 11 tests, offline, using vm with stubs.
+`node --test test/bb8o.test.js`: 13 tests, offline, using vm with stubs. They cover items 1–5, Taiwan, ratings (target keys
+global; generic keys on allowlisted routes only, with 10 non-market routes keeping `rating`/`ra`/`recommendation(s)`; AI body
+context sanitized while messages, question and userThesis stay byte-identical; a stub model capturing the prompt) and protocol
+(bb8o prefix, no timers, anchors, the BB8P_JS_END position, REFUSE, `--check`, bb8p code untouched).
+
+Box replays (stub DB/session, stubbed Stripe client, real Stripe never called): `/api/me` (admin, free, none),
+`/api/academy-daily` (quiz, plus `?diag=1`), GET/PUT `/api/prefs`, `/api/account/export`, `/api/admin/content` (5 views plus a 403),
+`/api/public/content` (3), `/api/ai-status` (admin plus a 403), `/api/admin/ai-readiness`, `/api/admin/market-data`, both
+admin alert routes, `/api/openbb/status`, `/api/stripe-status`, `/api/health`, and `/api/stripe/webhook` twice. All 32 steps
+were byte-identical to bb8p, and the webhook stub received the same event bytes (sha256 85da9b0b…6e43). Editorial content keeps
+`rating/ratings/ra/recommendation(s)`. Prefs drop them on both builds, which is base `rt17SanitizePrefs` behaviour.

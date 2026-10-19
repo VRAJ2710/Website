@@ -263,33 +263,78 @@ test("Taiwan listings use the Taipei session", () => {
   assert.equal(c.bb5eSpec("AAPL").label, "US");
 });
 
-const BANNED = /^(target(High|Low|Mean|Median)(Price)?|priceTargets?|targetPrice|recommendation(Key|Mean|Trend|s)?|upgradeDowngradeHistory|upgrades|downgrades|numberOfAnalystOpinions|(average|consensus)?(analyst)?ratings?|analystRatings?|ra)$/i;
-function keyScan(o, path, hits) { if (!o || typeof o !== "object") return hits; for (const k of Object.keys(o)) { if (BANNED.test(k)) hits.push(path + "." + k); keyScan(o[k], path + "." + k, hits); } return hits; }
-test("ratings: one sanitizer strips analyst ratings and price targets at the source, the cache, responses and AI bodies", async () => {
+const TARGET = /^(target(High|Low|Mean|Median)(Price)?|priceTargets?|targetPrice|analystTargets?|consensusTarget|recommendation(Key|Mean|Trend)|upgradeDowngradeHistory|numberOfAnalystOpinions|analystRatings?|averageAnalystRating|consensusRating)$/i;
+const GENERIC = /^(ratings?|ra|recommendations?|upgrades|downgrades)$/i;
+function keyScan(o, path, hits, re) { re = re || TARGET; if (!o || typeof o !== "object") return hits; for (const k of Object.keys(o)) { if (re.test(k)) hits.push(path + "." + k); keyScan(o[k], path + "." + k, hits, re); } return hits; }
+const both = (o, p) => keyScan(o, p, [], TARGET).concat(keyScan(o, p, [], GENERIC));
+test("ratings: target / analyst keys go everywhere; generic keys only from the market allowlist and the fundamentals source and cache", async () => {
   const c = load();
   const y = await c.rt32Yahoo("NVDA");
-  assert.deepEqual(keyScan(y, "y", []), []);
+  assert.deepEqual(both(y, "y"), []);
   assert.equal(y.financialData.profitMargins.raw, 0.5, "other fields kept");
   c.RT32.cache.set("NVDA", { at: 1, data: { valuation: { price: 100, pe: 30, targetMean: 250, recommendation: "buy" }, metrics: { peRatio: 30 } } });
-  assert.deepEqual(keyScan(c.RT32.cache.get("NVDA"), "cache", []), []);
+  assert.deepEqual(both(c.RT32.cache.get("NVDA"), "cache"), []);
   assert.equal(c.RT32.cache.get("NVDA").data.valuation.pe, 30);
-  const body = { symbol: "BP.L", valuation: { price: 619.5, targetMean: 638.06, recommendation: "buy" }, priceTarget: { targetHigh: 1 }, recommendations: [{ buy: 3 }], upgrades: [], nested: [{ deep: { rating: "Buy", averageAnalystRating: "1.8 - Buy", ok: 1 } }] };
-  const out = c.bb8oShape({ bb8oPath: "/api/financials" }, 200, body);
-  assert.deepEqual(keyScan(out, "body", []), []);
-  assert.equal(out.valuation.price, 619.5); assert.equal(out.nested[0].deep.ok, 1);
-  const ask = { messages: [{ role: "user", content: "Why is NVDA moving?" }], context: "Ticker: NVDA (NVIDIA)\nAI score: 76/100 | Sentiment: Bullish | Rating: Strong Buy\nActive ticker: NVDA NVIDIA · Score 76/100 · Bullish · Strong Buy · $182.10 · Beta 1.72 · 52.8x\nAnalysts' mean price target is $250.00 (40 analysts), consensus rating Buy. Revenue grew 50%. The street recommendation is Outperform.", tickers: [{ tk: "NVDA", ra: "Strong Buy", targetMean: 250, sc: 76 }] };
+  const mk = () => ({ symbol: "BP.L", valuation: { price: 619.5, targetMean: 638.06, recommendation: "buy" }, priceTarget: { targetHigh: 1 }, recommendations: [{ buy: 3 }], upgrades: [], nested: [{ deep: { rating: "Buy", ra: "Hold", ratings: [1], averageAnalystRating: "1.8 - Buy", ok: 1 } }] });
+  for (const route of ["/api/financials", "/api/finnhub", "/api/yahoo-quote", "/api/search", "/api/listing-profile", "/api/brief", "/api/openbb/fundamentals", "/api/screener"]) {
+    const out = c.bb8oShape({ bb8oPath: route }, 200, mk());
+    assert.deepEqual(both(out, route), [], route);
+    assert.equal(out.nested[0].deep.ok, 1);
+  }
+  for (const route of ["/api/public/content", "/api/admin/content", "/api/prefs", "/api/me", "/api/academy-daily", "/api/committee", "/api/lenses", "/api/chat", "/api/ai-status", undefined]) {
+    const out = c.bb8oShape({ bb8oPath: route }, 200, mk());
+    assert.deepEqual(keyScan(out, "x", [], TARGET), [], String(route));
+    assert.equal(out.valuation.recommendation, "buy", String(route));
+    assert.equal(out.nested[0].deep.rating, "Buy"); assert.equal(out.nested[0].deep.ra, "Hold"); assert.deepEqual(out.nested[0].deep.ratings, [1]);
+    assert.deepEqual(out.recommendations, [{ buy: 3 }]); assert.deepEqual(out.upgrades, []);
+  }
+  assert.equal(c.bb8oMarketRoute("/api/financials/x"), false, "exact paths only");
+  const cyc = { a: 1 }; cyc.self = cyc; c.bb8oStripRatings(cyc, true); assert.equal(cyc.a, 1);
+  assert.equal(c.bb8oStripRatings(null, true), null);
+});
+test("ratings: AI bodies sanitize only the client context / fact fields; the question and messages pass through byte-identical", async () => {
+  const c = load();
+  const q = "Should I buy MU? Its price target is $150 and the rating: Strong Buy · Hold";
+  const ask = { messages: [{ role: "system", content: "Rating: Buy" }, { role: "user", content: "Why is NVDA moving?" }, { role: "assistant", content: "x" }, { role: "user", content: q }], question: q, userThesis: "I think the consensus rating Buy is wrong",
+    context: "Ticker: NVDA (NVIDIA)\nAI score: 76/100 | Sentiment: Bullish | Rating: Strong Buy\nActive ticker: NVDA NVIDIA · Score 76/100 · Bullish · Strong Buy · $182.10 · Beta 1.72 · 52.8x\nAnalysts' mean price target is $250.00 (40 analysts), consensus rating Buy. Revenue grew 50%. The street recommendation is Outperform.",
+    terminalContext: "Financial metrics: P/E 30, ROE 40 | Analyst: 40 buy / 5 hold / 1 sell | PT mean $250.5\nRegime: risk-on",
+    tickers: [{ tk: "NVDA", ra: "Strong Buy", targetMean: 250, sc: 76 }], facts: [{ label: "P/E", value: 30, rating: "Buy", note: "consensus rating Buy" }], extra: { targetPrice: 1, rating: 5 } };
+  const raw = JSON.stringify(ask.messages);
   const b1 = await c.readBody({ __body: ask }), b2 = await c.bb2Read0({ __body: ask });
   for (const b of [b1, b2]) {
-    assert.deepEqual(keyScan(b, "ask", []), []);
-    assert.equal(/Strong Buy|Rating:|rating Buy|Outperform|price target|\$250/i.test(JSON.stringify(b)), false, JSON.stringify(b));
+    assert.equal(JSON.stringify(b.messages), raw, "messages byte-identical");
+    assert.equal(b.messages[3].content, q); assert.equal(b.question, q); assert.equal(b.userThesis, "I think the consensus rating Buy is wrong");
+    assert.equal(/Strong Buy|Rating:|rating Buy|Outperform|price target|\$250|Analyst:|PT mean/i.test(b.context + b.terminalContext + JSON.stringify(b.tickers) + JSON.stringify(b.facts)), false);
     assert.match(b.context, /Sentiment: Bullish/); assert.match(b.context, /Score 76\/100 · Bullish · \$182\.10/); assert.match(b.context, /Revenue grew 50%/);
-    assert.equal(b.messages[0].content, "Why is NVDA moving?"); assert.equal(b.tickers[0].sc, 76);
+    assert.match(b.terminalContext, /P\/E 30, ROE 40\nRegime: risk-on/);
+    assert.deepEqual(both(b.tickers, "t").concat(both(b.facts, "f")), []); assert.equal(b.tickers[0].sc, 76); assert.equal(b.facts[0].value, 30);
+    assert.deepEqual(b.extra, { rating: 5 }, "outside context fields only target keys go");
   }
-  // cycles and non-objects are safe
-  const cyc = { a: 1 }; cyc.self = cyc; c.bb8oStripRatings(cyc); assert.equal(cyc.a, 1);
-  assert.equal(c.bb8oStripRatings(null), null);
+});
+test("ratings: a stub model receives the user's question byte-identical and the no-advice rule", async () => {
+  const c = load();
+  vm.runInContext(`
+    var MODEL = [];
+    var SYS = "You are Dispatch Expert, a market-research assistant. No buy or sell recommendation and no price target.";
+    async function stubModel(body) { MODEL.push(JSON.stringify(body)); return "You should buy MU now."; }
+    async function stubAsk(req) {
+      var b = await readBody(req);
+      var reply = await stubModel({ system: SYS + "\\nTERMINAL CONTEXT:\\n" + b.context, messages: b.messages });
+      return reply.replace(/\\b(?:you should|i recommend(?: that)? you)\\s+(?:buy|sell)\\b/gi, "no trade recommendation (research only)");
+    }`, c);
+  const input = { messages: [{ role: "user", content: "Should I buy MU?" }], context: "Active ticker: MU · $120.40 · Strong Buy · price target $150.00" };
+  const sent = JSON.stringify(input.messages[0].content);
+  const reply = await c.stubAsk({ __body: JSON.parse(JSON.stringify(input)) });
+  const prompt = JSON.parse(c.MODEL[0]);
+  assert.equal(JSON.stringify(prompt.messages[prompt.messages.length - 1].content), sent);
+  assert.equal(Buffer.compare(Buffer.from(prompt.messages[0].content), Buffer.from("Should I buy MU?")), 0);
+  assert.match(prompt.system, /No buy or sell recommendation/);
+  assert.equal(/Strong Buy|price target \$150/.test(prompt.system), false);
+  assert.match(prompt.system, /Active ticker: MU · \$120\.40/);
+  assert.equal(/you should buy/i.test(reply), false);
 });
 
+const ET = (iso) => Date.parse(iso); // ET offsets in Oct 2026: UTC-4
 test("protocol: names, no timers, anchors, refuse marker, dry run", () => {
   const fns = [...B8O.matchAll(/(?:^|\n)(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\(/g)].map(m => m[1]);
   assert.ok(fns.length > 40);
@@ -299,7 +344,8 @@ test("protocol: names, no timers, anchors, refuse marker, dry run", () => {
   assert.equal(/setInterval\(|setTimeout\(|CREATE TABLE|\.tier\b|stripe/i.test(B8O), false);
   assert.match(PATCH, /REFUSE: bb8o already applied/);
   assert.match(PATCH, /"--check" in sys\.argv/);
-  assert.match(PATCH, /"server\.js": "9b48a917c654891a50e7c7c6bd8c9a49"/);
-  assert.equal(/bb8p/i.test(PATCH), false, "no anchor on bb8p code");
+  assert.match(PATCH, /"server\.js": "92cdce800208671ab32ded68d15e24d1"/);
+  assert.match(PATCH, /\/\/ BB8P_JS_END/, "stacked after the bb8p block");
+  assert.equal(/BB8P_JS"\)|bb8pFigs\(|bb8pHayOf\(/.test(B8O), false, "bb8p's guard is not modified");
   assert.equal(/sec\.gov|edgar/i.test(B8O), false, "no new SEC requests");
 });
