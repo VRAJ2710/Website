@@ -639,6 +639,7 @@ function bb8oStripRatings(x, generic, seen, depth) {
 }
 function bb8oScrubText(s) {
   if (typeof s !== "string" || !s) return s;
+  s = bb8oDeskScore(s);
   var out = s.replace(BB8O_RATING_LABEL_RE, "").replace(BB8O_RATING_SEP_RE, "").replace(BB8O_TARGET_RE, "").replace(BB8O_CONSENSUS_RE, "").replace(BB8O_TALLY_RE, "").replace(BB8O_PT_RE, "");
   if (out !== s) bb8oStripStats.text++;
   return out;
@@ -690,7 +691,8 @@ var BB8O_ADVICE_RES = [
   /\b(?:rating|verdict|call|stance|recommendation|view|takeaway|action)\s*(?:is|:|of|remains|stays|=|-)?[*_]{0,2}\s*(?:an?\s+)?(?:strong\s+)?(?:buy|sell|hold|accumulate|trim|outperform|underperform|overweight|underweight|equal[- ]weight)\b/i,
   /\b(?:is|as|remains|looks like|stays|rated(?: as)?|rate it(?: as)?|rating of|upgraded? (?:\w+ ){0,3}to|downgraded? (?:\w+ ){0,3}to)\s+an?\s+(?:strong\s+)?(?:buy|sell|hold)\b/i,
   /\b(?:upgrade|downgrade)[sd]?\s+(?:\w+\s+){0,4}to\s+(?:strong\s+)?(?:buy|sell|hold|outperform|underperform|overweight|underweight|equal[- ]weight|neutral|market perform)\b/i,
-  /\b(?:strong[- ](?:buy|sell)|conviction buy|top pick|market perform|sector perform)\b/i,
+  /\b(?:strong[- ](?:buy|sell)|conviction buy|top pick|best idea|(?:highest|top|strongest|best|high)[- ]conviction|market perform|sector perform)\b/i,
+  /(?:^|[|·]\s*)(?:\**\s*)(?:overweight|underweight)s?\s*\**\s*:/i,
   /\b(?:go|move|stay|be|turn|remain|recommend|rated?|to|an?)\s+(?:overweight|underweight|equal[- ]weight)\b/i,
   /\b(?:overweight|underweight|equal[- ]weight)\s+(?:rating|position|stance|call|recommendation)\b/i,
   /\b(?:buy|sell|accumulate|trim|add|short)(?:ing)?\s+(?:on|into|the)\s+(?:dips?|weakness|strength|rall(?:y|ies)|pullbacks?|breakouts?|bounces?)\b/i,
@@ -711,7 +713,7 @@ function bb8oSentences(line) { return String(line).match(/(?:[^.!?]|[.!?](?![\s"
 // Drops every advice sentence; keeps line breaks and the rest of the text exactly.
 function bb8oAdviceText(s) {
   if (typeof s !== "string" || !s) return s;
-  var out = bb8oHeadings(s).split("\n").map(function (line) {
+  var out = bb8oHeadings(bb8oDeskScore(s)).split("\n").map(function (line) {
     if (!line.trim()) return line;
     var head = (line.match(/^\s*(?:[-*•]\s+|\d+[.)]\s+|#{1,6}\s+)?/) || [""])[0];
     var kept = bb8oSentences(line.slice(head.length)).filter(function (x) { return !bb8oIsAdvice(x) && !(head && bb8oIsAdvice(head + x)); }).join("").replace(/\s+$/, "");
@@ -787,9 +789,160 @@ function bb8oAdviceBody(path, body) {
     var br = Object.assign({}, b.brief);
     ["headline", "summary", "houseView"].forEach(function (k) { if (typeof br[k] === "string") br[k] = bb8oAdviceField(br[k], k); });
     if (Array.isArray(br.risks)) br.risks = bb8oAdviceTree(br.risks, "risks", 1);
+    bb8oBriefThemesSync(br);
     b.brief = br;
   }
   return b;
+}
+// ── Leading / lagging themes: measured, cited, never a positioning call ──
+// An "overweight" / "underweight" theme list becomes "Leading themes" / "Lagging themes": each theme is measured on a
+// free Yahoo ETF / index proxy over the last 5 sessions against the S&P 500 (SPY). It is kept only if the figure
+// exists and it actually led (or lagged) SPY over that window. Themes with no proxy or no figure are left out.
+var BB8O_THEME_WIN = 5;
+var BB8O_THEME_MS = 10 * 60 * 1000;
+var BB8O_LEAD_LABEL = "Leading themes";
+var BB8O_LAG_LABEL = "Lagging themes";
+var bb8oThemeCache = new Map();
+var BB8O_THEMES = [
+  [/\b(?:gold|bullion|xau)\b/i, "GLD", "SPDR Gold Shares"], [/\bsilver\b/i, "SLV", "iShares Silver Trust"],
+  [/\b(?:cash|t-?bills?|money markets?)\b/i, "BIL", "SPDR 1-3 Month T-Bill ETF"],
+  [/\b(?:long[- ]dated |long |)(?:treasur(?:y|ies)|bonds?|gilts?|duration|fixed income)\b/i, "IEF", "iShares 7-10 Year Treasury Bond ETF"],
+  [/\b(?:semis?|semiconductors?|chips?|memory)\b/i, "SOXX", "iShares Semiconductor ETF"],
+  [/\b(?:high[- ]beta tech|tech(?:nology)?|software)\b/i, "XLK", "Technology Select Sector SPDR"],
+  [/\b(?:energy|oil|crude)\b/i, "XLE", "Energy Select Sector SPDR"], [/\b(?:financials?|banks?)\b/i, "XLF", "Financial Select Sector SPDR"],
+  [/\b(?:health ?care|pharma\w*|biotech)\b/i, "XLV", "Health Care Select Sector SPDR"], [/\butilities\b/i, "XLU", "Utilities Select Sector SPDR"],
+  [/\b(?:consumer )?staples\b/i, "XLP", "Consumer Staples Select Sector SPDR"], [/\b(?:consumer )?discretionary\b/i, "XLY", "Consumer Discretionary Select Sector SPDR"],
+  [/\bindustrials?\b/i, "XLI", "Industrial Select Sector SPDR"], [/\bmaterials\b/i, "XLB", "Materials Select Sector SPDR"],
+  [/\breal estate|\breits?\b/i, "XLRE", "Real Estate Select Sector SPDR"], [/\bcommunication/i, "XLC", "Communication Services Select Sector SPDR"],
+  [/\bsmall[- ]?caps?\b/i, "IWM", "iShares Russell 2000 ETF"], [/\bnasdaq\b/i, "QQQ", "Invesco QQQ Trust"],
+  [/\bemerging markets?\b/i, "EEM", "iShares MSCI Emerging Markets ETF"], [/\beurope(?:an)?\b/i, "VGK", "Vanguard FTSE Europe ETF"],
+  [/\bjapan\b/i, "EWJ", "iShares MSCI Japan ETF"], [/\bchina\b/i, "MCHI", "iShares MSCI China ETF"], [/\b(?:uk|ftse)\b/i, "^FTSE", "FTSE 100"],
+  [/\b(?:bitcoin|btc|crypto)\b/i, "BTC-USD", "Bitcoin (USD)"], [/\b(?:ether|ethereum)\b/i, "ETH-USD", "Ether (USD)"],
+  [/\b(?:dollar|usd|greenback)\b/i, "DX-Y.NYB", "US Dollar Index (ICE, Yahoo DX-Y.NYB)"], [/\bcopper\b/i, "HG=F", "Copper futures"],
+  [/\bdefensives?\b/i, "XLP", "Consumer Staples Select Sector SPDR (defensives proxy)"]
+];
+function bb8oThemeProxy(theme) {
+  var s = String(theme || "").trim();
+  if (/^[A-Z]{1,5}(?:\.[A-Z]{1,2})?$/.test(s)) return { sym: s, name: s };
+  for (var i = 0; i < BB8O_THEMES.length; i++) if (BB8O_THEMES[i][0].test(s)) return { sym: BB8O_THEMES[i][1], name: BB8O_THEMES[i][2] };
+  return null;
+}
+// Change over the last BB8O_THEME_WIN sessions from one free Yahoo daily chart (shared chart cache, then 10 min here).
+async function bb8oThemeMove(sym) {
+  var hit = bb8oThemeCache.get(sym), now = Date.now();
+  if (hit && now - hit.at < BB8O_THEME_MS) return hit.v;
+  var v = null;
+  try {
+    var body = null;
+    if (typeof fetchYahooChart === "function") { var r0 = await fetchYahooChart(sym, "1mo", "1d"); body = r0 && !r0.unavailable ? r0.data : null; }
+    var r = body && body.chart && body.chart.result && body.chart.result[0];
+    var ts = (r && r.timestamp) || [], cl = (r && r.indicators && r.indicators.quote && r.indicators.quote[0] && r.indicators.quote[0].close) || [];
+    var pts = [];
+    for (var i = 0; i < ts.length; i++) if (Number(cl[i]) > 0) pts.push([Number(ts[i]) * 1000, Number(cl[i])]);
+    if (pts.length > BB8O_THEME_WIN) {
+      var a = pts[pts.length - 1 - BB8O_THEME_WIN], b = pts[pts.length - 1], meta = (r && r.meta) || {};
+      var asOf = Number(meta.regularMarketTime) * 1000; if (!(asOf >= b[0])) asOf = b[0];
+      v = { sym: sym, from: a[0], to: b[0], asOf: asOf, chg: Math.round((b[1] / a[1] - 1) * 10000) / 100 };
+    }
+  } catch (e) { v = null; }
+  if (v) { bb8oThemeCache.set(sym, { at: now, v: v }); if (bb8oThemeCache.size > 64) bb8oThemeCache.delete(bb8oThemeCache.keys().next().value); }
+  return v;
+}
+function bb8oSignPct(n) { return (n >= 0 ? "+" : "\u2212") + Math.abs(n).toFixed(2) + "%"; }
+// lead: true for an overweight list (kept if it beat SPY), false for an underweight list (kept if it trailed SPY).
+async function bb8oThemes(list, lead) {
+  var items = [], excluded = [], seen = {};
+  var names = (Array.isArray(list) ? list : String(list || "").split(/\s*[,;]\s*|\s+and\s+/)).map(function (x) { return String(typeof x === "object" && x ? (x.theme || x.name || "") : x || "").replace(/\s*\(.*$/, "").trim(); }).filter(Boolean);
+  var spy = await bb8oThemeMove("SPY");
+  await Promise.all(names.map(async function (theme) {
+    var px = bb8oThemeProxy(theme);
+    if (!px) { excluded.push({ theme: theme, reason: "no free price proxy" }); return; }
+    if (seen[px.sym]) { excluded.push({ theme: theme, reason: "same proxy as " + seen[px.sym] }); return; }
+    seen[px.sym] = theme;
+    var m = await bb8oThemeMove(px.sym);
+    if (!m || !spy) { excluded.push({ theme: theme, reason: "no measured figure" }); return; }
+    var rel = Math.round((m.chg - spy.chg) * 100) / 100;
+    if (lead ? !(rel > 0) : !(rel < 0)) { excluded.push({ theme: theme, reason: (lead ? "did not lead" : "did not lag") + " the S&P 500 (SPY) over the window", changePct: m.chg, benchmarkChangePct: spy.chg }); return; }
+    var toLbl = bb8oDayLabel(m.to, "America/New_York");
+    items.push({ theme: theme, proxy: px.sym, proxyName: px.name, window: BB8O_THEME_WIN + " sessions", from: new Date(m.from).toISOString().slice(0, 10), to: new Date(m.to).toISOString().slice(0, 10),
+      changePct: m.chg, benchmark: { symbol: "SPY", name: "S&P 500 (SPY)", changePct: spy.chg }, relativePct: rel, asOf: new Date(m.asOf).toISOString(), asOfUk: bb8oUk(m.asOf),
+      source: { name: "Yahoo Finance", url: "https://finance.yahoo.com/quote/" + encodeURIComponent(px.sym) + "/history/" },
+      text: theme + " (" + px.sym + ") " + bb8oSignPct(m.chg) + " vs S&P 500 (SPY) " + bb8oSignPct(spy.chg) + " over the " + BB8O_THEME_WIN + " sessions to " + toLbl + " (Yahoo Finance, as of " + bb8oUk(m.asOf) + ")" });
+  }));
+  items.sort(function (a, b) { return lead ? b.relativePct - a.relativePct : a.relativePct - b.relativePct; });
+  return { label: lead ? BB8O_LEAD_LABEL : BB8O_LAG_LABEL, items: items, excluded: excluded };
+}
+// Brief: overweight / underweight keep their keys (same neutral text), plus leadingThemes / laggingThemes and labels.
+async function bb8oBriefThemes(br) {
+  if (!br || typeof br !== "object" || Array.isArray(br.leadingThemes)) return br;
+  var L = await bb8oThemes(br.overweight || [], true);
+  br.leadingThemes = L.items; br.leadingThemesLabel = L.label; br.overweight = L.items.map(function (x) { return x.text; }); br.overweightLabel = L.label;
+  var ex = L.excluded.map(function (x) { return Object.assign({ list: "leading" }, x); });
+  if (Array.isArray(br.underweight)) {
+    var G = await bb8oThemes(br.underweight, false);
+    br.laggingThemes = G.items; br.laggingThemesLabel = G.label; br.underweight = G.items.map(function (x) { return x.text; }); br.underweightLabel = G.label;
+    ex = ex.concat(G.excluded.map(function (x) { return Object.assign({ list: "lagging" }, x); }));
+  }
+  br.themesExcluded = ex;
+  return br;
+}
+// Sync fallback (response layer): an unmeasured overweight / underweight list is never sent as a positioning call.
+function bb8oBriefThemesSync(br) {
+  if (!br || typeof br !== "object" || Array.isArray(br.leadingThemes)) return br;
+  if (Array.isArray(br.overweight)) { br.themesExcluded = br.overweight.map(function (t) { return { list: "leading", theme: String(t), reason: "no measured figure" }; }); br.overweight = []; br.leadingThemes = []; br.leadingThemesLabel = br.overweightLabel = BB8O_LEAD_LABEL; }
+  if (Array.isArray(br.underweight)) { br.themesExcluded = (br.themesExcluded || []).concat(br.underweight.map(function (t) { return { list: "lagging", theme: String(t), reason: "no measured figure" }; })); br.underweight = []; br.laggingThemes = []; br.laggingThemesLabel = br.underweightLabel = BB8O_LAG_LABEL; }
+  return br;
+}
+// AI context text: "Overweight: Gold, Cash" / "Underweight: …" segments become measured "Leading themes" / "Lagging themes"
+// segments (or are removed when nothing is measured). Only strings that contain such a segment are touched.
+var BB8O_OWUW_RE = /(^|\n|\|\s*|·\s*)\**\s*(?:overweight|underweight)s?\s*\**\s*:\s*\**\s*[^|\n·]*/gi;
+async function bb8oThemeLine(s) {
+  if (typeof s !== "string" || !/(?:^|\n|\|\s*|·\s*)\**\s*(?:overweight|underweight)s?\s*\**\s*:/i.test(s)) return s;
+  var segs = [], m; BB8O_OWUW_RE.lastIndex = 0;
+  while ((m = BB8O_OWUW_RE.exec(s))) segs.push(m);
+  var outs = await Promise.all(segs.map(async function (mm) {
+    var lead = /^[\s*]*overweight/i.test(mm[0].slice(mm[1].length)), list = mm[0].slice(mm[1].length).replace(/^[^:]*:[\s*]*/, "");
+    var T = await bb8oThemes(list, lead);
+    if (!T.items.length) return "";
+    var w = T.items[0];
+    return T.label + " (measured, " + w.window + " to " + bb8oDayLabel(Date.parse(w.to + "T20:00:00Z"), "America/New_York") + ", vs S&P 500 (SPY) " + bb8oSignPct(w.benchmark.changePct) + "; Yahoo Finance, as of " + w.asOfUk + "): " +
+      T.items.map(function (x) { return x.theme + " (" + x.proxy + ") " + bb8oSignPct(x.changePct); }).join(", ");
+  }));
+  var out = "", last = 0;
+  segs.forEach(function (mm, i) {
+    out += s.slice(last, mm.index);
+    var rep = outs[i];
+    if (rep) out += mm[1] + rep + (/\s*$/.exec(mm[0])[0]);
+    else if (!/\|/.test(mm[1])) out += mm[1]; // a removed "| Overweight: …" segment takes its separator with it
+    last = mm.index + mm[0].length;
+  });
+  out += s.slice(last);
+  return out.replace(/\s*\|\s*(?=\||$)/g, "").replace(/^\s*\|\s*/, "").replace(/\|\s*\n/g, "\n");
+}
+async function bb8oThemeCtx(b) {
+  if (!b || typeof b !== "object" || Array.isArray(b)) return b;
+  var jobs = [];
+  var walk = function (o, depth) {
+    if (!o || typeof o !== "object" || depth > 8) return;
+    Object.keys(o).forEach(function (k) {
+      if (depth === 0 && String(k).toLowerCase() === "messages") return;
+      if (depth === 0 && !bb8oHas(BB8O_CTX_FIELDS, k)) return;
+      var v = o[k];
+      if (typeof v === "string") { if (/(?:overweight|underweight)s?\s*\**\s*:/i.test(v)) jobs.push(bb8oThemeLine(v).then(function (t) { o[k] = t; })); }
+      else walk(v, depth + 1);
+    });
+  };
+  walk(b, 0);
+  if (jobs.length) await Promise.all(jobs);
+  return b;
+}
+// "Highest conviction on desk: XOM (84/100, Bullish)" and its variants become the plain desk-score statement.
+var BB8O_DESK_RE = /\b(?:(?:[Hh]ighest|[Tt]op|[Ss]trongest|[Bb]est|[Hh]igh)[- ](?:[Cc]onviction|CONVICTION)(?:\s+(?:[Nn]ame|[Ii]dea|[Pp]ick|[Cc]all))?|[Tt]op (?:[Pp]ick|[Ii]dea)|[Bb]est [Ii]dea|[Cc]onviction (?:[Bb]uy|[Pp]ick|[Ll]ong))(?:\s+(?:on|at|across|for)\s+(?:the\s+)?[Dd]esk)?\s*(?:is|[:\-\u2013])?\s*\**\s*([A-Z][A-Z0-9.\-=^]{0,9})\**\s*\(\s*(\d{1,3})\s*\/\s*100\b[^)]*\)/g;
+var BB8O_DESK_RE2 = /\b([A-Z][A-Z0-9.\-=^]{0,9})\**\s+(?:is\s+(?:the\s+|our\s+)?)?(?:(?:[Hh]ighest|[Tt]op|[Ss]trongest|[Bb]est)[- ][Cc]onviction|[Tt]op [Pp]ick|[Bb]est [Ii]dea)\s*\(\s*(\d{1,3})\s*\/\s*100\b[^)]*\)/g;
+function bb8oDeskScore(s) {
+  if (typeof s !== "string" || !/conviction|top pick|top idea|best idea/i.test(s)) return s;
+  return s.replace(BB8O_DESK_RE, function (_m, tk, sc) { return "Top desk score: " + tk + " " + sc + "/100 (Dispatch desk score)"; })
+    .replace(BB8O_DESK_RE2, function (_m, tk, sc) { return "Top desk score: " + tk + " " + sc + "/100 (Dispatch desk score)"; });
 }
 function bb8oShape(res, status, body) {
   var path = res && res.bb8oPath;
@@ -878,11 +1031,11 @@ try {
   }
   if (typeof readBody === "function") {
     var bb8oReadBody0 = readBody;
-    readBody = async function () { var b = await bb8oReadBody0.apply(this, arguments); try { return bb8oScrubBody(b); } catch (e) { return b; } };
+    readBody = async function () { var b = await bb8oReadBody0.apply(this, arguments); try { b = bb8oScrubBody(b); } catch (e) { return b; } try { return await bb8oThemeCtx(b); } catch (e) { return b; } };
   }
   if (typeof bb2Read0 === "function") {
     var bb8oRead0 = bb2Read0;
-    bb2Read0 = async function () { var b = await bb8oRead0.apply(this, arguments); try { return bb8oScrubBody(b); } catch (e) { return b; } };
+    bb2Read0 = async function () { var b = await bb8oRead0.apply(this, arguments); try { b = bb8oScrubBody(b); } catch (e) { return b; } try { return await bb8oThemeCtx(b); } catch (e) { return b; } };
   }
   // Committee, lenses, intelligence and brief prompts get the explicit no-advice rule (identified by their validators).
   if (typeof generateAi === "function") {
@@ -898,7 +1051,9 @@ try {
           args[0] = o;
         }
       } catch (e) {}
-      return bb8oGen0.apply(this, args);
+      var res = await bb8oGen0.apply(this, args);
+      try { if (options && typeof validateBriefResponse === "function" && options.validate === validateBriefResponse && res && res.validated && typeof res.validated === "object") await bb8oBriefThemes(res.validated); } catch (e) {}
+      return res;
     };
   }
   if (typeof json === "function") {

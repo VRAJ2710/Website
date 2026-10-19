@@ -280,9 +280,51 @@ intelligence, committee (earnings, document, portfolio and plain-text prompts) f
 advice sentences. After: 0. All 147 factual sentences were kept; the only things removed besides advice are the dropped action
 items and the renamed headings. Those routes now differ from bb8p on purpose; every other route still replays byte-identically.
 
+## 8. Brief: Top desk score and Leading / Lagging themes (no positioning calls)
+
+**Top desk score.** "Highest conviction on desk: XOM (84/100, Bullish)" comes from two places:
+- The free local brief, built in the browser: `app.js` line 839 (`summaryParts`, `Highest conviction on desk: ${tk} (${sc}/100, ${se})`).
+  This never reaches the server, and bb8o is server-only, so the one-line client fix goes to Frontend:
+  `` top[0] ? `Top desk score: ${top[0].tk} ${top[0].sc}/100 (Dispatch desk score).` : null, `` (app.js line 2968 has the same
+  "highest conviction" label in the portfolio card).
+- AI output and AI context: the model may echo the phrase from client context. `bb8oDeskScore` rewrites "highest / top / strongest /
+  best / high conviction (name|idea|pick|call) (on the desk) [:] TICKER (NN/100, anything)", "top pick", "top idea", "best idea",
+  "conviction buy/pick/long" and "TICKER is our top pick (NN/100)" to `Top desk score: TICKER NN/100 (Dispatch desk score)`.
+  The bullish or bearish word inside the brackets is dropped. It runs on every AI prose field (section 7) and on the client context
+  and fact fields of AI request bodies, so the model gets the neutral wording. The question and messages are never touched.
+  Without a score there's nothing to restate, so the advice filter drops the sentence ("highest conviction", "top pick", "best idea"
+  and "high-conviction" are now in `BB8O_ADVICE_RES`).
+
+**Leading / Lagging themes.** An overweight / underweight list is a positioning call. It becomes a measured, cited list:
+- Each theme is mapped to a free Yahoo proxy (`BB8O_THEMES`: Gold→GLD, Cash→BIL (SPDR 1-3 Month T-Bill), Treasuries→IEF,
+  semis→SOXX, tech / high-beta tech→XLK, the sector SPDRs, IWM, QQQ, EEM, VGK, EWJ, MCHI, ^FTSE, BTC-USD, ETH-USD,
+  dollar→DX-Y.NYB "US Dollar Index (ICE, Yahoo DX-Y.NYB)", HG=F). A plain ticker is its own proxy.
+- Change over the last 5 sessions from one Yahoo daily chart (`fetchYahooChart(sym, "1mo", "1d")`, the existing shared chart cache,
+  plus a 10-minute in-memory cache of up to 64 symbols). The benchmark is SPY over the same window.
+- A theme is listed as leading only if it beat SPY over the window (lagging: trailed it). A theme with no proxy, no figure or the
+  wrong sign is left out and recorded in `themesExcluded` with the reason. Cash is listed only with a real BIL figure.
+- Request-driven, no timers. Yahoo calls happen only when a brief or an AI body actually contains such a list.
+
+Brief fields (the `/api/brief` model path; measured right after `generateAi` returns the validated brief):
+```
+overweight:          ["Gold (GLD) +3.21% vs S&P 500 (SPY) −0.77% over the 5 sessions to Fri 16 Oct (Yahoo Finance, as of Fri 16 Oct, 21:00 UK)", …]
+overweightLabel:     "Leading themes"
+leadingThemes:       [{ theme, proxy, proxyName, window: "5 sessions", from, to, changePct, benchmark: { symbol: "SPY", name, changePct },
+                        relativePct, asOf (ISO), asOfUk, source: { name: "Yahoo Finance", url: "https://finance.yahoo.com/quote/GLD/history/" }, text }]
+leadingThemesLabel:  "Leading themes"
+underweight / underweightLabel / laggingThemes / laggingThemesLabel: the same, "Lagging themes" (only when the brief has an underweight array;
+                     the current normaliseBrief drops underweight, so today only the leading list appears)
+themesExcluded:      [{ list, theme, reason, changePct?, benchmarkChangePct? }]
+```
+Any other brief path that reaches the response layer unmeasured has its lists emptied (never a positioning call) and the excluded themes
+recorded. AI context: "Overweight: Gold, Treasuries | Underweight: High-beta tech" segments in client context / fact strings become
+"Leading themes (measured, 5 sessions to Fri 16 Oct, vs S&P 500 (SPY) −1.97%; Yahoo Finance, as of Fri 16 Oct, 21:00 UK): Treasuries (IEF)
++1.14%, Gold (GLD) −0.67% | Lagging themes (…): High-beta tech (XLK) …". A segment with nothing measured is removed with its separator.
+The free local brief's OVERWEIGHT / UNDERWEIGHT labels are client-side (app.js) and stay with Frontend.
+
 ## Tests
 
-`node --test test/bb8o.test.js`: 16 tests, offline, using vm with stubs. They cover items 1–5, Taiwan, ratings (target keys
+`node --test test/bb8o.test.js`: 20 tests (16–19: desk score and themes), offline, using vm with stubs. They cover items 1–5, Taiwan, ratings (target keys
 global; generic keys on allowlisted routes only, with 10 non-market routes keeping `rating`/`ra`/`recommendation(s)`; AI body
 context sanitized while messages, question and userThesis stay byte-identical; a stub model capturing the prompt) and section 7 (29 advice and 24 factual sentences, every field of the four routes, takeaway, labels, the
 prompt rule on those routes only) and protocol

@@ -82,12 +82,16 @@ async function rt32Yahoo(sym) { return { financialData: { currentPrice: { raw: 1
 async function readBody(req) { return JSON.parse(JSON.stringify(req.__body)); }
 var bb2Read0 = typeof readBody === "function" ? readBody : async function () { return {}; };
 var GEN = [];
-async function generateAi(options) { GEN.push(options); return { text: "{}", provider: "stub", model: "stub" }; }
+var NEXTV = null;
+async function generateAi(options) { GEN.push(options); var r = { text: "{}", provider: "stub", model: "stub" }; if (NEXTV) r.validated = NEXTV; return r; }
 function validateCommitteeResponse(t) { return t; }
 function validateLensesResponse(t) { return t; }
 function validateIntelligenceResponse(t) { return t; }
 function validateBriefResponse(t) { return t; }
 function normaliseChatAnswer(t) { return t; }
+var YCH = {}, YCALLS = [];
+function bb8oTestSeries(closes) { var t0 = 1792180800 - (closes.length - 1) * 86400; return { chart: { result: [{ meta: { regularMarketTime: t0 + (closes.length - 1) * 86400 }, timestamp: closes.map(function (_c, i) { return t0 + i * 86400; }), indicators: { quote: [{ close: closes }] } }] } }; }
+async function fetchYahooChart(sym, range, interval) { YCALLS.push(sym + "|" + range + "|" + interval); return YCH[sym] ? { data: YCH[sym] } : { unavailable: true }; }
 `;
 function load() {
   const ctx = { console: { warn() {} }, Date, JSON, Math, Object, String, Number, Array, RegExp, Promise, URL, Map, Intl, isFinite, crypto };
@@ -368,7 +372,8 @@ test("advice: every prose field of committee, lenses, intelligence and brief out
   assert.deepEqual([cj.ticker, cj.sentiment, cj.keyTakeaways, cj.tradingImplication, cj.summary, cj.recommendation, cj.takeaway], ["MU", "Bullish", ["Revenue grew 50%"], "No takeaway beyond the facts above.", "MU reported revenue up 50%. Buybacks continued.", "MONITOR", "MONITOR"]);
   assert.deepEqual(cj.rebalance, [{ action: "No takeaway beyond the facts above.", priority: "high" }]);
   const B = c.bb8oShape({ bb8oPath: "/api/brief" }, 200, { brief: { headline: "Stocks slip as chips lead the sell-off", houseView: "BUY", summary: "Chip stocks led a sell-off. Investors should buy the dip. Treasuries rallied.", overweight: ["Gold"], risks: ["Hormuz", "Go long gold as a hedge."] } });
-  assert.deepEqual([B.brief.headline, B.brief.houseView, B.brief.summary, B.brief.risks, B.brief.overweight], ["Stocks slip as chips lead the sell-off", "MONITOR", "Chip stocks led a sell-off. Treasuries rallied.", ["Hormuz"], ["Gold"]]);
+  assert.deepEqual([B.brief.headline, B.brief.houseView, B.brief.summary, B.brief.risks, B.brief.overweight], ["Stocks slip as chips lead the sell-off", "MONITOR", "Chip stocks led a sell-off. Treasuries rallied.", ["Hormuz"], []]);
+  assert.equal(B.brief.leadingThemesLabel, "Leading themes"); assert.deepEqual(B.brief.themesExcluded, [{ list: "leading", theme: "Gold", reason: "no measured figure" }]);
   // Errors, other statuses and other routes are untouched.
   const err = { error: "Buy now" }; assert.deepEqual(c.bb8oShape({ bb8oPath: "/api/committee" }, 502, err), { error: "Buy now" });
   for (const route of ["/api/chat", "/api/me", "/api/admin/content", "/api/academy-daily"]) assert.deepEqual(c.bb8oShape({ bb8oPath: route }, 200, { reply: "Buy MU.", verdict: "BUY" }), { reply: "Buy MU.", verdict: "BUY" }, route);
@@ -382,6 +387,85 @@ test("advice: committee, lenses, intelligence and brief prompts carry the no-adv
   assert.deepEqual(sys.slice(0, 4).map(s => s.endsWith("\n" + c.BB8O_NO_ADVICE) && s.startsWith("SYS")), [true, true, true, true]);
   assert.equal(sys[4], "CHAT"); assert.equal(sys[5].split(c.BB8O_NO_ADVICE).length, 2, "added once");
   assert.match(c.BB8O_NO_ADVICE, /never give a buy, sell, hold/); assert.match(c.BB8O_NO_ADVICE, /price target/);
+});
+
+const DESK = [
+  ["Highest conviction on desk: XOM (84/100, Bullish).", "Top desk score: XOM 84/100 (Dispatch desk score)."],
+  ["Highest conviction on desk: XOM (84/100, Bearish)", "Top desk score: XOM 84/100 (Dispatch desk score)"],
+  ["Top pick: NVDA (91/100, Bullish).", "Top desk score: NVDA 91/100 (Dispatch desk score)."],
+  ["Highest-conviction name: MU (77/100)", "Top desk score: MU 77/100 (Dispatch desk score)"],
+  ["Our top conviction is **TSM** (88/100, Bullish).", "Our Top desk score: TSM 88/100 (Dispatch desk score)."],
+  ["XOM highest conviction (84/100) · CVX lowest (40/100)", "Top desk score: XOM 84/100 (Dispatch desk score) · CVX lowest (40/100)"],
+  ["Best idea on the desk: AAPL (80/100, n/a)", "Top desk score: AAPL 80/100 (Dispatch desk score)"]
+];
+test("desk score: 'highest conviction' / 'top pick' become the plain Dispatch desk score; no bullish or bearish call", () => {
+  const c = load();
+  for (const [inp, out] of DESK) { assert.equal(c.bb8oDeskScore(inp), out, inp); assert.equal(c.bb8oIsAdvice(c.bb8oDeskScore(inp)), false, out); }
+  // Without a score there is nothing to restate, so the advice filter drops the sentence instead.
+  for (const s of ["Highest conviction: XOM.", "XOM is our top pick.", "High-conviction long in NVDA.", "Best idea this week is gold."]) assert.equal(c.bb8oIsAdvice(s), true, s);
+  assert.equal(c.bb8oAdviceText("Gold rose 1.2%. Highest conviction on desk: XOM (84/100, Bullish). XOM is our top pick."), "Gold rose 1.2%. Top desk score: XOM 84/100 (Dispatch desk score).");
+  const B = c.bb8oShape({ bb8oPath: "/api/brief" }, 200, { brief: { houseView: "Highest conviction on desk: XOM (84/100, Bullish)", summary: "Fear/Greed: Fear (31/100). Highest conviction on desk: XOM (84/100, Bullish). Research only — not investment advice." } });
+  assert.equal(B.brief.houseView, "Top desk score: XOM 84/100 (Dispatch desk score)");
+  assert.equal(B.brief.summary, "Fear/Greed: Fear (31/100). Top desk score: XOM 84/100 (Dispatch desk score). Research only — not investment advice.");
+  // AI context reaching the model is restated the same way; the question is untouched.
+  const b = c.bb8oScrubBody({ question: "Is XOM the highest conviction (84/100) name?", context: "Highest conviction on desk: XOM (84/100, Bullish)." });
+  assert.equal(b.question, "Is XOM the highest conviction (84/100) name?"); assert.equal(b.context, "Top desk score: XOM 84/100 (Dispatch desk score).");
+});
+const OWUW = ["Overweight: Gold, Cash", "Underweight: High-beta tech", "OVERWEIGHT: energy", "**Underweight:** small caps", "Regime: Risk-off | Overweight: Gold, Treasuries | Underweight: High-beta tech"];
+function themeCharts(c) {
+  c.YCH.SPY = c.bb8oTestSeries([598, 596, 596, 594, 592, 593.42]);   // 5 sessions: 598 -> 593.42 = -0.77%
+  c.YCH.GLD = c.bb8oTestSeries([384, 388, 388, 390, 393, 396.33]);   // 384 -> 396.33 = +3.21%
+  c.YCH.BIL = c.bb8oTestSeries([91.52, 91.53, 91.53, 91.54, 91.56, 91.59]); // +0.08%
+  c.YCH.IEF = c.bb8oTestSeries([95.2, 95.4, 95.4, 95.5, 95.6, 95.93]); // +0.77%
+  c.YCH.XLK = c.bb8oTestSeries([281, 276, 276, 272, 270, 268.75]);   // 281 -> 268.75 = -4.36%
+  c.YCH.XLE = c.bb8oTestSeries([90, 89, 89, 88, 87, 86]);             // -4.44%: did not lead
+}
+test("themes: 'Overweight: Gold, Cash' becomes measured, cited Leading themes; unmeasurable themes are left out", async () => {
+  const c = load(); themeCharts(c);
+  for (const s of OWUW) assert.equal(c.bb8oIsAdvice(s), true, s);
+  const L = await c.bb8oThemes(["Gold", "Cash", "Crypto winter", "Energy"], true);
+  assert.equal(L.label, "Leading themes");
+  assert.deepEqual(L.items.map(x => [x.theme, x.proxy, x.changePct, x.benchmark.changePct, x.relativePct, x.window, x.source.url]),
+    [["Gold", "GLD", 3.21, -0.77, 3.98, "5 sessions", "https://finance.yahoo.com/quote/GLD/history/"], ["Cash", "BIL", 0.08, -0.77, 0.85, "5 sessions", "https://finance.yahoo.com/quote/BIL/history/"]]);
+  assert.match(L.items[0].text, /^Gold \(GLD\) \+3\.21% vs S&P 500 \(SPY\) −0\.77% over the 5 sessions to Fri 16 Oct \(Yahoo Finance, as of .+ UK\)$/);
+  assert.deepEqual(L.excluded.map(x => [x.theme, x.reason]).sort(), [["Crypto winter", "no measured figure"], ["Energy", "did not lead the S&P 500 (SPY) over the window"]]);
+  // Cash with no BIL figure is left out rather than listed.
+  delete c.YCH.BIL; c.bb8oThemeCache.clear();
+  const L2 = await c.bb8oThemes(["Gold", "Cash"], true);
+  assert.deepEqual(L2.items.map(x => x.theme), ["Gold"]); assert.deepEqual(L2.excluded, [{ theme: "Cash", reason: "no measured figure" }]);
+});
+test("themes: brief keeps overweight / underweight keys with the neutral text and adds leadingThemes, laggingThemes and labels", async () => {
+  const c = load(); themeCharts(c);
+  const br = await c.bb8oBriefThemes({ houseView: "x", overweight: ["Gold", "Cash"], underweight: ["High-beta tech", "Gold"] });
+  assert.deepEqual([br.leadingThemesLabel, br.overweightLabel, br.laggingThemesLabel, br.underweightLabel], ["Leading themes", "Leading themes", "Lagging themes", "Lagging themes"]);
+  assert.deepEqual(br.overweight, br.leadingThemes.map(x => x.text)); assert.deepEqual(br.underweight, br.laggingThemes.map(x => x.text));
+  assert.deepEqual(br.laggingThemes.map(x => [x.theme, x.proxy, x.changePct]), [["High-beta tech", "XLK", -4.36]]);
+  assert.deepEqual(br.themesExcluded.map(x => [x.list, x.theme]), [["lagging", "Gold"]]);
+  // The response layer leaves a measured brief alone.
+  const out = c.bb8oShape({ bb8oPath: "/api/brief" }, 200, { brief: JSON.parse(JSON.stringify(br)) });
+  assert.deepEqual(out.brief.overweight, br.overweight);
+  // generateAi measures the brief right after the model; other routes are not measured.
+  c.NEXTV = { overweight: ["Gold", "Cash"] };
+  const r = await vm.runInContext(`generateAi({ system: "S", messages: [], validate: validateBriefResponse })`, c);
+  assert.deepEqual(r.validated.leadingThemes.map(x => x.proxy), ["GLD", "BIL"]); assert.equal(r.validated.overweight[0], r.validated.leadingThemes[0].text);
+  c.NEXTV = { overweight: ["Gold"] };
+  const r2 = await vm.runInContext(`generateAi({ system: "S", messages: [], validate: validateLensesResponse })`, c);
+  assert.deepEqual(r2.validated, { overweight: ["Gold"] });
+});
+test("themes: AI context 'Overweight: …' / 'Underweight: …' segments become measured themes; the question stays byte-identical", async () => {
+  const c = load(); themeCharts(c);
+  const out = await Promise.all(OWUW.map(s => c.bb8oThemeLine(s)));
+  assert.match(out[0], /^Leading themes \(measured, 5 sessions to Fri 16 Oct, vs S&P 500 \(SPY\) −0\.77%; Yahoo Finance, as of .+ UK\): Gold \(GLD\) \+3\.21%, Cash \(BIL\) \+0\.08%$/);
+  assert.match(out[1], /^Lagging themes \(measured, .+\): High-beta tech \(XLK\) −4\.36%$/);
+  assert.equal(out[2], "", "energy did not lead, so the segment is removed");
+  assert.equal(out[3], "", "small caps have no figure in the stub: removed");
+  assert.match(out[4], /^Regime: Risk-off \| Leading themes \(.+\): Gold \(GLD\) \+3\.21%, Treasuries \(IEF\) \+0\.77% \| Lagging themes \(.+\): High-beta tech \(XLK\) −4\.36%$/);
+  const req = { __body: { question: "Should I go overweight gold? Overweight: Gold, Cash", context: "Regime: Risk-off | Overweight: Gold, Treasuries | Underweight: High-beta tech", messages: [{ role: "user", content: "Overweight: Gold" }] } };
+  const b = await c.readBody(req);
+  assert.equal(b.question, req.__body.question); assert.deepEqual(b.messages, req.__body.messages);
+  assert.match(b.context, /^Regime: Risk-off \| Leading themes/);
+  // A body without such a segment makes no Yahoo request at all.
+  c.YCALLS.length = 0; await c.readBody({ __body: { question: "Why did MU fall?", context: "MU fell 5.63%." } }); assert.equal(c.YCALLS.length, 0);
 });
 
 const ET = (iso) => Date.parse(iso); // ET offsets in Oct 2026: UTC-4
