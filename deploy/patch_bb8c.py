@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""patch_bb8c.py — /api/financials 8s cap with partial results; Yahoo re-auth once. Server.js only.
+"""patch_bb8c.py — /api/financials 8s cap; Yahoo re-auth once; Ask cleanup on every /api/chat path; GBp/ZAc/ILA units. Server.js only.
 Stacked on bb8b (server md5 5683b5b2720ee7ced93b95f69690b81e). Does not rewrite app.js or index.html.
 1) /api/financials, /api/earnings, /api/statements, /api/holders answer within about 7.5s. If SEC or Yahoo is
    still running, the response is built from what is ready, with meta.partial and pending sources and the
@@ -8,6 +8,14 @@ Stacked on bb8b (server md5 5683b5b2720ee7ced93b95f69690b81e). Does not rewrite 
    Ask's peer lookups (rt32Build) get the full build as before.
 2) Yahoo crumb: an expired crumb triggers one shared re-auth (getcrumb with the existing cookie first, then
    fc.yahoo + getcrumb), one retry, per-call timeouts of 6.5s (auth) and 7s (quote) and a 20s chain budget.
+3) /api/chat, every path (SSE stream and the JSON handler): replayed assistant turns lose their old peer lines,
+   P/E figures and Sources footer; client-context forward P/E figures are rewritten to next-12-months values;
+   reply sentences quoting P/E figures absent from the precomputed comparison lines are dropped (after the
+   bb8 conclusion rewrite, filler removal and blank line before Sources, which now run on both paths).
+4) Minor-unit quotes (GBp/GBX, ZAc, ILA): price /100 and converted to the financial currency (Yahoo FX chart,
+   cached 6h) before NTM forward P/E; P/B /100; P/S and EV/EBITDA use market cap in the financial currency.
+   Yahoo trailingPE and dividendYield are already consistent and left alone. Adds priceCurrency, currency,
+   financialCurrency, fx and marketCapCurrency to valuation. Same for the Ask peer values.
 No tables, intervals, dependencies, secrets or Stripe changes.
 Usage: python3 patch_bb8c.py [--check] <dir with server.js>
 """
@@ -177,7 +185,10 @@ function bb8cEnsure(sym, build0) {
   var failed = false;
   entry.full = Promise.allSettled([sec.p, yah.p]).then(function (settled) {
     failed = settled[1].status === "rejected" || (settled[0].status === "rejected");
-    return build0(key, { settled: settled });
+    var y = settled[1].status === "fulfilled" ? settled[1].value : null;
+    var info = y ? bb8cNoteY(key, y) : null, u = info ? bb8cUnit(info.price) : null;
+    var fxp = info && info.fin && info.fin !== u.major ? Promise.race([bb8cFxLoad(u.major, info.fin).catch(function () { return null; }), bb8cLate(4000)]) : null;
+    return Promise.resolve(fxp).then(function () { return build0(key, { settled: settled }); });
   }).then(function (data) {
     if (bb8cAny(data)) {
       // A build with a failed source is kept for 10 minutes, not 12 hours.
@@ -200,6 +211,156 @@ function bb8cEnsure(sym, build0) {
   bb8cFlight.set(key, entry);
   return entry;
 }
+// Quote-currency units: Yahoo quotes London, Johannesburg and Tel Aviv in minor units (pence, cents, agorot)
+// while EPS estimates are in the company's financial currency.
+var BB8C_MINOR = { GBp: ["GBP", 100], GBX: ["GBP", 100], ZAc: ["ZAR", 100], ZAC: ["ZAR", 100], ILA: ["ILS", 100] };
+var bb8cCcy = new Map();
+var bb8cFx = new Map();
+var bb8cFxP = new Map();
+function bb8cUnit(ccy) {
+  var m = BB8C_MINOR[String(ccy || "")];
+  return m ? { major: m[0], div: m[1] } : { major: String(ccy || "").toUpperCase(), div: 1 };
+}
+function bb8cNote(sym, price, fin) {
+  var key = String(sym || "").toUpperCase();
+  if (!key || !price) return null;
+  var info = { price: String(price), fin: String(fin || "").toUpperCase() };
+  bb8cCcy.set(key, info);
+  if (bb8cCcy.size > 600) bb8cCcy.delete(bb8cCcy.keys().next().value);
+  var u = bb8cUnit(info.price);
+  if (info.fin && info.fin !== u.major && bb8cFxGet(u.major, info.fin) == null) bb8cFxLoad(u.major, info.fin).catch(function () {});
+  return info;
+}
+function bb8cNoteY(sym, y) {
+  var pr = (y && y.price) || {}, fd = (y && y.financialData) || {};
+  return bb8cNote(sym, pr.currency, fd.financialCurrency);
+}
+function bb8cFxGet(from, to) {
+  if (!from || !to || from === to) return 1;
+  var hit = bb8cFx.get(from + to);
+  return hit && Date.now() - hit.at < 6 * 3600e3 ? hit.rate : null;
+}
+function bb8cFxLoad(from, to) {
+  if (!from || !to || from === to) return Promise.resolve(1);
+  var k = from + to, have = bb8cFxGet(from, to);
+  if (have != null) return Promise.resolve(have);
+  if (bb8cFxP.has(k)) return bb8cFxP.get(k);
+  var p = (async function () {
+    var r = await bb8cGet("https://query2.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(k + "=X") + "?range=1d&interval=1d", { "User-Agent": RT32_BUA }, 4000);
+    if (!r.ok) throw new Error("fx " + r.status);
+    var j = await r.json();
+    var rate = Number(j && j.chart && j.chart.result && j.chart.result[0] && j.chart.result[0].meta && j.chart.result[0].meta.regularMarketPrice);
+    if (!(rate > 0)) throw new Error("fx empty");
+    bb8cFx.set(k, { at: Date.now(), rate: rate });
+    return rate;
+  })().finally(function () { bb8cFxP.delete(k); });
+  bb8cFxP.set(k, p);
+  return p;
+}
+// Price expressed in the currency EPS estimates use. null when the FX rate is not known yet.
+function bb8cPriceFin(sym, price) {
+  var px = Number(price);
+  var info = bb8cCcy.get(String(sym || "").toUpperCase());
+  if (!info || !(px > 0)) return price;
+  var u = bb8cUnit(info.price);
+  var major = px / u.div;
+  if (!info.fin || info.fin === u.major) return major;
+  var fx = bb8cFxGet(u.major, info.fin);
+  return fx == null ? null : major * fx;
+}
+function bb8cR(x) { return x && typeof x === "object" ? (x.raw != null ? Number(x.raw) : null) : (x == null ? null : Number(x)); }
+function bb8cRound(x, d) { if (x == null || !isFinite(x)) return null; var m = Math.pow(10, d == null ? 2 : d); return Math.round(x * m) / m; }
+// Fix price-based ratios for minor-unit / foreign-currency quotes. Yahoo's trailingPE and dividendYield are already
+// consistent (price and trailing EPS / dividend in the same major unit) and are not touched.
+function bb8cFixValuation(data, y, sym) {
+  if (!data || !data.valuation || !y) return data;
+  var pr = y.price || {}, fd = y.financialData || {}, ks = y.defaultKeyStatistics || {}, sd = y.summaryDetail || {};
+  var u = bb8cUnit(pr.currency), fin = String(fd.financialCurrency || "").toUpperCase() || u.major;
+  var v = data.valuation;
+  v.priceCurrency = pr.currency || null;
+  v.currency = u.major || null;
+  v.financialCurrency = fin || null;
+  if (u.div === 1 && fin === u.major) return data;
+  var fx = bb8cFxGet(u.major, fin);
+  var ptb = bb8cR(ks.priceToBook);
+  if (ptb != null && u.div > 1) v.pb = bb8cRound(ptb / u.div, 4);
+  var ps = bb8cR(sd.priceToSalesTrailing12Months), ev = bb8cR(ks.enterpriseValue), mc = bb8cR(sd.marketCap) || bb8cR(pr.marketCap), ebitda = bb8cR(fd.ebitda);
+  if (fin !== u.major) {
+    v.ps = ps != null && fx != null ? bb8cRound(ps * fx, 4) : null;
+    v.evEbitda = ev != null && mc != null && ebitda > 0 && fx != null ? bb8cRound((ev - mc + mc * fx) / ebitda, 3) : null;
+    if (fx == null) v.forwardPe = null;
+    v.fx = fx != null ? { pair: u.major + fin, rate: fx } : null;
+  }
+  v.marketCapCurrency = u.major || null;
+  if (data.metrics) { data.metrics.peRatio = v.pe; data.metrics.forwardPE = v.forwardPe; data.metrics.psRatio = v.ps; data.metrics.pbRatio = v.pb; data.metrics.evEbitda = v.evEbitda; }
+  return data;
+}
+// ── /api/chat on every path: stale figures in the request, unsupported P/E figures in the reply.
+var bb8cSeen = typeof WeakSet === "function" ? new WeakSet() : null;
+function bb8cFwdFix(text, fallbackTk) {
+  var s = String(text == null ? "" : text);
+  s = s.replace(/\b([A-Z][A-Z0-9.\-]{0,9})(?:'s|’s)?\s+forward\s+P\/E(?:\s*\(next 12 months\))?\s*\((\d+(?:\.\d+)?)\s*[x×]?\)/g, function (m, tk) {
+    var f = typeof bb8bFwdFor === "function" ? bb8bFwdFor(tk) : null;
+    return tk + "'s forward P/E (next 12 months) " + (f > 0 ? Number(f).toFixed(1) + "x" : "not available");
+  });
+  return typeof bb8bFwdText === "function" ? bb8bFwdText(s, fallbackTk) : s;
+}
+function bb8cReplay(text, tk) {
+  var s = String(text == null ? "" : text);
+  s = s.replace(/\n*\s*Sources:[\s\S]*$/i, "");
+  s = s.replace(/^Peer comparisons[^\n]*\n(?:[^\n]+\n?)*/m, "");
+  s = s.split("\n").map(function (line) {
+    return line.replace(/(?:[^.!?\n]|\.(?=\d))+(?:[.!?]+|$)\s*/g, function (sent) { return /\bP\/E\b/i.test(sent) && /\d/.test(sent) ? "" : sent; });
+  }).join("\n");
+  s = typeof bb8bCleanReplay === "function" ? bb8bCleanReplay(s, tk) : s.trim();
+  return s.trim() || "(earlier answer omitted: its figures may be out of date)";
+}
+function bb8cIsChat(req) { try { return !!(req && req.method === "POST" && /^\/api\/chat(?:\?|$)/.test(String(req.url || ""))); } catch (e) { return false; } }
+function bb8cCleanBody(body) {
+  if (!body || typeof body !== "object" || !Array.isArray(body.messages)) return body;
+  if (bb8cSeen) { if (bb8cSeen.has(body)) return body; bb8cSeen.add(body); }
+  try {
+    var tk = Array.isArray(body.tickers) && body.tickers[0] ? String(body.tickers[0]).toUpperCase() : "";
+    if (typeof body.context === "string") body.context = bb8cFwdFix(body.context, tk);
+    var lastUser = -1;
+    body.messages.forEach(function (m, i) { if (m && m.role === "user") lastUser = i; });
+    body.messages = body.messages.map(function (m, i) {
+      if (!m || m.role !== "assistant" || i > lastUser || typeof m.content !== "string") return m;
+      return Object.assign({}, m, { content: bb8cReplay(m.content, tk) });
+    });
+  } catch (e) {}
+  return body;
+}
+function bb8cAllowed(facts) {
+  var set = {};
+  (facts || []).forEach(function (f) {
+    var s = String((f && f.sentence) || "");
+    (s.match(/\d+(?:\.\d+)?(?=x)/g) || []).forEach(function (n) { set[Number(n).toFixed(1)] = 1; });
+  });
+  return set;
+}
+// Drop body sentences that quote a P/E figure the precomputed comparison lines do not contain.
+function bb8cScrub(text, facts) {
+  var list = Array.isArray(facts) ? facts : [];
+  var s = String(text == null ? "" : text);
+  if (!list.length) return s;
+  var ok = bb8cAllowed(list);
+  var cut = s.search(/\n\nSources:/), foot = cut >= 0 ? s.slice(cut) : "", main = cut >= 0 ? s.slice(0, cut) : s;
+  var blocks = main.split("\n\n");
+  var start = /^Peer comparisons/.test(blocks[0] || "") ? 1 : 0;
+  for (var i = start; i < blocks.length; i++) {
+    blocks[i] = blocks[i].split("\n").map(function (line) {
+      return line.replace(/(?:[^.!?\n]|\.(?=\d))+(?:[.!?]+|$)\s*/g, function (sent) {
+        if (!/\bP\/E\b|\bmultiple\b|\bearnings\b/i.test(sent)) return sent;
+        var nums = sent.match(/\d+(?:\.\d+)?(?=\s*[x×])/g) || [];
+        for (var k = 0; k < nums.length; k++) if (!ok[Number(nums[k]).toFixed(1)]) return "";
+        return sent;
+      }).replace(/\s+$/, "");
+    }).filter(function (line, idx, arr) { return line.trim() || (idx > 0 && arr[idx - 1].trim()); }).join("\n").trim();
+  }
+  var out = blocks.filter(function (b, i) { return i < start || b.trim(); }).join("\n\n").trim();
+  return out + foot;
+}
 function bb8cLate(ms) {
   return new Promise(function (r) { var t = setTimeout(function () { r("bb8c-late"); }, Math.max(0, ms)); if (t && t.unref) t.unref(); });
 }
@@ -210,11 +371,63 @@ async function bb8cLoad(sym, build0) {
   return { data: await entry.snapshot(), partial: true };
 }
 try {
+  if (typeof bb8Rt32Forward === "function") {
+    var bb8cRt32Fwd0 = bb8Rt32Forward;
+    bb8Rt32Forward = function (y, price, sym) { if (y && sym) bb8cNoteY(sym, y); return bb8cRt32Fwd0.call(this, y, sym ? bb8cPriceFin(sym, price) : price, sym); };
+  }
+  if (typeof bb8SummaryForward === "function") {
+    var bb8cSumFwd0 = bb8SummaryForward;
+    bb8SummaryForward = function (r, sym) {
+      if (r && sym) bb8cNoteY(sym, r);
+      var px = r && r.price && r.price.regularMarketPrice;
+      var pf = sym ? bb8cPriceFin(sym, bb8cR(px)) : null;
+      if (pf == null || pf === bb8cR(px)) return bb8cSumFwd0.call(this, r, sym);
+      var copy = Object.assign({}, r, { price: Object.assign({}, r.price, { regularMarketPrice: { raw: pf } }) });
+      return bb8cSumFwd0.call(this, copy, sym);
+    };
+  }
+  if (typeof bb8ApplyNtm === "function") {
+    var bb8cApply0 = bb8ApplyNtm;
+    bb8ApplyNtm = function (sym, v) {
+      if (!v || typeof v !== "object") return bb8cApply0.call(this, sym, v);
+      var px = v.price, pf = bb8cPriceFin(sym, px);
+      if (pf === px) return bb8cApply0.call(this, sym, v);
+      v.price = pf;
+      try { bb8cApply0.call(this, sym, v); } finally { v.price = px; }
+      return v;
+    };
+  }
+  if (typeof bb2StoreQuote === "function") {
+    var bb8cStore0 = bb2StoreQuote;
+    bb2StoreQuote = function (row, at) {
+      try { if (row && row.symbol) bb8cNote(row.symbol, row.currency, row.financialCurrency); } catch (e) {}
+      return bb8cStore0.call(this, row, at);
+    };
+  }
+  if (typeof readBody === "function") {
+    var bb8cRead0 = readBody;
+    readBody = async function (req) { var b = await bb8cRead0.apply(this, arguments); return bb8cIsChat(req) ? bb8cCleanBody(b) : b; };
+  }
+  if (typeof bb2Read0 === "function") {
+    var bb8cRead1 = bb2Read0;
+    bb2Read0 = async function (req) { var b = await bb8cRead1.apply(this, arguments); return bb8cIsChat(req) ? bb8cCleanBody(b) : b; };
+  }
+  if (typeof bb3bCompose === "function") {
+    var bb8cCompose0 = bb3bCompose;
+    bb3bCompose = function (reply, built, cite) {
+      var facts = (built && Array.isArray(built.facts)) ? built.facts : [];
+      return bb8cScrub(bb8cCompose0.call(this, reply, built, cite), facts);
+    };
+  }
   if (typeof rt32Crumb === "function") rt32Crumb = bb8cCrumb;
   if (typeof rt32Yahoo === "function") rt32Yahoo = bb8cYahoo;
   if (typeof rt32Build === "function" && typeof rt33sFund === "function") {
     var bb8cBuild0 = bb8bBuild0;
-    var bb8cAssemble = function (key, snap) { return bb8cBuild0(key, snap); };
+    var bb8cAssemble = function (key, snap) {
+      var y = snap && snap.settled && snap.settled[1] && snap.settled[1].status === "fulfilled" ? snap.settled[1].value : null;
+      if (y) bb8cNoteY(key, y);
+      return Promise.resolve(bb8cBuild0(key, snap)).then(function (d) { return bb8cFixValuation(d, y, key); });
+    };
     rt32Build = function (sym) { return bb8cEnsure(sym, bb8cAssemble).full; };
     var bb8cFund0 = rt33sFund;
     rt33sFund = async function (req, res, p, url) {
@@ -306,4 +519,4 @@ except Exception as e:
         os.unlink(bak)
     print("ABORT: write failed; backup restored:", e)
     sys.exit(1)
-print("APPLY bb8c financials cap + yahoo re-auth")
+print("APPLY bb8c financials cap + yahoo re-auth + ask all paths + quote units")

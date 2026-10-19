@@ -30,12 +30,35 @@ function bb8bBuild0(key, snap) {
   var s = snap.settled[0], y = snap.settled[1];
   var d = { symbol: key, asOf: "now", sources: { sec: s.status === "fulfilled" ? "ok" : String(s.reason && s.reason.message), yahoo: y.status === "fulfilled" ? "ok" : String(y.reason && y.reason.message) } };
   if (s.status === "fulfilled" && s.value) d.financials = s.value;
-  if (y.status === "fulfilled") d.valuation = { pe: y.value.pe };
+  if (y.status === "fulfilled") {
+    var r = y.value, px = r.price && r.price.regularMarketPrice ? r.price.regularMarketPrice.raw : null;
+    d.valuation = { pe: r.pe != null ? r.pe : (r.summaryDetail && r.summaryDetail.trailingPE.raw), price: px, forwardPe: bb8Rt32Forward(r, px, key),
+      pb: r.defaultKeyStatistics ? r.defaultKeyStatistics.priceToBook.raw : null, ps: r.summaryDetail ? r.summaryDetail.priceToSalesTrailing12Months.raw : null,
+      evEbitda: r.defaultKeyStatistics ? r.defaultKeyStatistics.enterpriseToEbitda.raw : null, marketCap: r.summaryDetail ? r.summaryDetail.marketCap.raw : null };
+    d.metrics = { peRatio: d.valuation.pe, forwardPE: d.valuation.forwardPe, pbRatio: d.valuation.pb };
+  }
   return Promise.resolve(d);
 }
+var NTM = { "BP.L": 0.9714 };
+function bb8ForwardFrom(price, eps) { var px = Number(price); return eps > 0 && px > 0 && px / eps < 1000 ? Math.round(px / eps * 100) / 100 : null; }
+function bb8Rt32Forward(y, price, sym) { return bb8ForwardFrom(price, NTM[sym]); }
+var memV = {};
+function bb8ApplyNtm(sym, v) { v.forward = bb8ForwardFrom(v.price, NTM[sym]); return v; }
+function bb2StoreQuote(row) { memV[row.symbol] = bb8ApplyNtm(row.symbol, { price: row.regularMarketPrice }); }
+async function readBody(req) { return JSON.parse(req.body); }
+var bb2Read0 = readBody;
+function bb8bFwdFor(tk) { return { MU: 4.87, NVDA: 15.27 }[tk] || null; }
+function bb8bFwdText(t) { return t; }
+function bb8bCleanReplay(t) { return String(t).replace(/[^.!?\\n]*cannot directly compare[^.!?\\n]*[.!?]?/gi, "").trim(); }
+function bb3bCompose(reply, built, cite) { return String(reply).replace(/\\n+Sources:[\\s\\S]*$/i, "").trim() + "\\n\\nSources:\\n[1] Yahoo Finance"; }
 async function rt33sFund(req, res, p, url) { fundCalls++; var sym = url.searchParams.get("symbol"); var h = RT32.cache.get(sym); json(res, 200, h ? h.data : { symbol: sym, unavailable: true }, { "Cache-Control": "public, max-age=600" }); }
 `;
 
+// Raw Yahoo quoteSummary fields for BP.L on 2026-10-16 close (price in pence, EPS/financials in USD).
+const BPL = { price: { currency: "GBp", regularMarketPrice: { raw: 614.1 }, marketCap: { raw: 94900240384 } },
+  financialData: { financialCurrency: "USD", currentPrice: { raw: 614.1 }, ebitda: { raw: 39197999104 } },
+  summaryDetail: { trailingPE: { raw: 24.564 }, priceToSalesTrailing12Months: { raw: 0.44044387 }, marketCap: { raw: 94900240384 }, dividendYield: { raw: 0.0408 } },
+  defaultKeyStatistics: { priceToBook: { raw: 217.4312 }, enterpriseToEbitda: { raw: 3.796 }, enterpriseValue: { raw: 148782039040 } } };
 function harness() {
   const cfg = { yahooMs: 50, secMs: 20, expired: false, yahooDown: false };
   const calls = {};
@@ -51,6 +74,8 @@ function harness() {
     if (k === "facts") return R({ facts: { rev: 1.3e11 } });
     if (k === "fc") return R("", 404);
     if (k === "getcrumb") return R(cfg.badCrumbOnce ? (cfg.badCrumbOnce = false, "<html>") : "crumbNEW", 200);
+    if (/chart\/GBPUSD/.test(u)) { calls.fx = (calls.fx || 0) + 1; return R({ chart: { result: [{ meta: { regularMarketPrice: 1.333 } }] } }); }
+    if (k === "qs" && /BP\.L/.test(u)) return R({ quoteSummary: { result: [BPL] } });
     if (k === "qs") { if (cfg.expired && !/crumb=crumbNEW/.test(u)) return R({}, 401); return R({ quoteSummary: { result: [{ pe: 27.07 }] } }); }
     return R({}, 404);
   };
@@ -147,5 +172,62 @@ test("Yahoo down: SEC-only answer cached for 10 minutes, not 12 hours; foreign l
   r = await h.call("BP.L");
   assert.equal(h.calls.map || 0, 0);
   assert.equal(h.calls.facts || 0, 0);
-  assert.equal(r.body.valuation.pe, 27.07);
+  assert.equal(r.body.valuation.pe, 24.564);
+});
+
+test("BP.L: pence price and USD estimates give consistent ratios; trailing P/E is left as Yahoo reports it", async () => {
+  const h = harness();
+  const r = await h.call("BP.L");
+  const v = r.body.valuation;
+  assert.equal(v.priceCurrency, "GBp");
+  assert.equal(v.currency, "GBP");
+  assert.equal(v.financialCurrency, "USD");
+  assert.equal(v.pe, 24.564, "Yahoo trailing P/E: GBP price / GBP trailing EPS, not corrected again");
+  assert.equal(v.forwardPe, 8.43, "6.141 GBP x 1.333 = 8.186 USD / 0.9714 USD NTM EPS; was 632.18");
+  assert.equal(v.pb, 2.1743, "217.4312 / 100; was 217.43");
+  assert.equal(v.ps, 0.5871, "0.44044 x 1.333: GBP market cap converted to USD before dividing by USD revenue");
+  assert.equal(v.evEbitda, 4.602, "(148.78B - 94.90B + 94.90B x 1.333) / 39.20B");
+  assert.equal(r.body.metrics.forwardPE, 8.43);
+  assert.equal(r.body.metrics.pbRatio, 2.1743);
+  assert.equal(h.calls.fx, 1);
+});
+
+test("Ask valuation path: a GBp quote row never yields a pence-based forward P/E", async () => {
+  const h = harness();
+  h.V("bb2StoreQuote({ symbol: 'BP.L', regularMarketPrice: 614.1, currency: 'GBp', financialCurrency: 'USD' })");
+  assert.equal(h.V("memV['BP.L'].forward"), null, "FX not known yet: no figure rather than 632x");
+  await h.until(() => h.V("bb8cFxGet('GBP', 'USD')") === 1.333, 3000);
+  h.V("bb2StoreQuote({ symbol: 'BP.L', regularMarketPrice: 614.1, currency: 'GBp', financialCurrency: 'USD' })");
+  assert.equal(h.V("memV['BP.L'].forward"), 8.43);
+  assert.equal(h.V("memV['BP.L'].price"), 614.1, "the quote price itself is not changed");
+});
+
+test("/api/chat request: stale replayed answers and client forward P/E figures are cleaned on every path", async () => {
+  const h = harness();
+  const old = "Peer comparisons as of 2026-10-16 20:00 UTC: [2]\nMU's forward P/E (4.2x) is lower than NVDA's forward P/E (13.5x).\n\nMicron trades at a trailing P/E of 11.8x and a forward P/E of 4.2x. Memory demand is strong. In conclusion, we cannot directly compare it to its peers.Sources:\n[2] Yahoo Finance | as of 2026-10-16";
+  const body = { messages: [{ role: "user", content: "q" }, { role: "assistant", content: old }, { role: "user", content: "q" }], tickers: ["MU"], context: "MU: trailing P/E (TTM) 11.8x · MU's forward P/E (4.2x)\nNVDA's forward P/E (13.5x)" };
+  for (const fn of ["readBody", "bb2Read0"]) {
+    const out = await h.ctx[fn]({ method: "POST", url: "/api/chat", body: JSON.stringify(body) });
+    const replay = out.messages[1].content;
+    assert.doesNotMatch(replay, /13\.5x|4\.2x|11\.8x|Peer comparisons|Sources:|cannot directly compare/, fn + ": " + replay);
+    assert.match(replay, /Memory demand is strong/);
+    assert.match(out.context, /MU's forward P\/E \(next 12 months\) 4\.9x/);
+    assert.match(out.context, /NVDA's forward P\/E \(next 12 months\) 15\.3x/);
+  }
+  const other = await h.ctx.readBody({ method: "POST", url: "/api/committee", body: JSON.stringify(body) });
+  assert.equal(other.messages[1].content, old, "other routes untouched");
+});
+
+test("/api/chat reply: body sentences quoting P/E figures not in the comparison lines are dropped", () => {
+  const h = harness();
+  h.ctx.__facts = [{ sentence: "MU forward P/E (next 12 months) 4.9x is lower than NVDA forward P/E (next 12 months) 15.3x by 10.4x (68.0%)." }, { sentence: "MU trailing P/E (TTM) 11.8x is lower than NVDA trailing P/E (TTM) 27.1x by 15.3x (56.5%)." }];
+  const reply = "Peer comparisons as of 2026-10-16 20:00 UTC: [1]\nMU forward P/E (next 12 months) 4.9x is lower than NVDA forward P/E (next 12 months) 15.3x by 10.4x (68.0%).\n\nMicron trades at a trailing P/E of 11.8x and a forward P/E of 4.2x, while NVDA trades at 13.5x forward. MU's forward P/E of 4.9x sits well below NVDA's 15.3x. Memory pricing lifted earnings 20% last quarter.\nIn short, MU screens cheaper than NVDA on both bases.";
+  const out = h.V("bb3bCompose(" + JSON.stringify(reply) + ", { facts: __facts }, 1)");
+  assert.doesNotMatch(out, /4\.2x|13\.5x/);
+  assert.match(out, /MU's forward P\/E of 4\.9x sits well below NVDA's 15\.3x\./);
+  assert.match(out, /Memory pricing lifted earnings 20% last quarter\./);
+  assert.match(out, /^Peer comparisons as of/);
+  assert.match(out, /In short/);
+  assert.match(out, /\n\nSources:\n/);
+  assert.equal(h.V("bb3bCompose('No figures here.', { facts: [] }, 0)").startsWith("No figures here."), true, "no facts: unchanged");
 });
