@@ -14,6 +14,13 @@ REFUSE_MARKER = "// ── rt61 ──"
 
 BLOCK = r'''
 // ── rt61 ──
+function fe76_vword(v) {
+  if (v == null) return "";
+  return String(v)
+    .replace(/\b(?:AVOID|Avoid|avoid)\b/g, "Weak")
+    .replace(/\b(?:BUY|Buy|buy)\b/g, "Positive")
+    .replace(/\b(?:SELL|Sell|sell)\b/g, "Negative");
+}
 var fe76_hold = Object.create(null);
 var fe76_spotPrev = null;
 var fe76_skipRender = 0;
@@ -1379,7 +1386,7 @@ function fe76_useProfile(sym, prof) {
     row[k] = asset[k];
   }
   fe76_dropRate(row);
-  if (mc) row.mc = mc;
+  if (mc) { row.mc = mc; row._fe76Cap = mc; }
   if (!row.cat) row.cat = "Stock";
   if (!row.th) row.th = (prof.name || asset.tk) + " on " + (prof.exchange || "the home exchange") + ".";
   try { _dynTk = null; _dynData = null; _dynLoading = false; } catch (e4) {}
@@ -1418,6 +1425,24 @@ try {
     return out;
   };
 } catch (e) {}
+try {
+  var fe76_rt33 = _rt33Apply;
+  _rt33Apply = function (tk) {
+    var cap = "";
+    try {
+      var a0 = A.find(function (a) { return a && a.tk === tk; });
+      cap = a0 && a0._fe76Cap || "";
+    } catch (e0) {}
+    var r = fe76_rt33.apply(this, arguments);
+    if (cap) {
+      try {
+        var a1 = A.find(function (a) { return a && a.tk === tk; });
+        if (a1 && (!a1.mc || a1.mc === "\u2014" || a1.mc === "-")) a1.mc = cap;
+      } catch (e1) {}
+    }
+    return r;
+  };
+} catch (e) {}
 try { setTimeout(function () { try { fetch("/api/brief/edition", { signal: AbortSignal.timeout(8000) }).catch(function () {}); } catch (e) {} }, 600); } catch (e) {}
 '''
 
@@ -1427,6 +1452,13 @@ def once(text, old, new, label):
     if n != 1:
         die("%s count %s" % (label, n))
     return text.replace(old, new, 1)
+
+
+def times(text, old, new, label, n):
+    c = text.count(old)
+    if c != n:
+        die("%s count %s" % (label, c))
+    return text.replace(old, new)
 
 
 def strip_ratings(app):
@@ -1549,6 +1581,48 @@ def strip_ratings(app):
     return app
 
 
+def neutralise_verdicts(app):
+    """Display-only. Scoring still reads BUY / SELL / AVOID."""
+    pairs = [
+        ("${wDir||dir}", "${fe76_vword(wDir||dir)}", "phone vote headline"),
+        ("simple vote: ${dir}", "simple vote: ${fe76_vword(dir)}", "phone simple vote"),
+        ("${buyCount} Buy", '${buyCount} ${fe76_vword("Buy")}', "phone buy count"),
+        ("${avoidCount} Avoid", '${avoidCount} ${fe76_vword("Avoid")}', "phone avoid count"),
+        (">Buy ${buyPct}%", '>${fe76_vword("Buy")} ${buyPct}%', "phone buy pct"),
+        (">Avoid ${avoidPct}%", '>${fe76_vword("Avoid")} ${avoidPct}%', "phone avoid pct"),
+        ('${c.verdict||"—"}', '${fe76_vword(c.verdict)||"—"}', "phone member verdict"),
+        ('${synth.verdict||"MONITOR"}', '${fe76_vword(synth.verdict)||"MONITOR"}', "phone synth verdict"),
+        (">${w.dir}</div>", ">${fe76_vword(w.dir)}</div>", "desk vote dir"),
+        (">${synth.verdict}</div>", ">${fe76_vword(synth.verdict)}</div>", "desk synth verdict"),
+        (">${c.verdict}</span>", ">${fe76_vword(c.verdict)}</span>", "desk member verdict"),
+        ('${intel.verdict || "MONITOR"}', '${fe76_vword(intel.verdict) || "MONITOR"}', "intel verdict"),
+        ("Lens verdict: ${synth.verdict} (", "Lens verdict: ${fe76_vword(synth.verdict)} (", "insight verdict"),
+        ('<span class="cr-v">${h.verdict || "—"}</span>', '<span class="cr-v">${fe76_vword(h.verdict) || "—"}</span>', "continue chip"),
+        ('${(st.verdict || "MONITOR").replace(/</g, "&lt;")}', '${fe76_vword(st.verdict || "MONITOR").replace(/</g, "&lt;")}', "chat verdict"),
+        ("<strong>Avoid tilt:</strong>", "<strong>Lower weight:</strong>", "regime tilt"),
+        (">Avoid ${_rt52E(x)}</span>", ">Lower weight ${_rt52E(x)}</span>", "regime pill"),
+        ("*BUY signals: Strong fundamentals with clear moat at reasonable valuation*", "*Positive signals: Strong fundamentals with clear moat at reasonable valuation*", "guide buy value"),
+        ("*AVOID signals: Price too high for intrinsic value, or business quality unclear*", "*Weak signals: Price too high for intrinsic value, or business quality unclear*", "guide avoid value"),
+        ("*AVOID is the most powerful signal — permanent impairment risks outweigh upside*", "*Weak is the most powerful signal — permanent impairment risks outweigh upside*", "guide avoid quality"),
+        ("*BUY signals: Clear catalyst identified, sum-of-parts undervaluation, actionable timeline*", "*Positive signals: Clear catalyst identified, sum-of-parts undervaluation, actionable timeline*", "guide buy catalyst"),
+    ]
+    for old, new, label in pairs:
+        app = once(app, old, new, label)
+    app = times(app, '${r.verdict || "MONITOR"}', '${fe76_vword(r.verdict) || "MONITOR"}', "journal verdict", 2)
+    app = times(app, "bd(r.verdict,", "bd(fe76_vword(r.verdict),", "history badge", 2)
+    return app
+
+
+def fix_lists(app):
+    """Watchlist cells prefixed $ for every row, including FX."""
+    return once(
+        app,
+        "<td data-fl=\"${a.tk}\">${na?'<span style=\"color:var(--t3);opacity:0.55\">—</span>':'$'+d.p}</td>",
+        "<td data-fl=\"${a.tk}\">${na?'<span style=\"color:var(--t3);opacity:0.55\">—</span>':((a.cat==='Stock'||a.cat==='Crypto'||a.cat==='Commodity')?'$':'')+d.p}</td>",
+        "watchlist fx dollar",
+    )
+
+
 def die(msg):
     print(msg, file=sys.stderr)
     sys.exit(1)
@@ -1657,6 +1731,8 @@ def main():
     if index.count('app.js?v=chat75"') != 1:
         die("cache bust anchor missing")
     app = strip_ratings(app)
+    app = neutralise_verdicts(app)
+    app = fix_lists(app)
     app = patch_stream(app)
     app = app + BLOCK
     if "fe76_cardLock" in app or "gap >= 60000" in app:
@@ -1665,6 +1741,8 @@ def main():
         die("fe76_quote count")
     if app.count("function fe76_closeLens(") != 1:
         die("fe76_closeLens count")
+    if app.count("function fe76_vword(") != 1:
+        die("fe76_vword count")
     index = index.replace('app.js?v=chat75"', 'app.js?v=chat76"', 1)
     tmp = tempfile.NamedTemporaryFile("w", suffix=".js", delete=False, encoding="utf-8")
     try:
