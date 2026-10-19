@@ -169,27 +169,36 @@ test("1) beta: Yahoo's published beta replaces the card line, cited Yahoo Financ
 test("1) beta: defaultKeyStatistics when summaryDetail has none; no Yahoo beta means no beta line and beta sentences dropped", async () => {
   const a = await streamRun(7, YQ({}, { raw: 1.9, fmt: "1.90" }), "MU's beta of 1.90 is high [1].\nSources:");
   assert.match(a.reply, /published beta is 1\.90 \(Yahoo Finance/);
-  assert.match(a.reply, /MU's beta of 1\.90 is high \[\d+\]\./);
+  assert.doesNotMatch(a.reply, /MU's beta of 1\.90 is high/, "restates the bullet beta, so item 3 drops it");
   const b = await streamRun(7, YQ({}, {}), "MU's beta of 2.23 means it tends to amplify market moves [9].\nMU lagged its sector by 1.48 percentage points [2].\nSources:");
   assert.doesNotMatch(b.reply, /beta/i);
   assert.ok(!b.foot.some(s => /key-statistics/.test(s.link || "")));
-  assert.match(b.reply, /MU lagged its sector by 1\.48 percentage points \[\d+\]\./);
+  assert.doesNotMatch(b.reply, /MU lagged its sector by 1\.48 percentage points \[/, "restates a bullet figure");
   const c = await streamRun(7, undefined, "MU's beta of 1.62 makes it volatile [8].\nThe card's 1.62 beta reading is high.\nSources:");
   assert.doesNotMatch(c.reply, /1\.62/, "a number other than Yahoo's is never called beta");
 });
 
-test("2) stream at chunks 1, 3, 7, 13 plus JSON: mis-cites re-pointed, unsourced figure dropped, interpretive cite stripped, Sources renumbered", async () => {
+const MODEL_PROSE = [
+  "MU fell 5.63% to $878.84 in its last session, a sharper drop than SPY's 1.11% decline, leaving it 4.52 percentage points behind the market [8]. It also trailed SOXX, which fell 4.14%, by 1.48 percentage points [8]. With a beta of 2.23, MU tends to amplify market moves, and its card score of 28/100 reflects increased investor caution towards MU [11]. This reflects increased investor caution towards MU.",
+  "Chip stocks including MU rebounded on Monday after their worst week since March [2].",
+  "Chip stocks have fallen 12% this month [8]."
+].join("\n");
+test("2+3) stream at chunks 1, 3, 7, 13 plus JSON: mis-cites re-pointed or dropped, bullet restatements and uncited claims dropped, Sources renumbered", async () => {
   for (const chunk of [1, 3, 7, 13]) {
-    const { reply, foot, painted } = await streamRun(chunk);
-    const q = numOf(foot, /last price and session change/), yb = numOf(foot, /key-statistics/);
-    const body = reply.split("\n\n")[1];
-    assert.match(body, new RegExp("MU's beta of 2\\.23 means it tends to amplify market moves \\[" + yb + "\\]\\."), "chunk " + chunk + "\n" + reply);
-    assert.match(body, new RegExp("SPY fell 1\\.11% in the same session, a much smaller drop \\[" + q + "\\]\\."));
-    assert.match(body, new RegExp("MU lagged its sector by 1\\.48 percentage points \\[" + q + "\\]\\."));
-    assert.match(body, /Memory makers are sensitive to swings in AI spending expectations\.(?! \[)/);
-    assert.doesNotMatch(reply + painted, /12% this month/);
-    assert.deepEqual(cites(reply), foot.map((_, i) => i + 1));
-    assert.ok(!foot.some(s => s.name === "Reuters"), "client headlines no longer cited");
+    for (const model of [MODEL_CARD, MODEL_PROSE]) {
+      const { reply, foot, painted } = await streamRun(chunk, undefined, model);
+      const parts = reply.split("\n\n");
+      assert.match(parts[parts.length - 1], /^In short: /);
+      const prose = parts.slice(1, -1).join("\n\n");
+      for (const re of [/5\.63%|1\.11%|4\.52|4\.14%|1\.48|2\.23 means|beta of 2\.23|28\/100/, /investor caution/, /12% this month/, /Memory makers/]) assert.doesNotMatch(prose, re, "chunk " + chunk + "\n" + reply);
+      if (model === MODEL_PROSE) {
+        const st = numOf(foot, /stocktwits|Rebound/i);
+        assert.equal(prose, "Chip stocks including MU rebounded on Monday after their worst week since March [" + st + "].", "cite re-pointed to the matching headline");
+      } else assert.equal(parts.length, 2, "nothing left: bullets plus In short\n" + reply);
+      assert.doesNotMatch(painted, /investor caution|12% this month/);
+      assert.deepEqual(cites(reply), foot.map((_, i) => i + 1));
+      assert.ok(!foot.some(s => s.name === "Reuters"), "client headlines no longer cited");
+    }
   }
   const ctx = load();
   ctx.__news = NEWS; ctx.__yahoo = YQ({ raw: 2.226 }, null);
@@ -197,12 +206,13 @@ test("2) stream at chunks 1, 3, 7, 13 plus JSON: mis-cites re-pointed, unsourced
   await ctx.bb2Read0({ body: { messages: [{ role: "user", content: CARD_Q }], tickers: ["MU"] } });
   await ctx.generateAi({ system: "ORIGINAL", messages: [] });
   assert.match(ctx.__genSystem, /MU's published beta is 2\.23 \(Yahoo Finance/);
-  const out = ctx.bb3bCompose(MODEL_CARD, { facts: [] }, 0);
+  assert.match(ctx.__genSystem, /Do not restate any figure from the lines above/);
+  const out = ctx.bb3bCompose(MODEL_PROSE.replace(/\[8\]/g, "[1]").replace(/\[11\]/g, "[4]").replace("[2].\n", "[2].\n"), { facts: [] }, 0);
   const keep = ctx.__store.bb8eCites.keep.map(i => ctx.__store.bb8eCites.full[i]);
-  const yb = keep.findIndex(s => /key-statistics/.test(s.link)) + 1, q = keep.findIndex(s => /last price/.test(s.detail)) + 1;
-  assert.match(out, new RegExp("amplify market moves \\[" + yb + "\\]\\."));
-  assert.match(out, new RegExp("much smaller drop \\[" + q + "\\]\\."));
-  assert.doesNotMatch(out, /12% this month/);
+  const st = keep.findIndex(s => /stocktwits|Rebound/i.test((s.link || "") + (s.detail || ""))) + 1;
+  assert.ok(st > 0);
+  assert.match(out, new RegExp("\\n\\nChip stocks including MU rebounded on Monday after their worst week since March \\[" + st + "\\]\\.\\n\\nIn short: "));
+  assert.doesNotMatch(out, /investor caution|12% this month|beta of 2\.23/);
   assert.deepEqual(cites(out), keep.map((_, i) => i + 1));
 });
 

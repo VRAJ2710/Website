@@ -11,6 +11,16 @@ Stacked on bb8g (server md5 7d10de541da933783afa032a90a4e57c). Does not rewrite 
    sentence has no figure, one of its tickers. Otherwise it is re-pointed to the matching server fact line's
    source, else stripped; a sentence left with no [n] and a figure found in no fact line is dropped. Sources are
    then pruned and renumbered as before (bb8e).
+3) Card answers: a model sentence is kept only when it carries a matched [n] and restates none of the card bullet
+   figures; otherwise it is dropped (uncited interpretation too). With nothing left the answer is the bullets plus
+   'In short'.
+4) Insiders: filings load 4 at a time through the shared 10/s SEC limiter and /api/insiders answers within about
+   6.5 s; what is ready comes back with meta.partial true, meta.more "loading", note "More filings loading -
+   refresh shortly", X-Dispatch-Data-Status: partial, while the same scan keeps filling the cache.
+5) Insiders window: free (5 open-market trades) and premium (40 filings) scans no longer share the cache key, so a
+   free scan can never stand in for a premium window; a filing that fails twice ends the scan as partial; partial
+   scans are never cached, and a complete entry is only replaced by another complete scan. The window covers the
+   unbroken run of filings actually loaded.
 No tables, intervals, dependencies, secrets or Stripe changes.
 Usage: python3 patch_bb8h.py [--check] <dir with server.js>
 """
@@ -83,6 +93,15 @@ REQUIRED = [
     ("bb5BetaMem", "var bb5BetaMem = {};"),
     ("rt32Yahoo", "async function rt32Yahoo(sym) {"),
     ("bb8bYahooSym", "function bb8bYahooSym(sym) {"),
+    ("bb7FetchForm4", "async function bb7FetchForm4(ticker, mode, now) {"),
+    ("bb7Form4", "async function bb7Form4(ticker, mode, now) {"),
+    ("bb7FormXml", "async function bb7FormXml(cik, filing) {"),
+    ("bb7Shape", "function bb7Shape(pack, opts) {"),
+    ("bb8Older", "async function bb8Older(ticker, before, opts) {"),
+    ("bb8Load0", "var bb8Load0 = bb7Load;"),
+    ("bb8Partial", "function bb8Partial(ticker, mode, opts) {"),
+    ("bb8Late", "function bb8Late(ms) {"),
+    ("bb8Track", "function bb8Track(ticker, mode, info) {"),
 ]
 miss = []
 for name, anchor in REQUIRED:
@@ -98,7 +117,8 @@ print("bb8h anchors ok x%d" % len(REQUIRED))
 
 BLOCK = r"""
 // ── bb8h ── Yahoo's published beta (cited Yahoo Finance) replaces the card beta line; every model [n] must point
-// at a fact or source line that shares the sentence's figure (or, with no figure, its ticker).
+// at a fact or source line that shares the sentence's figure (or, with no figure, its ticker); card prose that
+// restates the bullets is dropped; insiders answer within 6.5 s and never cache or label a short scan as complete.
 // BB8H_JS
 var BB8H_YAHOO_MS = 2500;
 var BB8H_NOT_TICKERS = { US: 1, UK: 1, EU: 1, AI: 1, ETF: 1, TTM: 1, CEO: 1, CFO: 1, DRAM: 1, NAND: 1, GDP: 1, FX: 1, IPO: 1, EPS: 1, NTM: 1, PE: 1, II: 1, III: 1, NYSE: 1, NASDAQ: 1, FTSE: 1, DAX: 1, CAC: 1, VIX: 1, DXY: 1, BBC: 1, AP: 1, SEC: 1, OK: 1, PM: 1, AM: 1, GMT: 1, BST: 1, UTC: 1, ET: 1, YOY: 1, QOQ: 1, Q: 1, A: 1, I: 1 };
@@ -145,6 +165,12 @@ function bb8hTicks(text, known) {
   return out;
 }
 function bb8hAny(a, b) { for (var k in a) if (b[k]) return true; return false; }
+function bb8hWords(text) {
+  var out = {};
+  String(text || "").toLowerCase().replace(/\[\d{1,2}(?:\s*,\s*\d{1,2})*\]/g, " ").replace(/[a-z]{4,}/g, function (w) { out[w] = 1; return w; });
+  return out;
+}
+function bb8hOverlap(words, text) { var n = 0, o = bb8hWords(text); for (var k in words) if (o[k]) n++; return n; }
 // For the current answer: per source number, the text of every fact line that cites it plus the source record itself.
 function bb8hIndex(st, facts) {
   var full = typeof bb8eFull === "function" ? bb8eFull(st) : [];
@@ -203,8 +229,12 @@ function bb8hFixSentence(sent, idx) {
     var to = ok ? n : 0;
     if (!to) {
       // Re-point: prefer a server fact line that shares the figure/ticker, then any source record.
-      var best = 0;
-      for (var a = 1; a <= idx.n && !best; a++) if (idx.fact[a] && (hasFig ? bb8hAny(figs, bb8hFigs(idx.fact[a])) : bb8hAny(ticks, bb8hTicks(idx.fact[a], idx.known)))) best = a;
+      // Among several matching lines, the one sharing the most words with the sentence wins.
+      var best = 0, top = -1, words = bb8hWords(s);
+      for (var a = 1; a <= idx.n; a++) if (idx.fact[a] && (hasFig ? bb8hAny(figs, bb8hFigs(idx.fact[a])) : bb8hAny(ticks, bb8hTicks(idx.fact[a], idx.known)))) {
+        var sc = bb8hOverlap(words, idx.fact[a]);
+        if (sc > top) { top = sc; best = a; }
+      }
       for (var b = 1; b <= idx.n && !best; b++) if (bb8hMatch(idx, b, figs, ticks, hasFig)) best = b;
       to = best;
     }
@@ -222,12 +252,24 @@ function bb8hFixSentence(sent, idx) {
   }
   return out;
 }
+// Card answers: the bullets already state every card figure. A model sentence is kept only when it carries a
+// matched [n] and restates none of the bullet figures (same rule as the valuation restatement filter).
+function bb8hLeadFigs(mv) {
+  if (!mv.bb8hFigs) mv.bb8hFigs = bb8hFigs(mv.text);
+  return mv.bb8hFigs;
+}
+function bb8hCardKeep(sent, lead) {
+  if (!/\[\d{1,2}(?:\s*,\s*\d{1,2})*\]/.test(sent)) return false;
+  return !bb8hAny(bb8hFigs(sent), lead || {});
+}
 function bb8hRewriteLine(line, st, facts) {
   if (!line) return line;
   var idx = bb8hIndex(st, facts);
   if (!idx.n) return line;
   var pre = (/^\s*(?:[-*•]|\d+[.)])\s+/.exec(line) || [""])[0];
-  var parts = bb8dSplit(String(line).slice(pre.length)).map(function (x) { return bb8hFixSentence(x, idx); }).filter(function (x) { return x && x.trim(); });
+  var card = !!(st && st.bb8eMode === "move" && st.bb8eMove && !(facts && facts.length));
+  var lead = card ? bb8hLeadFigs(st.bb8eMove) : null;
+  var parts = bb8dSplit(String(line).slice(pre.length)).map(function (x) { return bb8hFixSentence(x, idx); }).filter(function (x) { return x && x.trim() && (!card || bb8hCardKeep(x, lead)); });
   if (!parts.length) return "";
   return pre.trim() ? pre.trim() + " " + parts.join(" ") : parts.join(" ");
 }
@@ -263,11 +305,12 @@ try {
           out.bb8hBeta = { beta: Number(yb.beta), src: src };
         }
         var text = lines.join("\n");
-        out.prompt = out.prompt.replace(oldFacts, lines.slice(1).join("\n")) + " Only the Yahoo Finance line may be called beta; never call the card score or its inputs a beta. Cite each figure with the [n] of the line that shows it.";
+        out.prompt = out.prompt.replace(oldFacts, lines.slice(1).join("\n")) + " Only the Yahoo Finance line may be called beta; never call the card score or its inputs a beta. Cite each figure with the [n] of the line that shows it. Do not restate any figure from the lines above; add at most two cited sentences of context they do not already give, or nothing.";
         out.text = text;
         out.paint = text.replace(/\s*\[\d+\]/g, "");
         out.bb8gNums = typeof bb8gNums === "function" ? bb8gNums(text) : out.bb8gNums;
         out.bb8hPack = pack;
+        out.bb8hFigs = null;
       } catch (e) {}
       return out;
     };
@@ -284,6 +327,225 @@ try {
     };
   }
 } catch (e) { console.warn("bb8h hooks skipped", e && e.message); }
+// Insiders (items 4 and 5). Root cause of "Last 7 months" -> "Last 3 weeks": the free scan (stops after 5
+// open-market trades, about 6 NVDA filings) and the premium scan (40 filings) shared one cache key "f4:T", so a
+// free visitor overwrote the complete premium entry; the next cold premium request ran past the 8 s budget and
+// was answered from that free entry as "stale" with a window built from its 6 filings. Separately, a filing whose
+// fetch failed (limiter wait or SEC error) was counted as scanned, so a short scan could be cached as complete.
+// Now: premium "f4:T" only ever holds complete 40-filing scans, free scans live in "f4:T:free", a scan with a
+// failed filing is partial and never cached, the window covers only the filings actually loaded (the unbroken run
+// from the newest), filings load 4 at a time through the shared 10/s SEC limiter, and the route answers within
+// about 6.5 s with what is ready (meta.partial, X-Dispatch-Data-Status: partial) while the same scan finishes
+// and fills the cache.
+var BB8H_CAP_MS = 6500;
+var BB8H_PAR = 4;
+var BB8H_SCAN = 40;
+var BB8H_MORE_NOTE = "More filings loading \u2014 refresh shortly";
+var BB8H_RETRY_NOTE = "Some filings could not be loaded \u2014 refresh shortly";
+function bb8hCap() {
+  try { var n = Number(globalThis.bb8InsidersBudgetMs); if (isFinite(n) && n > 0) return n; } catch (e) {}
+  return BB8H_CAP_MS;
+}
+function bb8hKey(ticker, mode) { var k = "f4:" + bb7TickerKeys(ticker)[0]; return mode === "full" ? k : k + ":free"; }
+// A cached pack answers a request only when its scan finished; a complete premium scan also answers free requests.
+function bb8hServes(body, mode) {
+  if (!body || body.complete !== true) return false;
+  if (mode === "full") return !body.scope || body.scope === "full";
+  return true;
+}
+function bb8hCached(ticker, mode, now, freshOnly) {
+  var keys = mode === "full" ? [bb8hKey(ticker, "full")] : [bb8hKey(ticker, "full"), bb8hKey(ticker, "free")];
+  for (var i = 0; i < keys.length; i++) {
+    var row = bb7Recall(keys[i]);
+    if (!row || !bb8hServes(row.body, mode)) continue;
+    if (keys[i].slice(-5) === ":free" && row.body.scope !== "free") continue;
+    if (freshOnly && !(now - row.at <= row.ttl)) continue;
+    return row;
+  }
+  return null;
+}
+// Old entries from before bb8h may hold a free (incomplete) scan under the premium key: drop them so they are
+// never served as a premium window.
+function bb8hPurge(ticker) {
+  try {
+    var key = bb8hKey(ticker, "full"), row = bb7Recall(key);
+    if (row && row.body && !bb8hServes(row.body, "full")) bb7Mem.delete(key);
+  } catch (e) {}
+}
+function bb8hKeep(ticker, pack, now) {
+  if (!pack || pack.unknown || pack.complete !== true) return false;
+  bb7Remember(bb8hKey(ticker, pack.scope === "full" ? "full" : "free"), pack, bb7FormTtl, now);
+  return true;
+}
+// One retry. SEC answering 404/410 for a filing is a real answer (nothing to parse), not a failed load.
+async function bb8hFiling(cik, filing) {
+  for (var n = 0; ; n++) {
+    try { return await bb7FormXml(cik, filing); }
+    catch (e) {
+      if (e && (e.status === 404 || e.status === 410)) return "";
+      if (n >= 1) throw e;
+    }
+  }
+}
+// Load up to 40 filings, BB8H_PAR at a time. Rows are taken in filing order from the unbroken run of loaded
+// filings, so the window and rows always describe the same filings. A filing that fails twice ends the run.
+function bb8hScan(cik, filings, mode, onInfo) {
+  var limit = Math.min(filings.length, BB8H_SCAN);
+  var got = new Array(limit), next = 0, run = 0, open = 0, stop = false, failed = 0, rows = [];
+  var info = { rows: rows, scanned: function () { return run; } };
+  if (onInfo) onInfo(info);
+  function advance() {
+    while (!stop && run < limit && got[run] !== undefined) {
+      if (got[run] === null) { failed++; stop = true; break; }
+      for (var j = 0; j < got[run].length; j++) { rows.push(got[run][j]); if (bb7IsOpenMarket(got[run][j])) open++; }
+      run++;
+      if (mode !== "full" && open >= 5) stop = true;
+    }
+  }
+  async function worker() {
+    while (!stop && next < limit) {
+      var i = next++, f = filings[i], xml = null;
+      try { xml = await bb8hFiling(cik, f); } catch (e) { xml = null; }
+      if (xml == null) got[i] = null;
+      else {
+        var meta = { filingDate: f.filingDate, accession: f.accession, filingUrl: bb7IndexUrl(cik, f.accession) };
+        try { got[i] = bb7ParseForm4(xml, meta) || []; } catch (e2) { got[i] = []; }
+      }
+      advance();
+    }
+  }
+  var ws = [];
+  for (var w = 0; w < Math.min(BB8H_PAR, Math.max(1, limit)); w++) ws.push(worker());
+  return Promise.all(ws).then(function () {
+    advance();
+    var done = failed === 0 && (run >= limit || (mode !== "full" && open >= 5));
+    return { rows: rows, scanned: run, failed: failed, complete: done };
+  });
+}
+async function bb8hFetchForm4(ticker, mode, now) {
+  var map = await bb7TickerMap(now);
+  var hit = bb7Lookup(map, ticker);
+  if (!hit) return { unknown: true };
+  var submission = JSON.parse((await bb7FetchBuf("https://data.sec.gov/submissions/CIK" + hit.cik + ".json")).toString("utf8"));
+  var filings = bb7FormList(submission);
+  var company = hit.company || submission.name || "";
+  var r = await bb8hScan(hit.cik, filings, mode, function (info) {
+    bb8Track(ticker, mode, { rows: info.rows, cik: hit.cik, company: company, list: filings, scanned: info.scanned });
+  });
+  return {
+    unknown: false, ticker: bb7TickerKeys(ticker)[0], cik: hit.cik, company: company, rows: r.rows,
+    complete: r.complete, scope: mode === "full" ? "full" : "free", failed: r.failed,
+    filings: filings.length, scanned: r.scanned,
+    newestFiling: r.scanned ? filings[0].filingDate : "",
+    oldestFiling: r.scanned ? filings[r.scanned - 1].filingDate : ""
+  };
+}
+async function bb8hForm4(ticker, mode, now) {
+  var row = bb8hCached(ticker, mode, now, true);
+  if (row) return Object.assign({ stale: false, asOf: new Date(row.at).toISOString() }, row.body);
+  var flight = "f4-flight:" + bb8hKey(ticker, "full") + ":" + mode;
+  if (bb7Inflight.has(flight)) return bb7Inflight.get(flight);
+  var job = (async function () {
+    var pack = await bb8hFetchForm4(ticker, mode, now);
+    bb8hKeep(ticker, pack, now);
+    return Object.assign({ stale: false, asOf: new Date(now).toISOString() }, pack);
+  })();
+  bb7Inflight.set(flight, job);
+  try { return await job; }
+  finally { bb7Inflight.delete(flight); }
+}
+function bb8hFlag(out, loading) {
+  if (!out || !out.body || !out.body.meta || !out.body.meta.partial) return out;
+  out.body.meta.more = loading ? "loading" : "retry";
+  out.body.note = loading ? BB8H_MORE_NOTE : BB8H_RETRY_NOTE;
+  out.headers = Object.assign({}, out.headers || {}, { "X-Dispatch-Data-Status": "partial", "Cache-Control": "no-store" });
+  delete out.headers["X-Dispatch-As-Of"];
+  return out;
+}
+// What is ready when the cap hits: the unbroken run of loaded filings (possibly none yet), flagged partial.
+function bb8hPartial(ticker, mode, opts) {
+  var out = bb8Partial(ticker, mode, opts);
+  if (!out) {
+    var key = bb7TickerKeys(ticker)[0];
+    var prog = bb8Progress.get(key + ":" + mode);
+    var list = prog && prog.list || null;
+    var pack = { ticker: key, cik: prog && prog.cik || "", company: prog && prog.company || "", rows: [], complete: false, filings: list ? list.length : null, scanned: 0, newestFiling: "", oldestFiling: "", stale: false, asOf: new Date(bb7Now()).toISOString(), note: BB8H_MORE_NOTE };
+    var houseBody = null;
+    if (opts && opts.house && opts.premium) {
+      var old = bb7Recall("house:index");
+      houseBody = old ? bb7HouseView({ items: old.body, asOf: new Date(old.at).toISOString() }) : { items: [], asOf: "", note: "House filings are still loading. Try again in a moment." };
+    }
+    var body = bb7Shape(pack, { premium: !!(opts && opts.premium), codes: opts && opts.codes, house: !!(opts && opts.house), houseBody: houseBody });
+    body.meta.partial = true;
+    out = { status: 200, body: body, headers: {} };
+  }
+  return bb8hFlag(out, true);
+}
+async function bb8hOlder(ticker, before, opts) {
+  var now = bb7Now();
+  var key = "f4:" + bb7TickerKeys(ticker)[0] + "<" + before + ":" + (opts.codes === "all" ? "all" : "PS");
+  var cached = bb7Recall(key);
+  var pack = cached && now - cached.at <= cached.ttl && cached.body && cached.body.complete === true ? cached.body : null;
+  if (!pack) {
+    cached = null;
+    var map = await bb7TickerMap(now);
+    var hit = bb7Lookup(map, ticker);
+    if (!hit) return { status: 404, body: { error: "Unknown ticker." }, headers: {} };
+    var submission = JSON.parse((await bb7FetchBuf("https://data.sec.gov/submissions/CIK" + hit.cik + ".json")).toString("utf8"));
+    var filings = bb7FormList(submission).filter(function (f) { return String(f.filingDate || "") < before; });
+    var r = await bb8hScan(hit.cik, filings, "full", null);
+    pack = {
+      unknown: false, ticker: bb7TickerKeys(ticker)[0], cik: hit.cik, company: hit.company || submission.name || "", rows: r.rows,
+      complete: r.complete, scope: "full", failed: r.failed, filings: filings.length, scanned: r.scanned,
+      newestFiling: r.scanned ? filings[0].filingDate : "", oldestFiling: r.scanned ? filings[r.scanned - 1].filingDate : ""
+    };
+    if (pack.complete) bb7Remember(key, pack, bb7FormTtl, now);
+  }
+  var body = bb7Shape(Object.assign({ stale: false, asOf: new Date(cached ? cached.at : now).toISOString() }, pack), { premium: true, codes: opts.codes, house: false });
+  body.meta.before = before;
+  return bb8hFlag({ status: 200, body: body, headers: { "X-Dispatch-Data-Status": "fresh" } }, false);
+}
+try {
+  if (typeof bb7FetchForm4 === "function") bb7FetchForm4 = bb8hFetchForm4;
+  if (typeof bb7Form4 === "function") bb7Form4 = bb8hForm4;
+  if (typeof bb8Older === "function") bb8Older = bb8hOlder;
+  if (typeof bb7Shape === "function") {
+    var bb8hShape0 = bb7Shape;
+    bb7Shape = function (pack, opts) {
+      var body = bb8hShape0.apply(this, arguments);
+      try {
+        // A scan that did not finish is partial, and its window says so.
+        if (pack && pack.complete !== true && body && body.meta) {
+          body.meta.partial = true;
+          if (body.meta.window && typeof body.meta.window === "object") {
+            body.meta.window.partial = true;
+            if (!pack.scanned) body.meta.window.label = "Loading filings";
+          }
+        }
+      } catch (e) {}
+      return body;
+    };
+  }
+  if (typeof bb7Load === "function" && typeof bb8Load0 === "function") {
+    // Replaces the bb8 8 s wrapper (same retry-once rule) with the 6.5 s cap and complete-only fallbacks.
+    bb7Load = async function (ticker, opts) {
+      var t0 = Date.now(), cap = bb8hCap(), self = this;
+      var mode = opts && opts.premium ? "full" : "free";
+      bb8hPurge(ticker);
+      var job = bb8Load0.call(self, ticker, opts);
+      var out = await Promise.race([job, bb8Late(cap)]);
+      if (out !== "bb8-late" && out && out.body && out.body.unavailable && cap - (Date.now() - t0) > 1500) {
+        job = bb8Load0.call(self, ticker, opts);
+        out = await Promise.race([job, bb8Late(cap - (Date.now() - t0))]);
+      }
+      if (out !== "bb8-late") return bb8hFlag(out, false);
+      job.catch(function () {});
+      var row = bb8hCached(ticker, mode, bb7Now(), false);
+      if (row) return bb7StaleResult(Object.assign({ asOf: new Date(row.at).toISOString() }, row.body), opts || {});
+      return bb8hPartial(ticker, mode, opts);
+    };
+  }
+} catch (e) { console.warn("bb8h insiders hooks skipped", e && e.message); }
 // BB8H_JS_END
 """
 
@@ -344,4 +606,4 @@ except Exception as e:
         os.unlink(bak)
     print("ABORT: write failed; backup restored:", e)
     sys.exit(1)
-print("APPLY bb8h Yahoo published beta on card answers + citation matching")
+print("APPLY bb8h Yahoo beta, citation matching, card restatement filter, insiders 6.5 s cap + complete-only cache")
