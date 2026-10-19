@@ -81,6 +81,13 @@ var RT32 = { cache: new Map() };
 async function rt32Yahoo(sym) { return { financialData: { currentPrice: { raw: 100 }, targetMeanPrice: { raw: 250 }, targetHighPrice: { raw: 300 }, targetLowPrice: { raw: 150 }, targetMedianPrice: { raw: 240 }, recommendationKey: "buy", recommendationMean: { raw: 1.8 }, numberOfAnalystOpinions: { raw: 40 }, profitMargins: { raw: 0.5 } }, recommendationTrend: { trend: [{ strongBuy: 10 }] }, upgradeDowngradeHistory: { history: [{ firm: "X", toGrade: "Buy" }] }, price: { regularMarketPrice: { raw: 100 } } }; }
 async function readBody(req) { return JSON.parse(JSON.stringify(req.__body)); }
 var bb2Read0 = typeof readBody === "function" ? readBody : async function () { return {}; };
+var GEN = [];
+async function generateAi(options) { GEN.push(options); return { text: "{}", provider: "stub", model: "stub" }; }
+function validateCommitteeResponse(t) { return t; }
+function validateLensesResponse(t) { return t; }
+function validateIntelligenceResponse(t) { return t; }
+function validateBriefResponse(t) { return t; }
+function normaliseChatAnswer(t) { return t; }
 `;
 function load() {
   const ctx = { console: { warn() {} }, Date, JSON, Math, Object, String, Number, Array, RegExp, Promise, URL, Map, Intl, isFinite, crypto };
@@ -332,6 +339,49 @@ test("ratings: a stub model receives the user's question byte-identical and the 
   assert.equal(/Strong Buy|price target \$150/.test(prompt.system), false);
   assert.match(prompt.system, /Active ticker: MU · \$120\.40/);
   assert.equal(/you should buy/i.test(reply), false);
+});
+
+const ADVICE = ["Buy MU on dips.", "We recommend accumulating NVDA.", "Investors should trim positions after the rally.", "Our rating is Strong Buy.", "MU is a buy here.", "Price target of $150.", "We see a fair value of $210 per share.", "Upside to $1,000 is likely.", "Go long NVDA into earnings.", "Go short the memory names.", "Add to positions below $800.", "Consider taking profits.", "Overweight semis.", "Move to overweight on memory.", "The stock offers 25% upside.", "Set a stop-loss at $820.", "Keep position size small given volatility.", "Allocate 5% of the portfolio to MU.", "Rebalance: Trim largest position to <20%.", "Hold.", "Analysts upgraded MU to Outperform.", "Entry point near $850 looks attractive.", "Our 12-month target of $1,050 implies upside.", "This is a good time to buy.", "Add defensive or low-correlation asset.", "Rotate into bonds.", "**Verdict:** Buy.", "Underweight Europe.", "Accumulate below $878.84."];
+const FACTS = ["Insiders sold 120,000 shares in October.", "Buybacks totalled $1.2bn last quarter.", "The sell-off deepened on Friday.", "Selling pressure eased after the CPI print.", "MU fell 5.63% to $878.84 in its last session.", "Gold held steady near $4,180.", "Holders of the notes were repaid in full.", "Funds bought Treasuries as yields fell.", "Short interest rose to 3% of float.", "MU underperformed the SOXX by 1.48 points.", "Technology is overweight at 45% of the portfolio.", "Management added capacity in Idaho.", "The company will hold its earnings call on 18 December.", "Revenue grew 50% year on year to $9.3bn.", "Downside risks include a memory price slump.", "MU has a weighting of 7% in the SOXX.", "Consensus EPS for next quarter is $2.28.", "NVDA added 3% on Friday.", "The Fed will hold rates at 4.5%.", "Investors sold tech and bought bonds.", "Exit polls point to a hung parliament.", "Hedge funds sold 2m shares.", "Add to that the strong dollar.", "Investors rotated into bonds."];
+test("advice: buy/sell/hold calls, ratings, targets and sizing are matched; factual buying and selling is not", () => {
+  const c = load();
+  assert.deepEqual(ADVICE.filter(s => !c.bb8oIsAdvice(s)), [], "advice missed");
+  assert.deepEqual(FACTS.filter(s => c.bb8oIsAdvice(s)), [], "fact matched");
+  assert.equal(c.bb8oAdviceText("MU fell 5.63% to $878.84. Buy on weakness. Insiders sold shares.\n- Price target $150.\n- Revenue grew 50%."), "MU fell 5.63% to $878.84. Insiders sold shares.\n- Revenue grew 50%.");
+  assert.equal(c.bb8oAdviceCommittee("## Recommendation\nMU fell 5.63%. Buy MU; price target $1,050.\n\n## Verdict\nStrong Buy.\n\n## Risks\nA memory slump would hit margins."),
+    "## Takeaway\nMU fell 5.63%.\n\n## Takeaway\nNo takeaway beyond the facts above.\n\n## Risks\nA memory slump would hit margins.");
+});
+test("advice: every prose field of committee, lenses, intelligence and brief output; takeaway added, labels neutral", () => {
+  const c = load();
+  const lenses = { lenses: [{ name: "Value", role: "Valuation lens", analysis: "MU trades at 30x. We see a fair value of $1,050. Buy on weakness.", verdict: "BUY" }, { name: "Macro", role: "Macro", analysis: "Strong Buy. Go long into earnings.", verdict: "HOLD" }],
+    intelligence: { verdict: "Strong Buy with a target of $1,050.", confidence: 70, bullCase: "AI demand lifts pricing. Upside to $1,050 is likely.", actionPlan: "Accumulate below $878.84. Set a stop-loss at $820.", catalysts: ["Earnings on 18 December", "Buy before earnings."], positionSizing: "Allocate 5% of the portfolio to MU." }, meta: { provider: "stub" } };
+  const L = c.bb8oShape({ bb8oPath: "/api/lenses" }, 200, lenses);
+  assert.deepEqual(L.lenses.map(l => [l.analysis, l.verdict, l.takeaway]), [["MU trades at 30x.", "MONITOR", "MONITOR"], ["No takeaway beyond the facts above.", "MONITOR", "MONITOR"]]);
+  assert.deepEqual([L.intelligence.verdict, L.intelligence.takeaway, L.intelligence.bullCase, L.intelligence.actionPlan, L.intelligence.positionSizing, L.intelligence.confidence], ["No takeaway beyond the facts above.", "No takeaway beyond the facts above.", "AI demand lifts pricing.", "No takeaway beyond the facts above.", "No takeaway beyond the facts above.", 70]);
+  assert.deepEqual(L.intelligence.catalysts, ["Earnings on 18 December"]);
+  const I = c.bb8oShape({ bb8oPath: "/api/intelligence" }, 200, { intel: { headline: "MU is a buy after the dip", insight: "MU fell 5.63%. Insiders sold shares. We recommend accumulating MU.", actions: [{ label: "Buy MU now", type: "chat", value: "Should I buy MU?" }, { label: "Explain MU's move", type: "chat", value: "Why did MU fall?" }], fit: [{ tk: "MU", score: 60 }] } });
+  assert.equal(I.intel.headline, "No takeaway beyond the facts above."); assert.equal(I.intel.insight, "MU fell 5.63%. Insiders sold shares.");
+  assert.deepEqual(I.intel.actions, [{ label: "Explain MU's move", type: "chat", value: "Why did MU fall?" }]); assert.deepEqual(I.intel.fit, [{ tk: "MU", score: 60 }]);
+  const doc = { ticker: "MU", sentiment: "Bullish", keyTakeaways: ["Revenue grew 50%", "Investors should buy before the print."], tradingImplication: "Accumulate on weakness; fair value of $1,050.", summary: "MU reported revenue up 50%. Buybacks continued. We rate it a buy.", recommendation: "BUY", rebalance: [{ action: "Trim largest position to <20%", priority: "high" }] };
+  const C = c.bb8oShape({ bb8oPath: "/api/committee" }, 200, { content: [{ type: "text", text: JSON.stringify(doc) }] });
+  const cj = JSON.parse(C.content[0].text);
+  assert.deepEqual([cj.ticker, cj.sentiment, cj.keyTakeaways, cj.tradingImplication, cj.summary, cj.recommendation, cj.takeaway], ["MU", "Bullish", ["Revenue grew 50%"], "No takeaway beyond the facts above.", "MU reported revenue up 50%. Buybacks continued.", "MONITOR", "MONITOR"]);
+  assert.deepEqual(cj.rebalance, [{ action: "No takeaway beyond the facts above.", priority: "high" }]);
+  const B = c.bb8oShape({ bb8oPath: "/api/brief" }, 200, { brief: { headline: "Stocks slip as chips lead the sell-off", houseView: "BUY", summary: "Chip stocks led a sell-off. Investors should buy the dip. Treasuries rallied.", overweight: ["Gold"], risks: ["Hormuz", "Go long gold as a hedge."] } });
+  assert.deepEqual([B.brief.headline, B.brief.houseView, B.brief.summary, B.brief.risks, B.brief.overweight], ["Stocks slip as chips lead the sell-off", "MONITOR", "Chip stocks led a sell-off. Treasuries rallied.", ["Hormuz"], ["Gold"]]);
+  // Errors, other statuses and other routes are untouched.
+  const err = { error: "Buy now" }; assert.deepEqual(c.bb8oShape({ bb8oPath: "/api/committee" }, 502, err), { error: "Buy now" });
+  for (const route of ["/api/chat", "/api/me", "/api/admin/content", "/api/academy-daily"]) assert.deepEqual(c.bb8oShape({ bb8oPath: route }, 200, { reply: "Buy MU.", verdict: "BUY" }), { reply: "Buy MU.", verdict: "BUY" }, route);
+});
+test("advice: committee, lenses, intelligence and brief prompts carry the no-advice rule; other prompts do not", async () => {
+  const c = load();
+  for (const v of ["validateCommitteeResponse", "validateLensesResponse", "validateIntelligenceResponse", "validateBriefResponse"]) await vm.runInContext(`generateAi({ system: "SYS", messages: [], validate: ${v} })`, c);
+  await vm.runInContext(`generateAi({ system: "CHAT", messages: [], validate: normaliseChatAnswer })`, c);
+  await vm.runInContext(`generateAi({ system: "SYS\\n" + BB8O_NO_ADVICE, messages: [], validate: validateLensesResponse })`, c);
+  const sys = c.GEN.map(o => o.system);
+  assert.deepEqual(sys.slice(0, 4).map(s => s.endsWith("\n" + c.BB8O_NO_ADVICE) && s.startsWith("SYS")), [true, true, true, true]);
+  assert.equal(sys[4], "CHAT"); assert.equal(sys[5].split(c.BB8O_NO_ADVICE).length, 2, "added once");
+  assert.match(c.BB8O_NO_ADVICE, /never give a buy, sell, hold/); assert.match(c.BB8O_NO_ADVICE, /price target/);
 });
 
 const ET = (iso) => Date.parse(iso); // ET offsets in Oct 2026: UTC-4

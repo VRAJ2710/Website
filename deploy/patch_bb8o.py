@@ -8,6 +8,9 @@ returns result[] in the client's shape plus an LSE listing profile (GBp handled)
 (6) Analyst ratings and price targets: one sanitizer (bb8oStripRatings) removes target / analyst keys from every JSON
 response and AI body; generic keys (rating, ra, recommendation...) only on the BB8O_MARKET_ROUTES allowlist, the Yahoo
 quoteSummary source, the fundamentals cache and AI context / fact fields. User questions and messages pass untouched.
+(7) AI committee, lenses, intelligence and brief: explicit no-advice rule in those prompts; every prose field of their
+output drops buy/sell/hold calls, ratings, price targets, fair values and position sizes (sentence level); "takeaway"
+added next to recommendation / verdict; "Recommendation" / "Verdict" headings become "Takeaway".
 Server.js only. Stacked on bb8p (server md5 92cdce800208671ab32ded68d15e24d1). Appended after // BB8P_JS_END;
 anchors are long-standing declarations only (no in-place edits). See docs/bb8o.md.
 No tables, intervals, timers, dependencies, secrets or Stripe changes.
@@ -669,12 +672,132 @@ function bb8oScrubBody(b) {
   });
   return b;
 }
+// ── AI committee, lenses, intelligence and brief prose: no buy / sell / hold calls, ratings or price targets ──
+// The same rule as Ask is added to those prompts, and every prose field of their outputs goes through one
+// sentence-level advice filter (an advice sentence is dropped whole; factual uses such as "insiders sold",
+// "buybacks" or "sell-off" are not matched). The "recommendation" / "verdict" section is relabelled "takeaway".
+var BB8O_NEUTRAL = "No takeaway beyond the facts above.";
+var BB8O_NO_ADVICE = "NO ADVICE (applies to every field): never give a buy, sell, hold, accumulate, trim, add, reduce, avoid, overweight, underweight, outperform, strong buy, go long or go short call, a rating, a price target, a fair value, an upside or downside level, entry / exit / stop levels or a position size, for any asset or portfolio. Describe the facts, the risks and what to watch. Any verdict, recommendation, rating or action field is a neutral takeaway (a lens verdict is MONITOR).";
+var BB8O_ADVICE_ROUTES = { "/api/committee": 1, "/api/lenses": 1, "/api/intelligence": 1, "/api/brief": 1 };
+var BB8O_ACT = "buy|sell|hold|accumulate|trim|reduce|avoid|add|short|own|exit|enter|rotate|hedge|increase|decrease|scale|load";
+var BB8O_ADVICE_RES = [
+  // Imperative calls at the start of a sentence, bullet or "Label:" line.
+  new RegExp("^(?:[\\-*•]\\s*|\\d+[.)]\\s*)?(?:[*_]{0,2}[A-Za-z][\\w /&-]{0,30}:[*_]{0,2}\\s*)?[*_]{0,2}(?:strong\\s+)?(?:buy|sell|hold|accumulate|trim|reduce|avoid|overweight|underweight|take profits?|book profits?|lock in|stay (?:long|short|invested)|go (?:long|short)|get (?:long|short)|add(?!\\s+to\\s+(?:that|this|the (?:list|mix|picture)))|rotate|rebalance|diversify|hedge(?!\\s+funds?)|increase (?:exposure|the position|your)|decrease (?:exposure|the position|your)|exit (?:the |your |all )?(?:position|trade|longs?|shorts?)|consider (?:buying|selling|holding|trimming|adding|accumulating|reducing|shorting|exiting|taking profits))(?![\\w-])", "i"),
+  // Modal advice: "you / investors / we ... should buy".
+  new RegExp("\\b(?:you|investors|traders|holders|shareholders|clients|readers|we|i|one|users)\\s+(?:should|could|might|may|must|ought to|would|need to|want to|might want to|may want to|are advised to|would do well to|can)\\s+(?:also\\s+|now\\s+|still\\s+)?(?:consider\\s+|look to\\s+|think about\\s+)?(?:" + BB8O_ACT + "|take profits?|lock in|go long|go short|stay long|stay short|initiate|establish|build)(?:ing|ed|s)?\\b", "i"),
+  /\b(?:we|i)\s+(?:recommend|suggest|advise|favou?r|prefer|rate|would (?:buy|sell|hold|avoid))\b/i,
+  /\brecommend(?:ed|s|ing)?\s+(?:buying|selling|holding|accumulating|trimming|adding|reducing|avoiding|shorting|an?\s+(?:strong\s+)?(?:buy|sell|hold))\b/i,
+  /\b(?:rating|verdict|call|stance|recommendation|view|takeaway|action)\s*(?:is|:|of|remains|stays|=|-)?[*_]{0,2}\s*(?:an?\s+)?(?:strong\s+)?(?:buy|sell|hold|accumulate|trim|outperform|underperform|overweight|underweight|equal[- ]weight)\b/i,
+  /\b(?:is|as|remains|looks like|stays|rated(?: as)?|rate it(?: as)?|rating of|upgraded? (?:\w+ ){0,3}to|downgraded? (?:\w+ ){0,3}to)\s+an?\s+(?:strong\s+)?(?:buy|sell|hold)\b/i,
+  /\b(?:upgrade|downgrade)[sd]?\s+(?:\w+\s+){0,4}to\s+(?:strong\s+)?(?:buy|sell|hold|outperform|underperform|overweight|underweight|equal[- ]weight|neutral|market perform)\b/i,
+  /\b(?:strong[- ](?:buy|sell)|conviction buy|top pick|market perform|sector perform)\b/i,
+  /\b(?:go|move|stay|be|turn|remain|recommend|rated?|to|an?)\s+(?:overweight|underweight|equal[- ]weight)\b/i,
+  /\b(?:overweight|underweight|equal[- ]weight)\s+(?:rating|position|stance|call|recommendation)\b/i,
+  /\b(?:buy|sell|accumulate|trim|add|short)(?:ing)?\s+(?:on|into|the)\s+(?:dips?|weakness|strength|rall(?:y|ies)|pullbacks?|breakouts?|bounces?)\b/i,
+  /\b(?:time to (?:buy|sell)|buying opportunity|(?:good|great|attractive|compelling|ideal) (?:entry|time to buy|point to (?:buy|sell)|buy)|worth (?:buying|owning|selling)|entry (?:point|level|zone|price)s?\b)/i,
+  /\b(?:(?:initiate|open|establish|build|take|start)(?:ing)?\s+(?:an?\s+|the\s+)?(?:new\s+)?(?:long|short|starter|full|half|core)\s+position|position siz(?:e|ing) (?:of|at|to)|size (?:the|your|a) position|(?:allocat(?:e|ing)|invest(?:ing)?|cap(?:ping)?|limit(?:ing)?|keep(?:ing)?)\s+(?:\w+\s+){0,3}?(?:at\s+)?(?:no more than\s+|up to\s+|about\s+|around\s+|roughly\s+|under\s+|below\s+)?\d+(?:\.\d+)?%|(?:keep|cap|limit) (?:the |your )?position)/i,
+  // Targets and valuation levels.
+  /\b(?:price[- ]targets?|target prices?|fair[- ]value (?:of|at|is|estimate)|intrinsic value (?:of|at|is)|PT\s+(?:of\s+)?[$£€]?\d)/i,
+  /\b(?:target|objective|upside|downside|stop[- ]loss|stop|take[- ]profit|fair[- ]value)\s+(?:of|to|at|near|around|is|:|=|toward|towards)\s*(?:about|around|roughly|approximately|~)?\s*[$£€¥]?\s?\d/i,
+  /[$£€¥]\s?\d[\d,]*(?:\.\d+)?\s*(?:[kKmM]\b)?\s*(?:price\s+)?(?:target|objective|fair value)\b/i,
+  /\btargets?\s+(?:of\s+)?[$£€¥]\s?\d/i,
+  /\b\d+(?:\.\d+)?%\s+(?:upside|downside)\b/i
+];
+function bb8oIsAdvice(s) { s = String(s || "").trim(); if (!s) return false; for (var i = 0; i < BB8O_ADVICE_RES.length; i++) if (BB8O_ADVICE_RES[i].test(s)) return true; return false; }
+var BB8O_LABEL_RE = /^\s*(?:strong\s+)?(?:buy|sell|hold|accumulate|trim|reduce|avoid|add|short|long|outperform|underperform|overweight|underweight|equal[- ]weight|implement|buy the dip|take profits?)\s*[.!]?\s*$/i;
+// "Recommendation:" / "## Verdict" headings become "Takeaway".
+function bb8oHeadings(s) { return String(s).replace(/^(\s*(?:#{1,6}\s*|\*\*|__)?\s*)(?:final\s+|overall\s+|investment\s+|our\s+)?(?:recommendations?|verdicts?)(?=\s*(?:\*\*|__)?\s*(?::|$|\n))/gim, "$1Takeaway"); }
+function bb8oSentences(line) { return String(line).match(/(?:[^.!?]|[.!?](?![\s"')\]]|$))+(?:[.!?]+["')\]]*|$)\s*/g) || [line]; }
+// Drops every advice sentence; keeps line breaks and the rest of the text exactly.
+function bb8oAdviceText(s) {
+  if (typeof s !== "string" || !s) return s;
+  var out = bb8oHeadings(s).split("\n").map(function (line) {
+    if (!line.trim()) return line;
+    var head = (line.match(/^\s*(?:[-*•]\s+|\d+[.)]\s+|#{1,6}\s+)?/) || [""])[0];
+    var kept = bb8oSentences(line.slice(head.length)).filter(function (x) { return !bb8oIsAdvice(x) && !(head && bb8oIsAdvice(head + x)); }).join("").replace(/\s+$/, "");
+    if (!kept.trim()) { bb8oStripStats.text++; return null; }
+    if (kept !== line.slice(head.length).replace(/\s+$/, "")) bb8oStripStats.text++;
+    return head + kept;
+  });
+  // A heading whose whole section was advice keeps the heading with the neutral line under it.
+  var isHead = function (l) { return typeof l === "string" && /^\s*(?:#{1,6}\s+\S|\*\*[^*]+\*\*:?\s*$|__[^_]+__:?\s*$)/.test(l); };
+  for (var i = 0; i < out.length; i++) {
+    if (!isHead(out[i])) continue;
+    var j = i + 1, any = false, gone = false;
+    for (; j < out.length && !isHead(out[j]); j++) { if (out[j] === null) gone = true; else if (out[j].trim()) any = true; }
+    if (gone && !any) { for (var k = i + 1; k < j; k++) if (out[k] === null) { out[k] = BB8O_NEUTRAL; break; } }
+  }
+  out = out.filter(function (l) { return l !== null; }).join("\n");
+  return out.replace(/\n{3,}/g, "\n\n").replace(/^\s+$/, "");
+}
+var BB8O_LABEL_KEYS = { verdict: 1, recommendation: 1, rating: 1, houseview: 1, action: 1, stance: 1, call: 1, decision: 1, takeaway: 1 };
+var BB8O_SKIP_KEYS = { ticker: 1, tk: 1, symbol: 1, type: 1, id: 1, priority: 1, severity: 1, sentiment: 1, documenttype: 1, company: 1, date: 1, unit: 1, metric: 1, value_raw: 1, usedsearch: 1, focustickers: 1 };
+// One field: a bare rating label becomes MONITOR (the schema's own neutral value); prose loses its advice sentences;
+// a field emptied by the filter gets the neutral line.
+function bb8oAdviceField(v, key) {
+  var lk = String(key || "").toLowerCase();
+  if (typeof v !== "string" || !v.trim() || bb8oHas(BB8O_SKIP_KEYS, lk)) return v;
+  if (BB8O_LABEL_RE.test(v)) { bb8oStripStats.text++; return bb8oHas(BB8O_LABEL_KEYS, lk) || v.trim().length <= 12 ? "MONITOR" : BB8O_NEUTRAL; }
+  var t = bb8oAdviceText(v);
+  return t && t.trim() ? t : BB8O_NEUTRAL;
+}
+// Every prose field of an AI output, recursively. Objects with a recommendation or verdict also get "takeaway".
+function bb8oAdviceTree(x, key, depth) {
+  depth = depth || 0;
+  if (depth > 12 || x == null) return x;
+  if (typeof x === "string") return bb8oAdviceField(x, key);
+  if (Array.isArray(x)) {
+    var arr = [], had = x.length > 0, firstDrop = null;
+    x.forEach(function (v) {
+      if (typeof v === "string") { if (!v.trim()) { arr.push(v); return; } if (BB8O_LABEL_RE.test(v)) { bb8oStripStats.text++; return; } var t = bb8oAdviceText(v); if (t && t.trim()) arr.push(t); else bb8oStripStats.text++; }
+      else {
+        var o2 = bb8oAdviceTree(v, key, depth + 1);
+        // An action / chip whose label or action was advice is dropped whole (its value would point at the advice).
+        if (o2 && typeof o2 === "object" && !Array.isArray(o2) && ["label", "action", "point"].some(function (k) { return typeof v[k] === "string" && v[k].trim() && o2[k] === BB8O_NEUTRAL; })) { bb8oStripStats.text++; if (!firstDrop) firstDrop = o2; return; }
+        arr.push(o2);
+      }
+    });
+    // Emptied by the filter: strings get the neutral line; objects keep one item with its neutral fields.
+    if (had && !arr.length) { if (x.every(function (v) { return typeof v === "string"; })) arr.push(BB8O_NEUTRAL); else if (firstDrop) arr.push(firstDrop); }
+    return arr;
+  }
+  if (typeof x !== "object") return x;
+  var o = {};
+  Object.keys(x).forEach(function (k) { o[k] = bb8oHas(BB8O_SKIP_KEYS, String(k).toLowerCase()) ? x[k] : bb8oAdviceTree(x[k], k, depth + 1); });
+  var rk = Object.keys(o).filter(function (k) { return /^(?:recommendation|verdict)$/i.test(k) && typeof o[k] === "string"; });
+  if (rk.length && !("takeaway" in o)) { var pick = rk.filter(function (k) { return /^recommendation$/i.test(k); })[0] || rk[0]; o.takeaway = o[pick]; }
+  return o;
+}
+// Committee content is the model's text: JSON (filtered as a tree, re-serialised) or plain prose.
+function bb8oAdviceCommittee(text) {
+  var s = String(text == null ? "" : text), t = s.trim();
+  if (/^(?:```(?:json)?\s*)?[\[{]/i.test(t)) {
+    try { var j = JSON.parse(t.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "")); return JSON.stringify(bb8oAdviceTree(j, "", 0)); } catch (e) {}
+  }
+  var p = bb8oAdviceText(s);
+  return p && p.trim() ? p : BB8O_NEUTRAL;
+}
+function bb8oAdviceBody(path, body) {
+  if (!body || typeof body !== "object" || body.error) return body;
+  var b = Object.assign({}, body);
+  if (path === "/api/committee" && Array.isArray(b.content)) b.content = b.content.map(function (c) { return c && c.type === "text" && typeof c.text === "string" ? Object.assign({}, c, { text: bb8oAdviceCommittee(c.text) }) : c; });
+  else if (path === "/api/lenses") { if (Array.isArray(b.lenses)) b.lenses = bb8oAdviceTree(b.lenses, "lenses", 1); if (b.intelligence && typeof b.intelligence === "object") b.intelligence = bb8oAdviceTree(b.intelligence, "intelligence", 1); }
+  else if (path === "/api/intelligence" && b.intel && typeof b.intel === "object") b.intel = bb8oAdviceTree(b.intel, "intel", 1);
+  else if (path === "/api/brief" && b.brief && typeof b.brief === "object") {
+    var br = Object.assign({}, b.brief);
+    ["headline", "summary", "houseView"].forEach(function (k) { if (typeof br[k] === "string") br[k] = bb8oAdviceField(br[k], k); });
+    if (Array.isArray(br.risks)) br.risks = bb8oAdviceTree(br.risks, "risks", 1);
+    b.brief = br;
+  }
+  return b;
+}
 function bb8oShape(res, status, body) {
   var path = res && res.bb8oPath;
   try { bb8oStripRatings(body, bb8oMarketRoute(path)); } catch (e) {}
   if (!path || !body || typeof body !== "object") return body;
   if (BB8O_ROUTES[path]) return bb8oQuoteBody(body, path, res.bb8oQuery);
   if (path === "/api/search") return bb8oSearchBody(body, res.bb8oProfile || null);
+  if (BB8O_ADVICE_ROUTES[path] && status === 200) { try { body = bb8oAdviceBody(path, body); } catch (e) {} }
   if (path === "/api/brief" && res.bb8oEdition && status === 200 && body.brief) { var b = Object.assign({}, body); b.edition = res.bb8oEdition; return b; }
   if (path === "/api/financials") return bb8oValuation(body);
   return body;
@@ -760,6 +883,23 @@ try {
   if (typeof bb2Read0 === "function") {
     var bb8oRead0 = bb2Read0;
     bb2Read0 = async function () { var b = await bb8oRead0.apply(this, arguments); try { return bb8oScrubBody(b); } catch (e) { return b; } };
+  }
+  // Committee, lenses, intelligence and brief prompts get the explicit no-advice rule (identified by their validators).
+  if (typeof generateAi === "function") {
+    var bb8oGen0 = generateAi;
+    generateAi = async function (options) {
+      var args = Array.prototype.slice.call(arguments);
+      try {
+        var v = options && options.validate;
+        var mine = v && ((typeof validateCommitteeResponse === "function" && v === validateCommitteeResponse) || (typeof validateLensesResponse === "function" && v === validateLensesResponse) || (typeof validateIntelligenceResponse === "function" && v === validateIntelligenceResponse) || (typeof validateBriefResponse === "function" && v === validateBriefResponse));
+        if (mine && typeof options.system === "string" && options.system.indexOf(BB8O_NO_ADVICE) < 0) {
+          var o = Object.assign({}, options);
+          o.system = options.system + "\n" + BB8O_NO_ADVICE;
+          args[0] = o;
+        }
+      } catch (e) {}
+      return bb8oGen0.apply(this, args);
+    };
   }
   if (typeof json === "function") {
     var bb8oJson0 = json;

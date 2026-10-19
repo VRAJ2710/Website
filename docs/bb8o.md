@@ -1,11 +1,12 @@
 # bb8o: quote fallback, insider trade dates, LSE profile, canonical feed status, brief edition
 
 Server only (`deploy/patch_bb8o.py`), stacked on bb8p (PR #67, branch `cursor/bb8p-grounding-guard-p0`, server.js md5
-`92cdce800208671ab32ded68d15e24d1`, 16956 lines) giving md5 `71adc9f155bf95020c3430bc50139574` (17631 lines). The block is
+`92cdce800208671ab32ded68d15e24d1`, 16956 lines) giving md5 `0ac5d92b95f7b382841665c3ea4a8234` (17768 lines). The block is
 appended after the `// BB8P_JS_END` marker, so the first 16956 lines are byte-identical to bb8p, with no in-place edits.
 Its 30 anchors are long-standing declarations (json, handle, yahooQuote, fetchYahooQuote, bb5e/bb5g specs, bb7 Form 4 parser,
 parseForm4, bb8lRowDates, rt32Crumb/rt32Get, rt32Yahoo, RT32, readBody, the `var bb2Read0 = …` alias, _rt48sHeads, bb8cUnit,
-bb8dUk, crypto) plus the `// BB8N_JS_END` and `// BB8P_JS_END` markers. bb8o doesn't wrap or anchor on bb8p's grounding rule,
+bb8dUk, crypto) plus the `// BB8N_JS_END` and `// BB8P_JS_END` markers. Section 7 also wraps `generateAi` (outermost) and
+reads the four AI validators by identity; those are found at load time with `typeof` checks, not anchors. bb8o doesn't wrap or anchor on bb8p's grounding rule,
 numeric guard, source relevance, provider/model, meta.quote or timeframe code. bb8o's hooks are installed after bb8p's, so
 they're the outer wrappers on `json` and `handle`.
 No tables, timers, intervals, dependencies, secrets, paid feeds or Stripe changes, and no new SEC requests. The shared sec.gov
@@ -231,11 +232,60 @@ Client (Frontend's job, not changed here):
 Not stripped: consensus EPS and revenue estimates (`epsEstimate`, `earningsAverage`, `earningsTrend`, the forward P/E basis).
 These are estimates, not ratings or targets.
 
+## 7. AI committee, lenses, intelligence and brief: no buy / sell / hold calls or price targets
+
+**Prompts.** Before this change, `/api/committee`, `/api/lenses`, `/api/intelligence` and `/api/brief` only had MARKET_SYSTEM's
+"Do not provide personalized financial advice". The lenses schema even asked for `"verdict":"BUY|HOLD|SELL|MONITOR|IMPLEMENT"`
+and a `positionSizing`. bb8o wraps `generateAi` and appends `BB8O_NO_ADVICE` to the system prompt of those four routes only.
+A route is recognised by its validator (`validateCommitteeResponse`, `validateLensesResponse`, `validateIntelligenceResponse`,
+`validateBriefResponse`). The rule is added once and never reaches Ask, chat, news-scores, the gold desk or the Academy.
+The rule: never give a buy, sell, hold, accumulate, trim, add, reduce, avoid, overweight, underweight, outperform, strong buy,
+go long or go short call, a rating, a price target, a fair value, an upside or downside level, entry / exit / stop levels
+or a position size. Describe facts, risks and what to watch. Verdict / recommendation / rating / action fields are a neutral
+takeaway (a lens verdict is MONITOR).
+
+**Output filter (`bb8oAdviceBody`, response layer, status 200 only, error bodies untouched).** It is a sentence-level drop,
+in the same spirit as bb8i's speculative-claim drop. bb8i's filter tests a different claim, so it isn't reused; `bb8oIsAdvice`
+is bb8o's own. An advice sentence is removed whole, and the rest of the text, its line breaks and its bullets stay as they were.
+- Matched: imperative calls ("Buy/Sell/Hold/Accumulate/Trim/Reduce/Avoid/Add/Rotate/Rebalance/Overweight …", "Go long/short",
+  "Take profits", "Consider buying …", including after "Label:" or "**Verdict:**"); modal advice ("you / investors / we should
+  buy …"); "we recommend / suggest / rate …"; rating calls ("rating is Strong Buy", "is a buy", "upgraded to Outperform",
+  "move to overweight"); "buy the dip / on weakness"; "good time to buy", "entry point"; position sizing ("allocate 5%",
+  "keep position size …", "starter position"); targets and valuation levels ("price target", "target of $X", "fair value of
+  $X", "upside to $X", "25% upside", "stop-loss at $X", "$X target").
+- Not matched (tested): "insiders sold", "buybacks", "sell-off", "selling pressure", "funds bought", "gold held steady",
+  "holders of the notes", "short interest rose", "underperformed the SOXX", "Technology is overweight at 45% of the portfolio",
+  "NVDA added 3%", "the Fed will hold rates", "hedge funds sold", "investors rotated into bonds", "add to that …".
+- Fields covered: every string, at any depth, of `/api/committee` `content[].text` (JSON: parsed, filtered as a tree,
+  re-serialised; plain text: filtered line by line), `/api/lenses` `lenses[]` (`analysis`, `role`, `verdict`) and
+  `intelligence` (`verdict`, `bullCase`, `bearCase`, `actionPlan`, `positionSizing`, `keyDisagreements`, `catalysts`, `risks`),
+  `/api/intelligence` `intel` (`headline`, `insight`, `anomalies`, `actions[].label/value`), and `/api/brief` `brief`
+  (`headline`, `summary`, `houseView`, `risks`). Identifier fields (ticker, tk, symbol, type, id, priority, severity, sentiment,
+  documentType, company, date, focusTickers) and numbers are left alone.
+- A bare rating label in a verdict / recommendation / rating / houseView / action field becomes `MONITOR`, the schemas' own
+  neutral value. Prose emptied by the filter becomes "No takeaway beyond the facts above.". A string list keeps its other items
+  and gets the neutral line only if nothing is left. An action, chip or rebalance item whose `label` / `action` / `point` was
+  advice is dropped whole, because its `value` would point at the advice. If every item goes, one is kept with its neutral fields.
+- **Takeaway.** Every object with a `recommendation` or `verdict` also gets `takeaway`, holding the same filtered text
+  (`recommendation` first). The old keys stay, for compatibility. Headings "Recommendation" / "Verdict" (markdown `#`, `**…**`, or
+  a line start before ":") become "Takeaway". An emptied section keeps its heading with the neutral line.
+- Not changed, for Jack to decide: brief `overweight[]`, which is a theme list (Gold, Treasuries) shown under an "Overweight"
+  label; the gold desk scenarios (`entry`, `invalidation`, `targets`, labelled "Conditional research scenario — not investment
+  advice"); the client-side committee prompts in app.js, which ask for "rebalance" actions, "tradingImplication" and
+  "BULLISH_SETUP / WATCH / CAUTIOUS" verdicts, so the server filter catches the advice they produce. Client labels such as
+  "Recommendation" / "Verdict" are Frontend's job.
+
+Replay (box, stub model that deliberately writes advice and targets; no real model key is on the box): lenses,
+intelligence, committee (earnings, document, portfolio and plain-text prompts) for MU and NVDA, plus the brief. Before: 73
+advice sentences. After: 0. All 147 factual sentences were kept; the only things removed besides advice are the dropped action
+items and the renamed headings. Those routes now differ from bb8p on purpose; every other route still replays byte-identically.
+
 ## Tests
 
-`node --test test/bb8o.test.js`: 13 tests, offline, using vm with stubs. They cover items 1–5, Taiwan, ratings (target keys
+`node --test test/bb8o.test.js`: 16 tests, offline, using vm with stubs. They cover items 1–5, Taiwan, ratings (target keys
 global; generic keys on allowlisted routes only, with 10 non-market routes keeping `rating`/`ra`/`recommendation(s)`; AI body
-context sanitized while messages, question and userThesis stay byte-identical; a stub model capturing the prompt) and protocol
+context sanitized while messages, question and userThesis stay byte-identical; a stub model capturing the prompt) and section 7 (29 advice and 24 factual sentences, every field of the four routes, takeaway, labels, the
+prompt rule on those routes only) and protocol
 (bb8o prefix, no timers, anchors, the BB8P_JS_END position, REFUSE, `--check`, bb8p code untouched).
 
 Box replays (stub DB/session, stubbed Stripe client, real Stripe never called): `/api/me` (admin, free, none),
