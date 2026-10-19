@@ -11,7 +11,11 @@ quoteSummary source, the fundamentals cache and AI context / fact fields. User q
 (7) AI committee, lenses, intelligence and brief: explicit no-advice rule in those prompts; every prose field of their
 output drops buy/sell/hold calls, ratings, price targets, fair values and position sizes (sentence level); "takeaway"
 added next to recommendation / verdict; "Recommendation" / "Verdict" headings become "Takeaway".
-Server.js only. Stacked on bb8p (server md5 92cdce800208671ab32ded68d15e24d1). Appended after // BB8P_JS_END;
+(8) Brief: "Highest conviction" / "top pick" become "Top desk score: TICKER NN/100 (Dispatch desk score)"; overweight /
+underweight become measured Leading / Lagging themes (Yahoo ETF proxies vs SPY over 5 sessions, cited, as-of UK), also
+registered as a numbered source in bb8q's shared context. Upstream null changes (bb8q / bb8q2 gold spot) stay null.
+Server.js only. Stacked on bb8q2 (server md5 af877dde4d73f4c19eeff011a0e98f89; apply order bb8q b4f66c89 -> bb8q2 -> bb8o).
+Appended after // BB8Q2_JS_END;
 anchors are long-standing declarations only (no in-place edits). See docs/bb8o.md.
 No tables, intervals, timers, dependencies, secrets or Stripe changes.
 Usage: python3 patch_bb8o.py [--check] <dir with server.js>
@@ -21,7 +25,7 @@ import hashlib, os, re, sys, subprocess, tempfile
 EXPECTED_MD5 = {
     "app.js": "843c42b73f671d80c6e563d2edddb829",
     "index.html": "07137d3795c694d726cb9a295719849e",
-    "server.js": "92cdce800208671ab32ded68d15e24d1",
+    "server.js": "af877dde4d73f4c19eeff011a0e98f89",
 }
 
 CHECK = "--check" in sys.argv
@@ -76,7 +80,12 @@ REPLACE = []
 
 REQUIRED = [
     ("bb8n end marker", "// BB8N_JS_END"),
-    ("bb8p end marker (bb8o is appended after it)", "// BB8P_JS_END"),
+    ("bb8p end marker", "// BB8P_JS_END"),
+    ("bb8q end marker", "// BB8Q_JS_END"),
+    ("bb8q2 end marker (bb8o is appended after it)", "// BB8Q2_JS_END"),
+    ("bb8qBuild", "async function bb8qBuild(st, body) {"),
+    ("bb8qSrc", "function bb8qSrc(name, link, ms, detail, key) {"),
+    ("bb8qSrcText", "var bb8qSrcText = new WeakMap();"),
     ("crypto", 'const crypto = require("crypto");'),
     ("json", "function json(res, status, body, extraHeaders = {}) {"),
     ("handle", "async function handle(req, res) {"),
@@ -211,10 +220,23 @@ function bb8oRemember(sym, q, src) {
   bb8oGood.set(key, { p: Number(q.p), prev: prev != null && prev > 0 ? prev : null, ts: q.ts, tsMs: ms, currency: q.currency || null, src: src || q.source || "", seen: Date.now() });
   while (bb8oGood.size > BB8O_GOOD_MAX) bb8oGood.delete(bb8oGood.keys().next().value);
 }
+// The upstream row deliberately carries no change: null change / changePct / prevClose, or changeAvailable:false.
+function bb8oNullChg(q) {
+  if (!q || typeof q !== "object") return false;
+  if (q.changeAvailable === false) return true;
+  var nul = function (k) { return Object.prototype.hasOwnProperty.call(q, k) && q[k] === null; };
+  return nul("c") || nul("change") || nul("changePct");
+}
 // Valid price: keep it, but never let a non-finite change or previous close through.
 function bb8oTidy(q) {
   var p = Number(q.p), prev = bb8oNum(q.prev), c = bb8oNum(q.c), ch = bb8oNum(q.change), out = q, copy = function () { if (out === q) out = Object.assign({}, q); return out; };
   if (prev == null || prev <= 0) {
+    // An upstream that already says "no change" (explicit nulls or changeAvailable:false, e.g. bb8q / bb8q2 gold spot on a
+    // cold start) keeps its nulls, futuresChange and changeNote. Only junk values (NaN, Infinity, strings) become 0 as before.
+    if (bb8oNullChg(q)) {
+      if (q.prev !== null || q.c !== null || q.change !== null || q.changeAvailable !== false) { copy(); out.prev = null; out.c = null; out.change = null; out.changeAvailable = false; }
+      return out;
+    }
     if (q.prev !== null || c !== 0 || ch !== 0 || q.basis !== "none") { copy(); out.prev = null; out.c = 0; out.change = 0; out.basis = "none"; out.changeAvailable = false; }
     return out;
   }
@@ -236,6 +258,7 @@ function bb8oFromLast(q, sym, last, reason) {
   out.p = last.p;
   out.ts = last.ts != null ? last.ts : (tsMs ? Math.floor(tsMs / 1000) : null);
   if (last.prev) { out.prev = last.prev; out.change = last.p - last.prev; out.c = (out.change / last.prev) * 100; out.basis = "previous_close"; }
+  else if (bb8oNullChg(q)) { out.prev = null; out.c = null; out.change = null; out.basis = "none"; out.changeAvailable = false; }
   else { out.prev = null; out.c = 0; out.change = 0; out.basis = "none"; out.changeAvailable = false; }
   if (!out.currency && last.currency) out.currency = last.currency;
   out.fallback = true;
@@ -275,11 +298,58 @@ async function bb8oChartLast(sym) {
   if (i < 0) return null;
   var meta = r.meta || {}, spec = bb8oSpec(sym) || {}, tz = spec.tz || meta.exchangeTimezoneName || "Europe/London";
   var barMs = Number(ts[i]) * 1000, rmt = Number(meta.regularMarketTime) * 1000, day = bb8oYmd(barMs, tz);
-  var j = i - 1;
-  while (j >= 0 && (!(Number(cl[j]) > 0) || bb8oYmd(Number(ts[j]) * 1000, tz) === day)) j--;
   var tsMs = rmt > 0 && bb8oYmd(rmt, tz) === day ? rmt : barMs;
   var r4 = function (x) { return Math.round(Number(x) * 10000) / 10000; };
-  return { p: r4(cl[i]), prev: j >= 0 ? r4(cl[j]) : null, ts: Math.floor(tsMs / 1000), tsMs: tsMs, currency: meta.currency || null, src: "yahoo-daily-close", seen: Date.now() };
+  var pv = bb8oDistinctPrev(r, tz);
+  return { p: r4(cl[i]), prev: pv && pv.prev ? r4(pv.prev) : null, prevFix: pv ? pv.fix : null, prevDay: pv ? pv.prevDay : null, ts: Math.floor(tsMs / 1000), tsMs: tsMs, currency: meta.currency || null, src: "yahoo-daily-close", seen: Date.now() };
+}
+// Previous close from Yahoo daily bars, guarding against duplicate bars (0700.HK: Thu 15 and Fri 16 both "closed"
+// at 417.80). Bars on the same session date or timestamp collapse to the last one. When the prior bar's close equals the
+// last close and either bar's high/low range does not contain that close, the prior bar is a copy: the previous distinct
+// session's close is used, else the chart meta previousClose / chartPreviousClose. Normal series are unchanged.
+// (QA 1:38 rule: two consecutive identical daily closes are treated as a duplicate bar; prevDay says which close is used.)
+function bb8oDistinctPrev(r, tz) {
+  if (!r) return null;
+  var ts = r.timestamp || [], q0 = (r.indicators && r.indicators.quote && r.indicators.quote[0]) || {}, cl = q0.close || [], hi = q0.high || [], lo = q0.low || [], meta = r.meta || {};
+  var bars = [];
+  for (var i = 0; i < ts.length; i++) {
+    if (!(Number(cl[i]) > 0)) continue;
+    var b = { t: Number(ts[i]), d: bb8oYmd(Number(ts[i]) * 1000, tz), c: Number(cl[i]), h: Number(hi[i]), l: Number(lo[i]) };
+    var last = bars[bars.length - 1];
+    if (last && (last.d === b.d || last.t === b.t)) { bars[bars.length - 1] = b; continue; }
+    bars.push(b);
+  }
+  if (!bars.length) return null;
+  var L = bars[bars.length - 1], fix = null, k = bars.length - 2;
+  while (k >= 0 && Math.abs(bars[k].c - L.c) < 1e-9) { fix = "duplicate-bar"; k--; }
+  var mp = [meta.previousClose, meta.chartPreviousClose, meta.regularMarketPreviousClose].map(Number).filter(function (x) { return x > 0 && Math.abs(x - L.c) > 1e-9; })[0];
+  if (k >= 0 && !(fix && Math.abs(bars[k].c - L.c) < 1e-9)) return { prev: bars[k].c, fix: fix, prevDay: bars[k].d, lastDay: L.d };
+  if (mp) return { prev: mp, fix: fix || "meta-previous-close", prevDay: null, lastDay: L.d };
+  return { prev: k >= 0 ? bars[k].c : null, fix: fix, prevDay: k >= 0 ? bars[k].d : null, lastDay: L.d };
+}
+// A valid row with exactly zero change against its previous close: check the daily bars once (duplicate-bar guard).
+var BB8O_PREVCHK_MS = 10 * 60 * 1000;
+var bb8oPrevChk = new Map();
+async function bb8oPrevCheck(map) {
+  if (!map || typeof map !== "object" || Array.isArray(map)) return map;
+  var keys = Object.keys(map).filter(function (k) {
+    var q = map[k], p = Number(q && q.p), pv = Number(q && q.prev);
+    return bb8oIsRow(q) && p > 0 && pv > 0 && Math.abs(p - pv) < 1e-9 && !/-USD$|=X$|^\^/.test(k) && !q.prevFix;
+  }).slice(0, 6);
+  await Promise.all(keys.map(async function (k) {
+    try {
+      var hit = bb8oPrevChk.get(k), last;
+      if (hit && Date.now() - hit.at < BB8O_PREVCHK_MS) last = hit.v; else { last = await bb8oChartLast(k); bb8oPrevChk.set(k, { at: Date.now(), v: last }); if (bb8oPrevChk.size > 128) bb8oPrevChk.delete(bb8oPrevChk.keys().next().value); }
+      var q = map[k];
+      if (!last || !last.prevFix || !(last.prev > 0) || Math.abs(last.p - Number(q.p)) > 1e-6) return;
+      var o = Object.assign({}, q);
+      o.prev = last.prev; o.change = Number(q.p) - last.prev; o.c = (o.change / last.prev) * 100; if ("changePct" in o) o.changePct = o.c;
+      o.basis = "previous_close"; o.changeAvailable = true; o.prevFix = last.prevFix;
+      if (last.prevDay) { o.prevDay = last.prevDay; o.prevNote = "Previous close is the " + bb8oDayLabel(Date.parse(last.prevDay + "T12:00:00Z"), "UTC") + " close (the prior daily bar repeated the last close)."; }
+      map[k] = o;
+    } catch (e) {}
+  }));
+  return map;
 }
 async function bb8oGuardMap(map, src) {
   if (!map || typeof map !== "object" || Array.isArray(map)) return map;
@@ -317,7 +387,18 @@ function bb8oFeed(q, sym, src, now) {
 }
 function bb8oQuoteBody(body, path, query) {
   var src = BB8O_ROUTES[path], now = Date.now();
-  var one = function (q, sym) { var f = bb8oFix(q, sym, src); if (f) f.feed = bb8oFeed(f, sym, src, now); return f; };
+  // bb8q's gold spot row already carries a descriptive feed string: it is kept as feedLabel and feed.label, never lost.
+  var one = function (q, sym) {
+    var f = bb8oFix(q, sym, src);
+    if (f) {
+      f = bb8oCrypto24h(f, sym);
+      var lbl = typeof f.feed === "string" && f.feed ? f.feed : null;
+      f.feed = bb8oFeed(f, sym, src, now);
+      if (lbl) { f.feedLabel = lbl; f.feed.label = lbl; }
+      bb8oChangeDay(f, sym);
+    }
+    return f;
+  };
   var map = function (m) {
     if (!m || typeof m !== "object" || Array.isArray(m)) return m;
     var out = {};
@@ -492,7 +573,9 @@ function bb8oDecide(cur, ranked, now) {
 function bb8oEditionOut(ed, now) {
   if (!ed) return { editionId: null, status: "unavailable", lead: null, also: [], updatedAt: null, updatedAtUk: null, checkedAt: bb8oEd.headsAt ? new Date(bb8oEd.headsAt).toISOString() : null };
   return {
-    editionId: ed.id, day: ed.day, seq: ed.seq, status: "ok", reason: ed.reason,
+    editionId: ed.id, day: ed.day, dayLabel: bb8oDayLabel(ed.startedAt), name: bb8oEditionName(now || Date.now()) + " edition",
+    label: bb8oDayLabel(ed.startedAt) + " \u00b7 " + bb8oEditionName(now || Date.now()) + " edition", nameBasis: "UK time now: Morning before 12:00, Afternoon 12:00 to 16:59, Evening from 17:00",
+    seq: ed.seq, status: "ok", reason: ed.reason,
     lead: bb8oStory(ed.lead), also: ed.also.map(bb8oStory),
     updatedAt: new Date(ed.startedAt).toISOString(), updatedAtUk: "Updated " + bb8oHm(ed.startedAt) + " UK",
     checkedAt: bb8oEd.headsAt ? new Date(bb8oEd.headsAt).toISOString() : null, checkedAtUk: bb8oEd.headsAt ? bb8oUk(bb8oEd.headsAt) : null,
@@ -640,6 +723,7 @@ function bb8oStripRatings(x, generic, seen, depth) {
 function bb8oScrubText(s) {
   if (typeof s !== "string" || !s) return s;
   s = bb8oDeskScore(s);
+  s = bb8oCtxOpinion(s);
   var out = s.replace(BB8O_RATING_LABEL_RE, "").replace(BB8O_RATING_SEP_RE, "").replace(BB8O_TARGET_RE, "").replace(BB8O_CONSENSUS_RE, "").replace(BB8O_TALLY_RE, "").replace(BB8O_PT_RE, "");
   if (out !== s) bb8oStripStats.text++;
   return out;
@@ -944,6 +1028,500 @@ function bb8oDeskScore(s) {
   return s.replace(BB8O_DESK_RE, function (_m, tk, sc) { return "Top desk score: " + tk + " " + sc + "/100 (Dispatch desk score)"; })
     .replace(BB8O_DESK_RE2, function (_m, tk, sc) { return "Top desk score: " + tk + " " + sc + "/100 (Dispatch desk score)"; });
 }
+// Leading / Lagging themes as a numbered, citable source in bb8q's shared context (both /api/chat paths read it).
+var BB8O_THEME_ASK = /\b(?:themes?|leading|lagging|leaders?|laggards?|lead(?:s|ing)?|lag(?:s|ging)?|outperform\w*|underperform\w*|over-?weight|under-?weight|brief|sectors?|rotation|relative)\b/i;
+function bb8oThemeSegs(body) {
+  var segs = [];
+  var walk = function (o, depth) {
+    if (!o || typeof o !== "object" || depth > 8) return;
+    Object.keys(o).forEach(function (k) {
+      if (depth === 0 && (String(k).toLowerCase() === "messages" || !bb8oHas(BB8O_CTX_FIELDS, k))) return;
+      var v = o[k];
+      if (typeof v === "string") { var m; BB8O_OWUW_RE.lastIndex = 0; while ((m = BB8O_OWUW_RE.exec(v))) { var seg = m[0].slice(m[1].length); segs.push({ lead: /^[\s*]*overweight/i.test(seg), list: seg.replace(/^[^:]*:[\s*]*/, "").trim() }); } }
+      else walk(v, depth + 1);
+    });
+  };
+  walk(body, 0);
+  return segs;
+}
+function bb8oUpDown(n) { return Math.abs(n) < 0.005 ? "unchanged" : (n < 0 ? "down " : "up ") + Math.abs(n).toFixed(2) + "%"; }
+async function bb8oThemeFacts(ctx, body) {
+  if (!ctx || !Array.isArray(ctx.facts) || !Array.isArray(ctx.sources) || typeof bb8qSrc !== "function") return ctx;
+  if (ctx.facts.some(function (f) { return f.id === "themes"; })) return ctx;
+  var segs = bb8oThemeSegs(body);
+  if (!segs.length) return ctx;
+  var q = String(ctx.q || (typeof bb8pQuestion === "function" ? bb8pQuestion(body) : "") || "");
+  var named = segs.some(function (s) { return s.list.split(/\s*[,;]\s*|\s+and\s+/).some(function (n) { n = n.trim(); return n.length > 2 && q.toLowerCase().indexOf(n.toLowerCase()) >= 0; }); });
+  if (!BB8O_THEME_ASK.test(q) && !named) return ctx;
+  var race = function (p) { return typeof bb8q2Race === "function" ? bb8q2Race(p) : p; };
+  var res = await race(Promise.all(segs.map(function (s) { return bb8oThemes(s.list, s.lead); })));
+  // One source for both lists, so the shared S&P 500 (SPY) benchmark figure is carried by exactly one citable source.
+  var parts = [], items = [], seen = {}, first = null;
+  (res || []).forEach(function (T, i) {
+    var kind = segs[i].lead ? "leading" : "lagging";
+    if (!T || !T.items.length || seen[kind]) return;
+    seen[kind] = 1;
+    if (!first) first = T.items[0];
+    parts.push(T.label + ": " + T.items.map(function (x) { return x.theme + " (" + x.proxy + ", " + x.proxyName + ") " + bb8oUpDown(x.changePct); }).join("; "));
+    T.items.forEach(function (x) { items.push({ list: kind, theme: x.theme, proxy: x.proxy, changePct: x.changePct, spyChangePct: x.benchmark.changePct, asOfUk: x.asOfUk, source: x.source.url }); });
+  });
+  if (!first) return ctx;
+  var toLbl = bb8oDayLabel(Date.parse(first.to + "T20:00:00Z"), "America/New_York");
+  var label = parts.length > 1 ? "Leading and lagging themes" : parts[0].split(":")[0];
+  var text = label + " (Dispatch measurement from Yahoo Finance daily closes over the " + first.window + " to " + toLbl + ", against the S&P 500 (SPY), which is " + bb8oUpDown(first.benchmark.changePct) + " over the same window). " +
+    parts.join(". ") + ". As of " + first.asOfUk + ".";
+  var src = bb8qSrc("Yahoo Finance chart (" + label + ")", first.source.url, Date.parse(first.asOf) || Date.now(), text.replace(/\.$/, ""), "themes");
+  src.bb8oThemes = items;
+  ctx.facts.push({ id: "themes", text: text, src: src });
+  ctx.sources.push(src);
+  return ctx;
+}
+// The change tag names the last session's day ("Fri"), in the listing's own time zone, never today's.
+function bb8oChangeDay(f, sym) {
+  try {
+    var ms = bb8oTsMs(f.ts); if (!ms) return f;
+    var spec = bb8oSpec(sym) || {}, tz = spec.tz || (/-USD$|^BTC$|^ETH$/i.test(String(sym)) ? "Europe/London" : "America/New_York");
+    var full = bb8oDayLabel(ms, tz);
+    f.changeDay = full.split(" ")[0]; f.changeDayLabel = full;
+    if (f.feed && typeof f.feed === "object") { f.feed.changeDay = f.changeDay; f.feed.changeDayLabel = full; }
+  } catch (e) {}
+  return f;
+}
+// BTC / crypto: one canonical change baseline, rolling 24h. CoinGecko's 24h change when a fresh (10 min) CoinGecko
+// simple-price body is already in the server's last-good cache, else the Yahoo rolling-24h basis. Labelled "24h".
+var BB8O_CG_IDS = { BTC: "bitcoin", ETH: "ethereum", SOL: "solana", XRP: "ripple", BNB: "binancecoin", DOGE: "dogecoin", ADA: "cardano" };
+function bb8oCg24(id) {
+  try {
+    if (typeof coinGeckoLastGood === "undefined" || !coinGeckoLastGood || typeof coinGeckoLastGood.forEach !== "function") return null;
+    var best = null;
+    coinGeckoLastGood.forEach(function (body, key) {
+      if (!/^\/simple\/price\?/.test(String(key)) || !body || !body[id]) return;
+      var r = body[id], pct = Number(r.usd_24h_change), at = Number(r.last_updated_at) * 1000 || (typeof coinGeckoLastGoodAt !== "undefined" ? Number(coinGeckoLastGoodAt.get(key)) : 0) || 0;
+      if (!isFinite(pct) || !(Number(r.usd) > 0)) return;
+      if (!best || at > best.at) best = { pct: pct, usd: Number(r.usd), at: at };
+    });
+    return best && Date.now() - best.at < 10 * 60 * 1000 ? best : null;
+  } catch (e) { return null; }
+}
+function bb8oCrypto24h(f, sym) {
+  var s = String(sym || "").toUpperCase().replace(/-USD$|USDT?$/, "");
+  if (!BB8O_CG_IDS[s] || !/^(?:BTC|ETH|SOL|XRP|BNB|DOGE|ADA)(?:-USD)?$/.test(String(sym || "").toUpperCase())) return f;
+  var p = Number(f.p); if (!(p > 0)) return f;
+  var cg = bb8oCg24(BB8O_CG_IDS[s]), o = Object.assign({}, f);
+  if (cg) {
+    var prev = p / (1 + cg.pct / 100);
+    o.prev = prev; o.change = p - prev; o.c = cg.pct; o.changePct = cg.pct; o.basis = "rolling_24h"; o.changeAvailable = true;
+    o.baseline = "24h"; o.baselineSource = "CoinGecko 24h change"; o.baselineAsOf = new Date(cg.at).toISOString(); o.asOfUk = o.asOfUk || bb8oUk(cg.at); o.baselineAsOfUk = bb8oUk(cg.at);
+  } else if (Number(f.prev) > 0) {
+    o.change = p - Number(f.prev); o.c = (o.change / Number(f.prev)) * 100; o.changePct = o.c;
+    o.baseline = "24h"; o.baselineSource = f.basis === "rolling_24h" ? "Yahoo 15-minute bars, rolling 24h" : "previous print 24h basis"; o.baselineAsOfUk = bb8oUk(bb8oTsMs(f.ts) || Date.now());
+  } else return f;
+  if (!o.asOfUk) o.asOfUk = bb8oUk(bb8oTsMs(f.ts) || Date.now());
+  return o;
+}
+// "Gold spot" may only ever carry XAU data. A reply line or meta.quote that labels a non-XAU price as gold spot is
+// relabelled with the subject's own symbol / name when the figure is the subject's price, else the clause is dropped.
+var BB8O_SPOT_RE = /\b(Gold spot)(\s*(?:\(reference\)\s*)?(?:is\s+(?:at|trading\s+(?:at|near))\s+|at\s+|:\s*)?)\$\s?([\d,]+(?:\.\d+)?)/gi;
+function bb8oXauRef(st) {
+  try { var c = st && st.bb8qCtx; if (c && c.spot && c.spot.q && Number(c.spot.q.p) > 0) return Number(c.spot.q.p); } catch (e) {}
+  var g = bb8oGood.get("XAU") || bb8oGood.get("XAUUSD=X");
+  return g && Number(g.p) > 0 ? Number(g.p) : null;
+}
+function bb8oSubject(st) {
+  try { var m = st && st.bb8eMoveR; if (m && m.q && Number(m.q.p) > 0 && !/^(?:XAU|GC=F|GOLD)$/i.test(String(m.base || ""))) return { sym: m.base || m.ysym, name: m.q.name || m.base, p: Number(m.q.p) }; } catch (e) {}
+  return null;
+}
+function bb8oGoldSpotGuard(text, st) {
+  if (typeof text !== "string" || !/gold spot/i.test(text)) return text;
+  var xau = bb8oXauRef(st), subj = bb8oSubject(st);
+  var near = function (a, b, tol) { return a > 0 && b > 0 && Math.abs(a / b - 1) <= tol; };
+  var bad = false;
+  var out = text.replace(BB8O_SPOT_RE, function (m, lab, mid, num) {
+    var v = Number(String(num).replace(/,/g, ""));
+    if (xau ? near(v, xau, 0.03) : v > 1000) return m;
+    if (subj && near(v, subj.p, 0.005)) return subj.sym + (subj.name && subj.name !== subj.sym ? " (" + subj.name + ")" : "") + mid + "$" + num;
+    bad = true; return m;
+  });
+  if (!bad) return out;
+  return out.split("\n").map(function (line) {
+    if (!/gold spot/i.test(line)) return line;
+    return bb8oSentences(line).filter(function (s) {
+      var m2; BB8O_SPOT_RE.lastIndex = 0;
+      while ((m2 = BB8O_SPOT_RE.exec(s))) { var v = Number(String(m2[3]).replace(/,/g, "")); if (!(xau ? near(v, xau, 0.03) : v > 1000)) return false; }
+      return true;
+    }).join(" ").replace(/\s+$/, "");
+  }).filter(function (l, i, a) { return l.trim() || (a[i - 1] && a[i - 1].trim()); }).join("\n");
+}
+// ── bb8o answer post-pass (QA 1:44): one document pass on BOTH /api/chat paths, inside bb8qFinish (bb8jAssemble),
+// so stream and JSON apply exactly the same numeric and sentence drops. Works on bb8q's token form (⟦i⟧ = doc.srcs[i]).
+var BB8O_TOK = /\u27e6(\d+)\u27e7/g;
+var BB8O_UP = /\b(up|rose|risen|gained|higher|climbed|advanced|increased|rallied)\b/i;
+var BB8O_DN = /\b(down|fell|fallen|lost|lower|dropped|declined|decreased|slid|slipped)\b/i;
+var BB8O_DIRW = /\b(up|down|rose|risen|fell|fallen|gained|lost|higher|lower|climbed|dropped|declined|advanced|increased|decreased|rallied|slid|slipped)\b/i;
+var BB8O_FLIP = { up: "down", down: "up", rose: "fell", fell: "rose", risen: "fallen", fallen: "risen", gained: "lost", lost: "gained", higher: "lower", lower: "higher", climbed: "dropped", dropped: "climbed", declined: "advanced", advanced: "declined", increased: "decreased", decreased: "increased", rallied: "slid", slid: "rallied", slipped: "rallied" };
+var BB8O_FILLER = /geopolitic|defensive (?:sectors?|assets?|names|stocks)|central bank (?:statements?|communications?|commentary)|keep an eye|closely monitor|(?:it will be|remains?) (?:important|crucial|key) to|investors (?:will|may|should|are advised|might)|will likely remain|could significantly impact|preference for safety|seeking safety|amid uncertainty|market (?:sentiment|dynamics) (?:towards|moving forward)|it would be beneficial|shed light on|navigate these conditions|forthcoming economic data|interplay with/i;
+var BB8O_TAIL = /,\s*(?:indicating|suggesting|reflecting|signalling|signaling|which (?:may|could|might|suggests?|indicates?|reflects?))\b[^\u27e6\d]*?(?=[.!?]?\s*(?:\u27e6|$))/gi;
+var BB8O_METRIC = [
+  { id: "beta", q: /\bbeta\b/i, s: /\bbeta\b/i },
+  { id: "pe", q: /\b(?:p\s*\/\s*e|pe ratio|price[- ]to[- ]earnings|earnings multiple|valuation multiple)\b/i, s: /\bP\s*\/\s*E\b|price[- ]to[- ]earnings|\bPE\b/i },
+  { id: "dividend", q: /\bdividends?\b|\bpayout\b/i, s: /\bdividend|\bpayout\b/i },
+  { id: "mcap", q: /market (?:cap|capitali[sz]ation)|\bmcap\b/i, s: /market (?:cap|capitali[sz]ation)|\bvalued at\b/i },
+  { id: "eps", q: /\bEPS\b|earnings per share/i, s: /\bEPS\b|earnings per share/i },
+  { id: "yield", q: /\byield\b/i, s: /\byield\b/i }
+];
+var BB8O_WEEK_Q = /\b(?:this|the coming|next|the) week\b|\bweek ahead\b|\bweekly outlook\b/i;
+function bb8oN(s) { var v = Number(String(s).replace(/[$,\s]/g, "")); return isFinite(v) ? v : NaN; }
+function bb8oPct2(v) { return Math.abs(v).toFixed(2) + "%"; }
+// Sentences with their trailing citation tokens attached (bb8q writes "… 1.97%. ⟦2⟧ Next sentence").
+var BB8O_ABBR = /(?:\b(?:Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|Inc|Co|Corp|Ltd|vs|No|St|Mr|Ms|Dr|approx|est|e\.g|i\.e|U\.S|U\.K)|\b[A-Z])$/;
+function bb8oSplit(line) {
+  var s = String(line), out = [], cur = "", inQ = false;
+  for (var i = 0; i < s.length; i++) {
+    var ch = s.charAt(i); cur += ch;
+    if (ch === '"' || ch === "\u201c" || ch === "\u201d") inQ = ch === "\u201c" ? true : ch === "\u201d" ? false : !inQ;
+    if (inQ || !/[.!?]/.test(ch)) continue;
+    var nx = s.charAt(i + 1);
+    if (nx && !/\s/.test(nx)) continue;
+    if (ch === "." && BB8O_ABBR.test(cur.slice(0, -1))) continue;
+    while (i + 1 < s.length && /\s/.test(s.charAt(i + 1))) { cur += s.charAt(++i); }
+    out.push(cur); cur = "";
+  }
+  if (cur) out.push(cur);
+  var res = [];
+  out.forEach(function (x) {
+    var m = /^(\s*(?:\u27e6\d+\u27e7\s*)+)/.exec(x);
+    if (m && res.length) { res[res.length - 1] += m[1]; x = x.slice(m[1].length); }
+    if (x) res.push(x);
+  });
+  return res.length ? res : [s];
+}
+function bb8oToks(s) { var o = []; String(s).replace(BB8O_TOK, function (m, k) { o.push(Number(k)); return m; }); return o; }
+function bb8oNums(s) { return (String(s).replace(BB8O_TOK, " ").replace(/\/\s*100\b/g, " ").replace(/\b(?:19|20)\d{2}\b/g, " ").replace(/\b\d{1,2}:\d{2}\b/g, " ").match(/\d[\d,]*(?:\.\d+)?%?/g) || []).filter(function (x) { return /[.,%]/.test(x); }); }
+// P0 (a): direction and % from the two cited numbers, in code. dirs: [{from, to, pct}] (ctx.bb8oDir).
+function bb8oDirFix(s, dirs) {
+  var t = String(s), S = null, E = null, m;
+  if ((m = /\bfrom\s+\$?([\d,]+(?:\.\d+)?)(?:\s*\([^)]*\))?\s+to\s+\$?([\d,]+(?:\.\d+)?)/i.exec(t))) { S = bb8oN(m[1]); E = bb8oN(m[2]); }
+  else if ((m = /\bclose of\s+\$?([\d,]+(?:\.\d+)?)/i.exec(t)) || (m = /\bfrom\s+\$?([\d,]+(?:\.\d+)?)/i.exec(t))) {
+    S = bb8oN(m[1]);
+    var to = /\b(?:to|at|now)\s+\$?([\d,]+(?:\.\d+)?)/i.exec(t.slice(m.index + m[0].length));
+    if (to && bb8oN(to[1]) > 0 && Math.abs(bb8oN(to[1]) / S - 1) < 0.9) E = bb8oN(to[1]);
+    else (dirs || []).some(function (d) { if (Math.abs(d.from - S) < 0.006) { E = d.to; return true; } return false; });
+  } else if ((m = /\bprevious close (?:of )?\$?([\d,]+(?:\.\d+)?)/i.exec(t))) {
+    S = bb8oN(m[1]);
+    var at = /\b(?:to|at)\s+\$?([\d,]+(?:\.\d+)?)/i.exec(t);
+    if (at) E = bb8oN(at[1]);
+  }
+  if (!(S > 0) || !(E > 0) || S === E) return { s: t, fixed: false };
+  var pct = (E / S - 1) * 100;
+  if (Math.abs(pct) < 0.005) return { s: t, fixed: false };
+  var w = BB8O_DIRW.exec(t);
+  if (!w) return { s: t, fixed: false };
+  var saysUp = BB8O_UP.test(w[1]), right = pct > 0;
+  var after = t.slice(w.index + w[0].length), pm = /^(\s*(?:by\s+)?)(-?\d+(?:\.\d+)?)%/.exec(after);
+  var pctOk = !pm || Math.abs(Math.abs(Number(pm[2])) - Math.abs(pct)) < 0.06;
+  if (saysUp === right && pctOk) return { s: t, fixed: false };
+  var word = saysUp === right ? w[1] : (BB8O_FLIP[w[1].toLowerCase()] || (right ? "up" : "down"));
+  if (/^[A-Z]/.test(w[1])) word = word.charAt(0).toUpperCase() + word.slice(1);
+  var rest = pm ? pm[1] + bb8oPct2(pct) + after.slice(pm[0].length) : after;
+  return { s: t.slice(0, w.index) + word + rest, fixed: true, from: S, to: E, pct: pct };
+}
+// hay(s) -> the cited source text for sentence s. A contradicting claim is corrected only when both numbers are
+// cited figures (in the sentence's sources, or a code-computed timeframe pair); otherwise the sentence is dropped.
+function bb8oInHay(v, hay) { return (String(hay || "").replace(/,/g, "").match(/\d+(?:\.\d+)?/g) || []).some(function (x) { return Math.abs(Number(x) - v) < 0.006; }); }
+function bb8oDirGuard(text, dirs, hay) {
+  var n = 0, dropped = [];
+  var out = String(text).split("\n").map(function (line) {
+    return bb8oSplit(line).map(function (s) {
+      var r = bb8oDirFix(s, dirs); if (!r.fixed) return s;
+      var h = typeof hay === "function" ? hay(s) : null;
+      var pair = (dirs || []).some(function (d) { return Math.abs(d.from - r.from) < 0.006 && Math.abs(d.to - r.to) < 0.006; });
+      if (h != null && !pair && !(bb8oInHay(r.from, h) && bb8oInHay(r.to, h))) { dropped.push(s.replace(BB8O_TOK, "").trim()); return ""; }
+      n++; return r.s;
+    }).join("");
+  }).join("\n");
+  return { text: out, fixed: n, dropped: dropped };
+}
+function bb8oSrcLabel(s) {
+  if (!s || typeof s !== "object") return s;
+  var p = s.bb8qProxy, d = String(s.detail || "");
+  var lab = p && p.label ? p.label + " (" + p.sym + ")" : (d.split(/\s(?:is|are|was|were|has|had)\s|[,;:]\s/)[0] || "").replace(/^Our /, "").slice(0, 80);
+  if (!lab || lab.length < 3) lab = s.name || "Source";
+  lab = lab.charAt(0).toUpperCase() + lab.slice(1);
+  if (!s.label) s.label = lab + (p ? " (proxy)" : "");
+  if (!s.title) s.title = (s.name || "Source") + (s.label && s.label !== s.name ? " · " + s.label : "");
+  return s;
+}
+// An uncited sentence gets the [n] of the one source that carries all of its figures (same line first), else none.
+function bb8oFigs(s) { return (String(s).replace(BB8O_TOK, " ").replace(/\b(?:19|20)\d{2}\b/g, " ").replace(/\b\d{1,2}:\d{2}\b/g, " ").replace(/,/g, "").match(/\d+(?:\.\d+)?/g) || []).map(Number); }
+function bb8oReCite(body, lineToks, doc, after) {
+  var figs = bb8oFigs(body).filter(function (v) { return v !== 0; });
+  var hayOf = function (src) { return (typeof bb8qSrcText !== "undefined" && bb8qSrcText.get(src)) || (src && src.detail) || ""; };
+  var words = (String(body).toLowerCase().match(/[a-z]{5,}/g) || []);
+  var fits = function (k) {
+    var src = doc.srcs[k]; if (!src) return false; var h = hayOf(src);
+    if (figs.length) return figs.every(function (v) { return bb8oInHay(v, h); });
+    if (words.length < 3) return false;
+    var hl = h.toLowerCase(), hit = words.filter(function (w) { return hl.indexOf(w) >= 0; }).length;
+    return hit / words.length >= 0.6;
+  };
+  var seen = {}, cand = lineToks.filter(function (k) { if (seen[k]) return false; seen[k] = 1; return true; });
+  var same = cand.filter(fits); if (same.length === 1 || (same.length && !figs.length)) return same[0];
+  // bb8q's line-level cite: a figure sentence before the line's one source takes that source's [n]
+  if (figs.length && cand.length === 1 && after) return cand[0];
+  if (!figs.length) return null;
+  var best = null, bh = 0, tie = false;
+  for (var k = 0; k < doc.srcs.length; k++) {
+    var src = doc.srcs[k]; if (!src) continue; var h = hayOf(src);
+    var hit = figs.filter(function (v) { return bb8oInHay(v, h); }).length;
+    if (hit > bh) { best = k; bh = hit; tie = false; } else if (hit && hit === bh) tie = true;
+  }
+  if (best != null && !tie && bh >= Math.max(1, Math.ceil(figs.length / 2))) return best;
+  // a descriptive source (bb8's server lines: "trailing P/E (TTM) and forward P/E, refreshed on request") whose
+  // words the sentence carries: the one such source is cited
+  var low = String(body).toLowerCase(), desc = [];
+  for (var j = 0; j < doc.srcs.length; j++) {
+    var hj = hayOf(doc.srcs[j]); if (!hj || /\d\.\d|\d%/.test(hj)) continue;
+    var ws = (hj.toLowerCase().match(/[a-z\/]{4,}/g) || []).filter(function (w) { return !/^(?:from|with|that|this|refreshed|request|last|price|change|session)$/.test(w); });
+    if (ws.length && ws.filter(function (w) { return low.indexOf(w) >= 0; }).length >= Math.min(2, Math.max(1, ws.length - 1))) desc.push(j);
+  }
+  return desc.length === 1 ? desc[0] : null;
+}
+function bb8oUkHm(ms) { try { return typeof bb8qUk === "function" ? bb8qUk(ms) : bb8oUk(ms); } catch (e) { return ""; } }
+function bb8oPost(doc, st) {
+  var ctx = (st && st.bb8qCtx) || {}, q = String(ctx.q || ""), stat = { dir: 0, dropped: [], moved: null, outlook: false, sp: null, proxied: 0, stamps: 0 };
+  var srcOf = function (i) { return doc.srcs[i] || null; };
+  var lines = String(doc.body).split("\n");
+  var firstDone = false, seenNums = {};
+  var isFixed = function (l) { return /^\s*(?:In short:|For context:|Sources:|#|\|)/.test(l) || /:\s*$/.test(l.trim()); };
+  // (a) numeric direction guard
+  var hayOf = function (s) { var ks = bb8oToks(s), L = ks.length ? ks.map(srcOf) : doc.srcs; return L.filter(Boolean).map(function (x) { return (typeof bb8qSrcText !== "undefined" && bb8qSrcText.get(x)) || x.detail || ""; }).join(" "); };
+  var dg = bb8oDirGuard(lines.join("\n"), ctx.bb8oDir || [], hayOf); stat.dir = dg.fixed; dg.dropped.forEach(function (s) { stat.dropped.push({ why: "direction claim on an uncited start or end figure", s: s }); }); lines = dg.text.split("\n");
+  // (e) citation hygiene, sentence by sentence
+  lines = lines.map(function (line) {
+    if (!line.trim() || /^\s*(?:In short:|Sources:|\|)/.test(line)) return line;
+    var keepAll = isFixed(line), lineToks = bb8oToks(line);
+    var sents = bb8oSplit(line).map(function (s) {
+      var toks = bb8oToks(s);
+      // the regime source is citable only for the regime score
+      toks.forEach(function (k) { var src = srcOf(k); if (src && src.bb8qKey === "regime" && !/regime|risk-?(?:on|off)|score|\/100|mood/i.test(s.replace(BB8O_TOK, ""))) s = s.replace(new RegExp("\\s*\\u27e6" + k + "\\u27e7", "g"), ""); });
+      s = s.replace(BB8O_TAIL, "");
+      return s;
+    });
+    var lastTokAt = -1; sents.forEach(function (s, i) { if (bb8oToks(s).length) lastTokAt = i; });
+    sents = sents.map(function (s, idx) {
+      var body = s.replace(BB8O_TOK, "").trim(), cited = bb8oToks(s).length > 0, nums = bb8oNums(s);
+      if (!body) return null;
+      var first = !firstDone; firstDone = true;
+      if (BB8O_FILLER.test(body) && !nums.length) { stat.dropped.push({ why: "filler", s: body }); return null; }
+      if (!cited && !first && !/\b(?:don't|do not|doesn't|not (?:in|available|have|quote|reported|compared))\b|\bno (?:[A-Za-z\- ]{0,30})(?:figures?|data|dates?|catalysts?|cause)\b/i.test(body)) {
+        var k2 = bb8oReCite(body, lineToks, doc, idx < lastTokAt);
+        if (k2 != null) { s = s.replace(/(\s*)$/, " \u27e6" + k2 + "\u27e7$1"); cited = true; stat.recited = (stat.recited || 0) + 1; }
+        else if (!keepAll) { stat.dropped.push({ why: "uncited", s: body }); return null; }
+      }
+      // de-duplicate a repeated proxy / figure line: every figure already given earlier, same source
+      if (nums.length && cited && !first) {
+        var all = nums.every(function (x) { return seenNums[x.replace(/[,%]/g, "")]; });
+        if (all) { stat.dropped.push({ why: "repeat", s: body }); return null; }
+      }
+      nums.forEach(function (x) { seenNums[x.replace(/[,%]/g, "")] = 1; });
+      return s;
+    }).filter(function (s) { return s != null; });
+    return sents.join("").replace(/\s+$/, "");
+  });
+  // (h) one S&P figure per answer: SPY or ^GSPC, never both
+  var SPFIG = "[^.;:]{0,60}?(?:-?\\d[\\d,]*\\.\\d+%?|\\d+(?:\\.\\d+)?%)";
+  var kind = function (s) { var b = s.replace(BB8O_TOK, ""); if (new RegExp("\\bSPY\\b" + SPFIG).test(b) || new RegExp("-?\\d[\\d,.]*%[^.;]{0,40}\\bSPY\\b").test(b)) return "SPY"; if (new RegExp("(?:\\^GSPC|S&P\\s*500)(?!'s move)" + SPFIG).test(b)) return "GSPC"; return null; };
+  var OTHER = /\((?!SPY\b|\^GSPC\b|S&P)[A-Z^][A-Z0-9.=^\-]{1,9}\b|\b(?:lagged|ahead of|behind|outperform\w*|underperform\w*)\b/;
+  var kinds = {}, firstKind = null, rich = {};
+  lines.forEach(function (l) { bb8oSplit(l).forEach(function (s) { var k = kind(s); if (!k) return; kinds[k] = 1; if (!firstKind) firstKind = k; if (OTHER.test(s.replace(BB8O_TOK, "")) || /^\s*In short:/.test(l)) rich[k] = 1; }); });
+  if (kinds.SPY && kinds.GSPC) {
+    var keep = rich.SPY && !rich.GSPC ? "SPY" : rich.GSPC && !rich.SPY ? "GSPC" : firstKind;
+    stat.sp = keep;
+    lines = lines.map(function (l) {
+      if (/^\s*In short:/.test(l)) return l;
+      return bb8oSplit(l).filter(function (s) { var k = kind(s); if (k && k !== keep && !OTHER.test(s.replace(BB8O_TOK, ""))) { stat.dropped.push({ why: "second S&P figure", s: s.replace(BB8O_TOK, "").trim() }); return false; } return true; }).join("").replace(/\s+$/, "");
+    });
+  } else stat.sp = kinds.SPY ? "SPY" : kinds.GSPC ? "GSPC" : null;
+  // (f) proxies are labelled as proxies in the text
+  lines = lines.map(function (l) {
+    return bb8oSplit(l).map(function (s) {
+      var toks = bb8oToks(s); if (!toks.length || /\bproxy|proxies\b/i.test(s)) return s;
+      var px = toks.map(srcOf).filter(function (x) { return x && x.bb8qProxy; });
+      if (!px.length || px.length !== toks.map(srcOf).filter(Boolean).length) return s;
+      stat.proxied++;
+      if (/^(\s*)What we do have, from/i.test(s)) return s.replace(/What we do have, from/i, "What we do have, as proxies, from");
+      var lead = /^(\s*)(?:The |the )?/.exec(s)[1];
+      var rest = s.slice(lead.length).replace(/^The /, "the ");
+      return lead + "As a proxy, " + rest;
+    }).join("");
+  });
+  // (g) a headline as-of is never earlier than the cited source's own as-of: use the source time
+  lines = lines.map(function (l, li) {
+    return l.replace(/^(.*?(?:latest move|What we do have[^:]*?)\b[^:]*?\bas of )([A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2,4}, \d{2}:\d{2} UK)(:)/, function (m, a, hm, c) {
+      var scope = l; if (!bb8oToks(l).length) { for (var j = li + 1; j < lines.length; j++) if (lines[j].trim()) { scope = lines[j]; break; } }
+      var best = 0; bb8oToks(scope).forEach(function (k) { var src = srcOf(k), t = src && Date.parse(src.asOf); if (t > best) best = t; });
+      if (!best) return m;
+      var txt = bb8oUkHm(best); if (!txt || txt === hm) return m;
+      stat.stamps++; return a + txt + c;
+    });
+  });
+  // (c) intent beats template: a direct factual question is answered first, with its cited value
+  var met = BB8O_METRIC.filter(function (x) { return x.q.test(q); })[0];
+  if (met && !(met.id === "yield" && /dividend/i.test(q))) {
+    var hit = null;
+    lines.some(function (l, li) { var ss = bb8oSplit(l); return ss.some(function (s, si) { if (met.s.test(s) && bb8oToks(s).length && (/\d/.test(s.replace(BB8O_TOK, "")) || /\bno\b|\bdoes not\b|\bdoesn't\b/i.test(s))) { hit = { li: li, si: si, s: s }; return true; } return false; }); });
+    if (!hit && ctx.bb8oMetric && ctx.bb8oMetric.id === met.id && ctx.bb8oMetric.src) {
+      lines.unshift(ctx.bb8oMetric.text + " " + bb8qTok(doc, ctx.bb8oMetric.src), "");
+      stat.moved = met.id + " (server fact)";
+    } else if (hit && !(hit.si === 0 && lines.slice(0, hit.li).every(function (l) { return !l.trim() || /:\s*$/.test(l) && !/\d\.\d|%/.test(l.replace(/\d{2}:\d{2}/g, "")); }))) {
+      var ss = bb8oSplit(lines[hit.li]); ss.splice(hit.si, 1); lines[hit.li] = ss.join("").replace(/\s+$/, "");
+      lines.unshift(hit.s.replace(/^\s+|\s+$/g, ""), "");
+      stat.moved = met.id;
+    }
+  }
+  // (d) "this week" questions: an outlook built only from citable facts, never a forecast
+  if (BB8O_WEEK_Q.test(q) && !lines.some(function (l) { return /^\s*Outlook for this week/i.test(l); })) {
+    var parts = [], lv = ctx.bb8oLevels, ev = ctx.bb8oEvents || [];
+    if (lv && lv.src && /\^GSPC|S&P/.test(lv.label) && stat.sp === "SPY") { stat.levelsSkipped = "one S&P figure per answer (SPY kept)"; lv = null; }
+    if (lv && lv.src) parts.push("the " + lv.n + "-session range for " + lv.label + " is " + lv.fmt(lv.low) + " (low) to " + lv.fmt(lv.high) + " (high), " + lv.span + " " + bb8qTok(doc, lv.src));
+    ev.forEach(function (e) { parts.push(e.text + " " + bb8qTok(doc, e.src)); });
+    var line;
+    if (parts.length) line = "Outlook for this week (from our data, not a forecast): " + parts.join("; ") + "." + (ev.length ? "" : " No scheduled Fed, economic-data or earnings dates for this week are in our feed.");
+    else line = "Outlook for this week: nothing in our feed is citable for the week ahead (no scheduled Fed, data or earnings dates and no measured range), so we give no outlook.";
+    var si2 = -1; for (var z = lines.length - 1; z >= 0; z--) if (/^\s*In short:/.test(lines[z])) { si2 = z; break; }
+    if (si2 >= 0) lines.splice(si2, 0, line, ""); else lines.push("", line);
+    stat.outlook = true;
+  }
+  // a header line ("For context:", "Peer comparisons as of …:") left with nothing under it goes too
+  lines = lines.filter(function (l, i, a) {
+    if (!/:\s*$/.test(l) || /^\s*In short:/.test(l)) return true;
+    var nx = a[i + 1]; return !!(nx && nx.trim() && !/:\s*$/.test(nx));
+  });
+  doc.body = lines.filter(function (l, i, a) { return !(l.trim() === "" && (i === 0 || a[i - 1].trim() === "")); }).join("\n");
+  return stat;
+}
+// P0 (a) in the context: every timeframe line carries both cited numbers and a code-computed direction and %.
+function bb8oDirCtx(ctx) {
+  if (!ctx || !ctx.tf || !ctx.tf.text) return;
+  var m = /\bto\s+\$?([\d,]+(?:\.\d+)?)\s+now\b/.exec(ctx.tf.text), E = m ? bb8oN(m[1]) : NaN;
+  if (!(E > 0)) return;
+  var dirs = [], money = /\bto \$/.test(ctx.tf.text), f2 = function (v) { return (money ? "$" : "") + bb8qNum(v, 2); };
+  var fix = function (t) {
+    var s = /close of\s+\$?([\d,]+(?:\.\d+)?)/.exec(t) || /\bfrom [^$\d]*\$?([\d,]+(?:\.\d+)?)/.exec(t), S = s ? bb8oN(s[1]) : NaN;
+    if (!(S > 0)) return t;
+    var pct = (E / S - 1) * 100, word = Math.abs(pct) < 0.005 ? "unchanged" : (pct < 0 ? "down " : "up ") + bb8oPct2(pct);
+    dirs.push({ from: S, to: E, pct: pct });
+    var u = t.replace(/\b(?:down|up) \d+(?:\.\d+)?%|\bunchanged\b/, word);
+    if (!/\bto\s+\$?[\d,]+(?:\.\d+)?\s+now\b/.test(u)) u = u.replace(/(close of\s+\$?[\d,]+(?:\.\d+)?)/, "$1 to " + f2(E) + " now");
+    return u;
+  };
+  ctx.tf.text = fix(ctx.tf.text);
+  if (Array.isArray(ctx.tfMore)) ctx.tfMore = ctx.tfMore.map(fix);
+  (ctx.facts || []).forEach(function (f) { if (f.src === ctx.tf.src) f.text = ctx.tf.text; });
+  if (ctx.tf.src) { var d = ctx.tf.text.replace(/\.$/, "") + (ctx.tfMore && ctx.tfMore.length ? "; " + ctx.tfMore.join(" ") : ""); ctx.tf.src.detail = d.slice(0, 600); bb8qSrcText.set(ctx.tf.src, d); }
+  ctx.bb8oDir = dirs;
+}
+// P1 (c): direct factual questions about an equity get the cited value as a server fact (Yahoo Finance quoteSummary,
+// through bb8l's shared 30 s lookup, so the card's beta / earnings requests are reused; no new fetch path).
+async function bb8oMetricCtx(ctx, st) {
+  var q = String((ctx && ctx.q) || ""), met = BB8O_METRIC.filter(function (x) { return x.q.test(q); })[0];
+  var base = st && st.bb8eBase;
+  if (!met || !base || /^(?:XAU|GC=F|GOLD|BTC|ETH)/i.test(base) || /^\^|=/.test(base) || met.id === "beta" || met.id === "pe") return;
+  if (met.id === "yield" && !/dividend/i.test(q) && !/\b(?:stock|share|shares|dividend)\b/i.test(q)) return;
+  if (typeof bb8lYahooShared !== "function") return;
+  var race = function (p) { return typeof bb8q2Race === "function" ? bb8q2Race(p) : p; };
+  var ysym = typeof bb8bYahooSym === "function" ? bb8bYahooSym(base) : base;
+  var y = await race(bb8lYahooShared(ysym));
+  if (!y || typeof y !== "object" || typeof rt32R !== "function") return;
+  var sd = y.summaryDetail || {}, ks = y.defaultKeyStatistics || {}, pr = y.price || {}, ccy = sd.currency || pr.currency || "USD";
+  var cs = ccy === "USD" ? "$" : ccy === "GBP" ? "\u00a3" : ccy === "EUR" ? "\u20ac" : ccy + " ";
+  var text = null, label = "key statistics";
+  if (met.id === "dividend" || met.id === "yield") {
+    var rate = rt32R(sd.dividendRate), dy = rt32R(sd.dividendYield), ex = sd.exDividendDate && sd.exDividendDate.fmt;
+    if (rate > 0) text = base + " pays a dividend of " + cs + Number(rate).toFixed(2) + " a share a year" + (dy > 0 ? ", a yield of " + (dy * 100).toFixed(2) + "%" : "") + (ex ? " (last ex-dividend date " + ex + ")" : "") + " (Yahoo Finance, summary detail).";
+    else text = base + " has no dividend in Yahoo Finance's summary detail (no dividend rate is listed).";
+  } else if (met.id === "mcap") {
+    var mc = rt32R(sd.marketCap) || rt32R(pr.marketCap);
+    if (mc > 0) text = base + "'s market capitalisation is " + cs + (mc >= 1e12 ? (mc / 1e12).toFixed(2) + " trillion" : (mc / 1e9).toFixed(1) + " billion") + " (Yahoo Finance, summary detail).";
+  } else if (met.id === "eps") {
+    var eps = rt32R(ks.trailingEps);
+    if (eps != null) text = base + "'s trailing twelve-month EPS is " + cs + Number(eps).toFixed(2) + " (Yahoo Finance, key statistics).";
+  }
+  if (!text) return;
+  var src = bb8qSrc("Yahoo Finance " + label, "https://finance.yahoo.com/quote/" + encodeURIComponent(ysym) + "/key-statistics/", Date.now(), text.replace(/\.$/, ""), "bb8o:metric");
+  ctx.facts.push({ id: "bb8o:metric", text: text, src: src }); ctx.sources.push(src);
+  ctx.bb8oMetric = { id: met.id, text: text, src: src };
+}
+// P1 (d): week levels (5-session high / low from daily bars, or gold's futures windows) and scheduled earnings in the next 7 days.
+async function bb8oWeekCtx(ctx, st) {
+  if (!ctx || !BB8O_WEEK_Q.test(String(ctx.q || ""))) return;
+  var race = function (p) { return typeof bb8q2Race === "function" ? bb8q2Race(p) : p; };
+  if (ctx.gold && ctx.fut && ctx.fut.sn && Array.isArray(ctx.fut.sn.windows)) {
+    var w = ctx.fut.sn.windows.filter(function (x) { return Number(x.n) === 5; })[0];
+    if (w && ctx.fut.src) ctx.bb8oLevels = { n: 5, label: "gold futures (GC=F)", low: Number(w.low), high: Number(w.high), span: "sessions " + bb8qDayName(w.start) + " to " + bb8qDayName(w.end), src: ctx.fut.src, fmt: function (v) { return "$" + bb8qNum(v, 2); } };
+  } else {
+    var sym = (ctx.tf && ctx.tf.sym) || (st && st.bb8eMoveR && st.bb8eMoveR.ysym) || (st && st.bb8eBase) || null;
+    if (sym && typeof fetchYahooChart === "function") {
+      var c = await race(fetchYahooChart(sym, "1y", "1d"));
+      var r = c && c.data && c.data.chart && c.data.chart.result && c.data.chart.result[0];
+      var qd = r && r.indicators && r.indicators.quote && r.indicators.quote[0];
+      if (r && qd && Array.isArray(r.timestamp)) {
+        var tz = (r.meta && r.meta.exchangeTimezoneName) || "America/New_York", fmt = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" });
+        var rows = [];
+        r.timestamp.forEach(function (t, i) { var h = Number(qd.high && qd.high[i]), l = Number(qd.low && qd.low[i]); if (h > 0 && l > 0) rows.push({ d: fmt.format(new Date(t * 1000)), h: h, l: l }); });
+        rows = rows.filter(function (x, i, a) { return !a[i + 1] || a[i + 1].d !== x.d; }).slice(-5);
+        if (rows.length === 5) {
+          var hi = Math.max.apply(null, rows.map(function (x) { return x.h; })), lo = Math.min.apply(null, rows.map(function (x) { return x.l; }));
+          var money = (r.meta && r.meta.currency === "USD" && !/^\^/.test(sym)) || sym === "GC=F";
+          var lab = sym === "^GSPC" ? "the S&P 500 (^GSPC)" : sym;
+          var span = "sessions " + bb8qDayName(rows[0].d) + " to " + bb8qDayName(rows[4].d);
+          var f = function (v) { return (money ? "$" : "") + bb8qNum(v, 2); };
+          var tx = "Week levels: " + lab + " 5-session high " + f(hi) + " and low " + f(lo) + " (" + span + ", Yahoo Finance daily bars), as of " + bb8qUk(Number(r.meta && r.meta.regularMarketTime) * 1000 || Date.now()) + ".";
+          var src = bb8qSrc("Yahoo Finance chart", "https://finance.yahoo.com/quote/" + encodeURIComponent(sym) + "/history/", Number(r.meta && r.meta.regularMarketTime) * 1000 || Date.now(), tx.replace(/\.$/, ""), "bb8o:levels");
+          ctx.facts.push({ id: "bb8o:levels", text: tx, src: src }); ctx.sources.push(src);
+          ctx.bb8oLevels = { n: 5, label: lab, low: lo, high: hi, span: span, src: src, fmt: f };
+        }
+      }
+    }
+  }
+  var base = st && st.bb8eBase;
+  if (base && !/^(?:XAU|GC=F|GOLD|BTC|ETH)/i.test(base) && !/^\^/.test(base) && typeof bb8lEarnGet === "function") {
+    var e = await race(bb8lEarnGet(base));
+    if (e && e.date) {
+      var days = (Date.parse(e.date + "T12:00:00Z") - Date.now()) / 86400000;
+      if (days >= -0.5 && days <= 7) {
+        var es = bb8lEarnSrc(e, typeof bb8bYahooSym === "function" ? bb8bYahooSym(base) : base, base);
+        var et = base + " next earnings: " + bb8lDay(e.date, true) + (e.isEstimate ? " (estimated)" : "");
+        ctx.facts.push({ id: "bb8o:event", text: "Scheduled this week: " + et + ".", src: es }); ctx.sources.push(es);
+        ctx.bb8oEvents = [{ text: et, src: es }];
+      }
+    }
+  }
+}
+function bb8oQuoteLabel(q) {
+  if (!q || typeof q !== "object") return q;
+  var sym = String(q.symbol || "");
+  if (/^(?:XAU|XAUUSD=X)$/i.test(sym)) return q;
+  var o = Object.assign({}, q), own = (q.name && !/gold spot/i.test(q.name) ? q.name : null) || sym || null;
+  if (/gold spot/i.test(String(q.label || "")) || /gold spot/i.test(String(q.name || ""))) { o.name = own; o.label = own; }
+  if (!o.label && own) o.label = own;
+  return o;
+}
+// Edition naming from UK time: Morning before 12:00, Afternoon 12:00 to 16:59, Evening from 17:00. Dated label, not ISO.
+function bb8oEditionName(ms) {
+  var hm = bb8oHm(ms), h = Number(String(hm).split(":")[0]);
+  return h < 12 ? "Morning" : h < 17 ? "Afternoon" : "Evening";
+}
+// Static desk thesis and rating / sentiment words sent from the page context are uncited opinion: not passed to the model.
+function bb8oCtxOpinion(s) {
+  if (typeof s !== "string" || !s) return s;
+  if (!/Platform thesis:|Active ticker:/.test(s)) return s;
+  return s.split("\n").filter(function (l) { return !/^\s*Platform thesis:/.test(l); }).map(function (l) {
+    if (!/^\s*Active ticker:/.test(l)) return l;
+    return l.replace(/\s*·\s*(?:Strong[- ]Buy|Strong[- ]Sell|Buy|Sell|Hold|Accumulate|Reduce|Outperform|Underperform|Overweight|Underweight)(?=\s*·)/gi, "")
+      .replace(/\s*·\s*(?:Neutral-Bull|Neutral-Bear|Bullish|Bearish|Neutral|Very Bullish|Very Bearish)(?=\s*·)/gi, "");
+  }).join("\n");
+}
 function bb8oShape(res, status, body) {
   var path = res && res.bb8oPath;
   try { bb8oStripRatings(body, bb8oMarketRoute(path)); } catch (e) {}
@@ -951,7 +1529,7 @@ function bb8oShape(res, status, body) {
   if (BB8O_ROUTES[path]) return bb8oQuoteBody(body, path, res.bb8oQuery);
   if (path === "/api/search") return bb8oSearchBody(body, res.bb8oProfile || null);
   if (BB8O_ADVICE_ROUTES[path] && status === 200) { try { body = bb8oAdviceBody(path, body); } catch (e) {} }
-  if (path === "/api/brief" && res.bb8oEdition && status === 200 && body.brief) { var b = Object.assign({}, body); b.edition = res.bb8oEdition; return b; }
+  if (path === "/api/brief" && res.bb8oEdition && status === 200 && body.brief) { var b = Object.assign({}, body); b.edition = res.bb8oEdition; try { b.brief = Object.assign({}, b.brief); var dms = Date.parse(String(b.brief.date || "") + "T12:00:00Z"); b.brief.dateLabel = isFinite(dms) ? bb8oDayLabel(dms) : res.bb8oEdition.dayLabel; b.brief.editionLabel = res.bb8oEdition.label || null; } catch (e) {} return b; }
   if (path === "/api/financials") return bb8oValuation(body);
   return body;
 }
@@ -986,6 +1564,7 @@ try {
     yahooQuote = async function () {
       var out = await bb8oYq0.apply(this, arguments);
       try { out = await bb8oGuardMap(out, "yahoo"); } catch (e) {}
+      try { out = await bb8oPrevCheck(out); } catch (e) {}
       return out;
     };
   }
@@ -993,7 +1572,7 @@ try {
     var bb8oFyq0 = fetchYahooQuote;
     fetchYahooQuote = async function (symbol) {
       var q = await bb8oFyq0.apply(this, arguments);
-      try { if (bb8oIsRow(q)) return bb8oFix(q, symbol, "yahoo"); } catch (e) {}
+      try { if (bb8oIsRow(q)) { var m = {}; m[symbol] = bb8oFix(q, symbol, "yahoo"); if (!m[symbol]) return m[symbol]; await bb8oPrevCheck(m); return m[symbol]; } } catch (e) {}
       return q;
     };
   }
@@ -1036,6 +1615,76 @@ try {
   if (typeof bb2Read0 === "function") {
     var bb8oRead0 = bb2Read0;
     bb2Read0 = async function () { var b = await bb8oRead0.apply(this, arguments); try { b = bb8oScrubBody(b); } catch (e) { return b; } try { return await bb8oThemeCtx(b); } catch (e) { return b; } };
+  }
+  // P1 (e) stream == JSON: the stream path's final document is assembled from the model's own text (as the JSON path's is),
+  // not from the painted text that the per-line stream guards trimmed (acc, bb8i's st.bb8iGen); done.reply stays
+  // authoritative on the client, so both paths apply exactly the same numeric and sentence drops.
+  var bb8oRawWrap = function (fn) {
+    return async function (cfg, system, messages, onDelta) {
+      var st = null; try { st = typeof bb8qSt === "function" ? bb8qSt() : null; } catch (e) {}
+      if (!st || !st.chat || typeof onDelta !== "function") return fn.apply(this, arguments);
+      st.bb8oRaw = "";
+      var args = Array.prototype.slice.call(arguments);
+      args[3] = function (d) { try { st.bb8oRaw += String(d == null ? "" : d); } catch (e) {} return onDelta.apply(this, arguments); };
+      return fn.apply(this, args);
+    };
+  };
+  if (typeof bb2OpenAi === "function") bb2OpenAi = bb8oRawWrap(bb2OpenAi);
+  if (typeof bb2Gemini === "function") bb2Gemini = bb8oRawWrap(bb2Gemini);
+  if (typeof bb2Finish === "function") {
+    var bb8oFin0 = bb2Finish;
+    bb2Finish = function (reply, store) { try { if (store && typeof store === "object") store.bb8oJsonFinish = true; } catch (e) {} return bb8oFin0.apply(this, arguments); };
+  }
+  if (typeof bb8jAssemble === "function") {
+    var bb8oAsm0 = bb8jAssemble;
+    bb8jAssemble = function (reply, store) {
+      var args = Array.prototype.slice.call(arguments);
+      try {
+        var st = store || (typeof bb8qSt === "function" ? bb8qSt() : null);
+        if (st && st.chat && st.bb8qCtx && !st.bb8oJsonFinish && typeof st.bb8oRaw === "string" && st.bb8oRaw.trim()) { args[0] = st.bb8oRaw; st.bb8oRawUsed = true; if (typeof st.bb8iGen === "string") st.bb8iGen = null; }
+      } catch (e) {}
+      return bb8oAsm0.apply(this, args);
+    };
+  }
+  // "Gold spot" only ever carries XAU data: reply text (both paths, via bb8qFinish), meta.quote, and the spot stamp.
+  if (typeof bb8qFinish === "function") {
+    var bb8oFinish0 = bb8qFinish;
+    bb8qFinish = function (out, st) {
+      var r = bb8oFinish0.apply(this, arguments);
+      try {
+        if (r && typeof r === "object" && typeof r.reply === "string" && typeof bb8qParse === "function" && typeof bb8qRender === "function") {
+          var doc = bb8qParse(r), g = bb8oGoldSpotGuard(doc.body, st);
+          if (g !== doc.body) { doc.body = g; st.bb8oSpotFixed = (st.bb8oSpotFixed || 0) + 1; }
+          var stat = bb8oPost(doc, st);
+          if (st) st.bb8oPost = stat;
+          var r2 = bb8qRender(doc);
+          (r2.sources || []).forEach(bb8oSrcLabel);
+          r = Object.assign({}, r, { reply: r2.reply, sources: r2.sources });
+        } else if (typeof r === "string") r = bb8oGoldSpotGuard(r, st);
+      } catch (e) { console.warn("bb8o post", e && e.message); }
+      return r;
+    };
+  }
+  if (typeof bb8pQuoteMeta === "function") {
+    var bb8oQm0 = bb8pQuoteMeta;
+    bb8pQuoteMeta = function (st) { var q = bb8oQm0.apply(this, arguments); try { return bb8oQuoteLabel(q); } catch (e) { return q; } };
+  }
+  if (typeof bb8qSpotQuote === "function") {
+    var bb8oSpotQ0 = bb8qSpotQuote;
+    bb8qSpotQuote = function (q) { if (q && typeof q === "object" && q.symbol && !/^(?:XAU|XAUUSD=X|GOLD|GC=F)$/i.test(String(q.symbol))) return q; return bb8oSpotQ0.apply(this, arguments); };
+  }
+  // bb8q shared context: measured Leading / Lagging themes become a numbered, citable source on both /api/chat paths.
+  if (typeof bb8qBuild === "function") {
+    var bb8oBuild0 = bb8qBuild;
+    bb8qBuild = async function (st, body) {
+      var ctx = await bb8oBuild0.apply(this, arguments);
+      try { await bb8oThemeFacts(ctx, body); } catch (e) {}
+      try { bb8oDirCtx(ctx); } catch (e) {}
+      try { await bb8oWeekCtx(ctx, st); } catch (e) {}
+      try { await bb8oMetricCtx(ctx, st); } catch (e) {}
+      try { (ctx.sources || []).forEach(bb8oSrcLabel); } catch (e) {}
+      return ctx;
+    };
   }
   // Committee, lenses, intelligence and brief prompts get the explicit no-advice rule (identified by their validators).
   if (typeof generateAi === "function") {
@@ -1108,6 +1757,9 @@ if "CREATE TABLE" in BLOCK or "setInterval(" in BLOCK or "stripe.webhooks" in BL
 for a, b in REPLACE:
     v = v.replace(a, b, 1)
     print("bb8o replaced in place: %s" % a.strip().splitlines()[0][:70])
+_after_q2 = v[v.index("// BB8Q2_JS_END") + len("// BB8Q2_JS_END"):]
+if re.search(r"// (?:BB|RT)[A-Z0-9]*_JS_END", _after_q2):
+    die("bb8o must be stacked directly on bb8q2 (another patch block follows // BB8Q2_JS_END)")
 v = v.rstrip("\n") + "\n" + BLOCK
 print("server-only: app.js and index.html are not modified")
 

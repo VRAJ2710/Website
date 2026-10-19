@@ -139,9 +139,10 @@ test("item 1: null / NaN / Infinity prices never pass; no memory uses one Yahoo 
   const tb = c.bb8oShape({ bb8oPath: "/api/twelve-data-quote" }, 200, { quotes: { "EUR/USD": { p: 1.12, prev: 1.124, c: -0.3, change: -0.004, ts: Math.floor(c.NOW / 1000) }, "X/Y": { p: NaN } } });
   assert.deepEqual(Object.keys(tb.quotes), ["EUR/USD"]);
   assert.equal(tb.quotes["EUR/USD"].feed.symbol, "EURUSD=X");
-  // non-finite change on a valid price: basis none, c 0
-  const t2 = c.bb8oShape({ bb8oPath: "/api/market-reference-quotes" }, 200, { DXY: { p: 101.9, prev: null, c: null, change: null, ts: 1 } });
-  assert.equal(t2.DXY.c, 0); assert.equal(t2.DXY.basis, "none"); assert.equal(t2.DXY.changeAvailable, false);
+  // no previous close and an explicit null change (fix A): stays null, flagged; a non-finite change becomes 0, basis none
+  const t2 = c.bb8oShape({ bb8oPath: "/api/market-reference-quotes" }, 200, { DXY: { p: 101.9, prev: null, c: null, change: null, ts: 1 }, VIX: { p: 18, prev: null, c: NaN, change: "x", ts: 1 } });
+  assert.equal(t2.DXY.c, null); assert.equal(t2.DXY.change, null); assert.equal(t2.DXY.changeAvailable, false);
+  assert.equal(t2.VIX.c, 0); assert.equal(t2.VIX.basis, "none"); assert.equal(t2.VIX.changeAvailable, false);
 });
 
 test("item 1: fetchYahooQuote (DXY inputs) and valuation price are guarded too", async () => {
@@ -174,7 +175,7 @@ test("item 4: one feed status per row, same classifier on every route", () => {
   const a = c.bb8oShape({ bb8oPath: "/api/yahoo-quote" }, 200, { "EURUSD=X": { p: 1.12, ts: s - 30, delayMin: 0, status: "fresh" } })["EURUSD=X"].feed;
   const b = c.bb8oShape({ bb8oPath: "/api/twelve-data-quote" }, 200, { quotes: { "EUR/USD": { p: 1.12, ts: s - 30, delayMin: 0, status: "delayed" } } }).quotes["EUR/USD"].feed;
   for (const k of ["v", "symbol", "status", "ageSec", "asOf", "asOfUk", "delayMin", "market"]) assert.deepEqual(a[k], b[k], k);
-  assert.deepEqual(Object.keys(a).sort(), ["ageSec", "asOf", "asOfUk", "delayMin", "fallback", "market", "reason", "sessionDate", "sessionDayUk", "sessionLabel", "source", "status", "symbol", "v"]);
+  assert.deepEqual(Object.keys(a).sort(), ["ageSec", "asOf", "asOfUk", "changeDay", "changeDayLabel", "delayMin", "fallback", "market", "reason", "sessionDate", "sessionDayUk", "sessionLabel", "source", "status", "symbol", "v"]);
 });
 
 const X = (tx, de, por) => `<ownershipDocument>${por ? `<periodOfReport>${por}</periodOfReport>` : ""}<nonDerivativeTable><nonDerivativeTransaction><transactionCoding><transactionCode>S</transactionCode></transactionCoding>${tx ? `<transactionDate><value>${tx}</value></transactionDate>` : ""}${de ? `<deemedExecutionDate><value>${de}</value></deemedExecutionDate>` : ""}</nonDerivativeTransaction></nonDerivativeTable></ownershipDocument>`;
@@ -316,7 +317,7 @@ test("ratings: AI bodies sanitize only the client context / fact fields; the que
     assert.equal(JSON.stringify(b.messages), raw, "messages byte-identical");
     assert.equal(b.messages[3].content, q); assert.equal(b.question, q); assert.equal(b.userThesis, "I think the consensus rating Buy is wrong");
     assert.equal(/Strong Buy|Rating:|rating Buy|Outperform|price target|\$250|Analyst:|PT mean/i.test(b.context + b.terminalContext + JSON.stringify(b.tickers) + JSON.stringify(b.facts)), false);
-    assert.match(b.context, /Sentiment: Bullish/); assert.match(b.context, /Score 76\/100 · Bullish · \$182\.10/); assert.match(b.context, /Revenue grew 50%/);
+    assert.match(b.context, /Sentiment: Bullish/); assert.match(b.context, /Score 76\/100 · \$182\.10/); assert.match(b.context, /Revenue grew 50%/);
     assert.match(b.terminalContext, /P\/E 30, ROE 40\nRegime: risk-on/);
     assert.deepEqual(both(b.tickers, "t").concat(both(b.facts, "f")), []); assert.equal(b.tickers[0].sc, 76); assert.equal(b.facts[0].value, 30);
     assert.deepEqual(b.extra, { rating: 5 }, "outside context fields only target keys go");
@@ -468,6 +469,153 @@ test("themes: AI context 'Overweight: …' / 'Underweight: …' segments become 
   c.YCALLS.length = 0; await c.readBody({ __body: { question: "Why did MU fall?", context: "MU fell 5.63%." } }); assert.equal(c.YCALLS.length, 0);
 });
 
+test("fix A: upstream null change / changePct / prevClose stay null (bb8q / bb8q2 gold spot); junk values still become 0", () => {
+  const c = load();
+  const spot = { p: 4166.6, c: null, change: null, changePct: null, prev: null, prevClose: null, changeAvailable: false, label: "Gold spot", futuresChange: { symbol: "GC=F", changePct: 0.2, prevClose: 4181.1 }, changeNote: "No spot previous close yet; futures change shown separately." };
+  const out = c.bb8oTidy(spot);
+  assert.deepEqual([out.c, out.change, out.changePct, out.prev, out.prevClose, out.changeAvailable], [null, null, null, null, null, false]);
+  assert.deepEqual(out.futuresChange, spot.futuresChange); assert.equal(out.changeNote, spot.changeNote); assert.equal(out, spot, "nothing to change: same object");
+  // changeAvailable:false alone is enough; NaN with no flag is junk and becomes 0 as before
+  assert.deepEqual([c.bb8oTidy({ p: 10, c: 0.5, change: 0.05, changeAvailable: false }).c, c.bb8oTidy({ p: 10, c: 0.5, change: 0.05, changeAvailable: false }).change], [null, null]);
+  assert.deepEqual([c.bb8oTidy({ p: 10, c: NaN, change: Infinity, prev: 0 }).c, c.bb8oTidy({ p: 10, c: NaN, change: Infinity, prev: 0 }).change], [0, 0]);
+  // a null change is never a zero-price failure: the row is valid and passes through the response layer untouched
+  assert.equal(c.bb8oValid(spot), true);
+  // the zero-price fallback keeps nulls too when the upstream row said "no change"
+  const fb = c.bb8oFromLast({ p: 0, c: null, change: null, changeAvailable: false, changeNote: "n", futuresChange: { x: 1 } }, "XAU", { p: 4160, prev: null, ts: 1792400000, tsMs: 1792400000000, src: "gold-api.com" }, "zero-price");
+  assert.deepEqual([fb.p, fb.c, fb.change, fb.prev, fb.changeAvailable, fb.changeNote, fb.futuresChange.x, fb.fallback], [4160, null, null, null, false, "n", 1, true]);
+  // through the response layer: bb8q's spot row keeps its nulls, futuresChange, changeNote and its feed string (as feedLabel / feed.label)
+  const R = c.bb8oShape({ bb8oPath: "/api/market-reference-quotes" }, 200, { XAU: Object.assign({ ts: Math.floor(c.NOW / 1000), feed: "gold-api.com spot (api.gold-api.com/price/XAU)", source: "gold-api-spot-proxy" }, spot) });
+  assert.deepEqual([R.XAU.c, R.XAU.change, R.XAU.prev, R.XAU.changeAvailable, R.XAU.changeNote, R.XAU.futuresChange.changePct], [null, null, null, false, spot.changeNote, 0.2]);
+  assert.equal(typeof R.XAU.feed, "object"); assert.equal(R.XAU.feed.symbol, "XAU"); assert.equal(R.XAU.feedLabel, "gold-api.com spot (api.gold-api.com/price/XAU)"); assert.equal(R.XAU.feed.label, R.XAU.feedLabel);
+  // with a previous close the change is still computed
+  const ok = c.bb8oTidy({ p: 110, prev: 100, c: null, change: null });
+  assert.deepEqual([Math.round(ok.c * 100) / 100, Math.round(ok.change * 100) / 100], [10, 10]);
+});
+test("fix B: Leading / Lagging themes are a numbered, citable source in bb8q's shared context when the Ask is about them", async () => {
+  const c = load(); themeCharts(c);
+  vm.runInContext(`var bb8qSrcText = new WeakMap(); function bb8qSrc(name, link, ms, detail, key) { var s = { name: name, link: link, asOf: new Date(ms).toISOString(), detail: String(detail).slice(0, 400), bb8q: true, bb8qKey: key }; bb8qSrcText.set(s, String(detail)); return s; }
+    function bb8pQuestion(b) { return b.question; }`, c);
+  const body = { question: "Which themes are leading this week?", context: "Regime: Risk-off | Overweight: Gold, Cash | Underweight: High-beta tech" };
+  const ctx = { facts: [{ id: "regime", text: "r", src: { name: "x" } }], sources: [{ name: "x" }], q: body.question };
+  await c.bb8oThemeFacts(ctx, body);
+  assert.deepEqual(ctx.facts.map(f => f.id), ["regime", "themes"]);
+  const th = ctx.facts[1];
+  assert.match(th.text, /^Leading and lagging themes \(Dispatch measurement from Yahoo Finance daily closes over the 5 sessions to Fri 16 Oct, against the S&P 500 \(SPY\), which is down 0\.77% over the same window\)\. Leading themes: Gold \(GLD, SPDR Gold Shares\) up 3\.21%; Cash \(BIL, SPDR 1-3 Month T-Bill ETF\) up 0\.08%\. Lagging themes: High-beta tech \(XLK, Technology Select Sector SPDR\) down 4\.36%\. As of Fri 16 Oct, 21:00 UK\.$/);
+  assert.equal(th.text.split("0.77%").length, 2, "the SPY figure appears once, in one source");
+  assert.equal(ctx.sources[1], th.src); assert.equal(th.src.link, "https://finance.yahoo.com/quote/GLD/history/"); assert.equal(th.src.bb8qKey, "themes");
+  assert.deepEqual(th.src.bb8oThemes.map(x => [x.list, x.proxy, x.changePct, x.spyChangePct]), [["leading", "GLD", 3.21, -0.77], ["leading", "BIL", 0.08, -0.77], ["lagging", "XLK", -4.36, -0.77]]);
+  assert.equal(c.bb8qSrcText.get(th.src), th.text.replace(/\.$/, ""));
+  // idempotent; an unrelated Ask adds nothing and makes no Yahoo request
+  await c.bb8oThemeFacts(ctx, body); assert.equal(ctx.facts.length, 2);
+  c.YCALLS.length = 0; c.bb8oThemeCache.clear();
+  const ctx2 = { facts: [], sources: [], q: "Why did MU fall?" };
+  await c.bb8oThemeFacts(ctx2, { question: "Why did MU fall?", context: body.context }); assert.equal(ctx2.facts.length, 0); assert.equal(c.YCALLS.length, 0);
+  // naming a theme counts as asking about it
+  const ctx3 = { facts: [], sources: [], q: "How has gold done?" };
+  await c.bb8oThemeFacts(ctx3, { question: "How has gold done?", context: body.context }); assert.deepEqual(ctx3.facts.map(f => f.id), ["themes"]);
+});
+
+// ── QA items folded into the bb8q2 restack ──
+test("QA P0: 'Gold spot' only ever carries XAU data; an MU / NVDA / AAPL Pulse Ask never shows gold spot with a non-XAU price", () => {
+  const c = load();
+  const xau = { bb8qCtx: { spot: { q: { p: 4166.6 } } } };
+  for (const [sym, name, p, prev] of [["MU", "Micron Technology, Inc.", 878.84, 931.24], ["NVDA", "NVIDIA Corporation", 181.42, 186.1], ["AAPL", "Apple Inc.", 247.1, 249.0]]) {
+    const st = Object.assign({ bb8eMoveR: { base: sym, ysym: sym, q: { p, prev, name } } }, xau);
+    const chg = (p - prev).toFixed(2), pct = ((p / prev - 1) * 100).toFixed(2);
+    const reply = `${sym} fell ${Math.abs(pct)}% in its last session. [1]\n\nGold spot $${p.toLocaleString("en-US", { minimumFractionDigits: 2 })} ${chg} (${pct}%)`;
+    const out = c.bb8oGoldSpotGuard(reply, st);
+    assert.equal(/Gold spot[^\n]*\$\s?(?!4,1)/.test(out), false, sym + ": " + out);
+    assert.match(out, new RegExp("^" + sym + " \\(" + name.replace(/[.()]/g, "\\$&") + "\\) \\$", "m"), "relabelled with the subject's own symbol and name");
+    // a gold spot clause with a price that is neither XAU nor the subject is dropped
+    const out2 = c.bb8oGoldSpotGuard(`${sym} fell [1]. Gold spot is at $512.30 today.`, st);
+    assert.equal(out2, `${sym} fell [1].`);
+  }
+  // a gold Ask keeps XAU spot
+  const g = "Live: Gold spot is at $4,166.60; no spot previous close is available yet [1]; gold futures (GC=F, delayed 10 min) are up 0.20% at $4,189.50 [2].";
+  assert.equal(c.bb8oGoldSpotGuard(g, xau), g);
+  assert.equal(c.bb8oGoldSpotGuard("Gold spot (reference) at $4,170.10.", {}), "Gold spot (reference) at $4,170.10.");
+  // meta.quote: subject's own label; XAU untouched
+  assert.deepEqual(c.bb8oQuoteLabel({ symbol: "MU", name: "Gold spot", label: "Gold spot", price: 878.84 }).label, "MU");
+  assert.equal(c.bb8oQuoteLabel({ symbol: "MU", name: "Micron Technology, Inc.", price: 878.84 }).label, "Micron Technology, Inc.");
+  assert.equal(c.bb8oQuoteLabel({ symbol: "XAU", name: "Gold spot", label: "Gold spot" }).label, "Gold spot");
+});
+function hkBars(dup) {
+  // Wed 14, Thu 15, Fri 16 Oct 2026 daily bars for 0700.HK (Yahoo stamps 09:30 HKT = 01:30 UTC)
+  const ts = [1791941400, 1792027800, 1792114200, 1792200600].map(x => x - 86400);
+  const close = dup ? [405.0, 410.2, 417.8, 417.8] : [405.0, 410.2, 412.4, 417.8];
+  const high = dup ? [407.0, 412.0, 412.6, 428.8] : [407.0, 412.0, 414.0, 428.8];
+  const low = dup ? [401.0, 404.2, 408.0, 415.8] : [401.0, 404.2, 409.0, 415.8];
+  return { chart: { result: [{ meta: { currency: "HKD", exchangeTimezoneName: "Asia/Hong_Kong", regularMarketTime: 1792138094, chartPreviousClose: 399.0 }, timestamp: ts, indicators: { quote: [{ close, high, low }] } }] } };
+}
+test("QA P0: 0700.HK duplicate daily bar: previous distinct session close, Fri change tag; normal series unchanged", async () => {
+  const c = load();
+  const D = hkBars(true).chart.result[0], N = hkBars(false).chart.result[0];
+  assert.deepEqual(c.bb8oDistinctPrev(D, "Asia/Hong_Kong"), { prev: 410.2, fix: "duplicate-bar", prevDay: "2026-10-14", lastDay: "2026-10-16" });
+  assert.deepEqual(c.bb8oDistinctPrev(N, "Asia/Hong_Kong"), { prev: 412.4, fix: null, prevDay: "2026-10-15", lastDay: "2026-10-16" });
+  // the live 19 Oct shape: Thu and Fri both close 417.80 with ranges that contain it: still the previous distinct close
+  const L = JSON.parse(JSON.stringify(D)); L.indicators.quote[0].high = [407.0, 412.0, 422.6, 428.8]; L.indicators.quote[0].low = [401.0, 404.2, 414.0, 415.8];
+  assert.deepEqual(c.bb8oDistinctPrev(L, "Asia/Hong_Kong"), { prev: 410.2, fix: "duplicate-bar", prevDay: "2026-10-14", lastDay: "2026-10-16" });
+  // the same session date twice (duplicate timestamps) collapses to one bar
+  const S = JSON.parse(JSON.stringify(N)); S.timestamp[3] = S.timestamp[2] + 3600; assert.equal(c.bb8oDistinctPrev(S, "Asia/Hong_Kong").prev, 410.2);
+  // nothing distinct left: chart meta previous close
+  const M = { meta: { previousClose: 411.0 }, timestamp: [1792027800, 1792114200], indicators: { quote: [{ close: [417.8, 417.8], high: [412.6, 428.8], low: [408.0, 415.8] }] } };
+  assert.deepEqual(c.bb8oDistinctPrev(M, "Asia/Hong_Kong").prev, 411.0);
+  // through yahooQuote: a zero-change row is checked once against the daily bars and fixed
+  vm.runInContext(`upstream = async function (u) { UPCALLS.push(u); return { json: async function () { return /0700/.test(u) ? HKC : { chart: { result: [] } }; } }; };`, Object.assign(c, { HKC: hkBars(true) }));
+  c.YQ = { "0700.HK": { p: 417.8, prev: 417.8, c: 0, change: 0, ts: 1792138094, currency: "HKD" }, "MU": { p: 878.84, prev: 931.24, c: -5.6269, change: -52.4, ts: 1792180800 } };
+  const out = await c.yahooQuote(["0700.HK", "MU"]);
+  assert.deepEqual([out["0700.HK"].prev, Math.round(out["0700.HK"].c * 100) / 100, out["0700.HK"].prevFix], [410.2, 1.85, "duplicate-bar"]);
+  assert.equal(out["0700.HK"].prevNote, "Previous close is the Wed 14 Oct close (the prior daily bar repeated the last close).");
+  assert.deepEqual(out.MU, c.YQ.MU, "normal rows unchanged, no chart read");
+  assert.equal(c.UPCALLS.filter(u => /0700/.test(u)).length, 1); assert.equal(c.UPCALLS.filter(u => /MU/.test(u)).length, 0);
+  await c.yahooQuote(["0700.HK"]); assert.equal(c.UPCALLS.filter(u => /0700/.test(u)).length, 1, "10-minute memory, no second read");
+  // the change tag names the last session's day in Hong Kong time
+  const R = c.bb8oShape({ bb8oPath: "/api/yahoo-quote" }, 200, { "0700.HK": out["0700.HK"] });
+  assert.deepEqual([R["0700.HK"].changeDay, R["0700.HK"].changeDayLabel, R["0700.HK"].feed.changeDay], ["Fri", "Fri 16 Oct", "Fri"]);
+});
+test("QA P2: BTC has one canonical rolling-24h baseline (CoinGecko 24h when fresh, else Yahoo rolling 24h), labelled 24h", () => {
+  const c = load();
+  const now = Date.now();
+  vm.runInContext(`var coinGeckoLastGood = new Map(); var coinGeckoLastGoodAt = new Map();`, c);
+  const row = { p: 104200, prev: 103784, c: 0.4008, change: 416, ts: Math.floor(now / 1000), basis: "rolling_24h" };
+  let R = c.bb8oShape({ bb8oPath: "/api/yahoo-quote" }, 200, { "BTC-USD": Object.assign({}, row) });
+  assert.deepEqual([R["BTC-USD"].baseline, R["BTC-USD"].baselineSource, Math.round(R["BTC-USD"].change)], ["24h", "Yahoo 15-minute bars, rolling 24h", 416]);
+  c.coinGeckoLastGood.set("/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true", { bitcoin: { usd: 104150, usd_24h_change: 0.5363, last_updated_at: Math.floor(now / 1000) - 60 } });
+  for (const route of ["/api/yahoo-quote", "/api/market-reference-quotes", "/api/twelve-data-quote"]) {
+    const td = route === "/api/twelve-data-quote";
+    R = c.bb8oShape({ bb8oPath: route }, 200, td ? { quotes: { "BTC-USD": Object.assign({}, row) } } : { "BTC-USD": Object.assign({}, row) });
+    const b = td ? R.quotes["BTC-USD"] : R["BTC-USD"];
+    assert.deepEqual([b.baseline, b.baselineSource, b.changePct, b.c, Math.round(b.change)], ["24h", "CoinGecko 24h change", 0.5363, 0.5363, 556], route);
+    assert.match(b.asOfUk, / UK$/);
+  }
+  // stale CoinGecko (over 10 minutes): back to the Yahoo rolling 24h basis
+  c.coinGeckoLastGood.set("/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true", { bitcoin: { usd: 104150, usd_24h_change: 0.5363, last_updated_at: Math.floor(now / 1000) - 3600 } });
+  R = c.bb8oShape({ bb8oPath: "/api/yahoo-quote" }, 200, { "BTC-USD": Object.assign({}, row) });
+  assert.equal(R["BTC-USD"].baselineSource, "Yahoo 15-minute bars, rolling 24h");
+  // stocks are untouched
+  R = c.bb8oShape({ bb8oPath: "/api/yahoo-quote" }, 200, { MU: { p: 878.84, prev: 931.24, c: -5.6269, change: -52.4, ts: 1792180800 } });
+  assert.equal(R.MU.baseline, undefined);
+});
+test("QA P2: brief edition carries a dated label and a UK-time edition name; the edition id stays stable", () => {
+  const c = load();
+  const ed = { id: "2026-10-19.1-abc123", day: "2026-10-19", seq: 1, reason: "cold-start", startedAt: Date.parse("2026-10-19T07:40:00Z"), lead: { h: "x", src: "s", link: "l", t: 0, as: [], coverage: 1, sources: ["s"] }, also: [] };
+  const at = (iso) => c.bb8oEditionOut(ed, Date.parse(iso));
+  assert.deepEqual([at("2026-10-19T10:59:00Z").label, at("2026-10-19T11:00:00Z").label, at("2026-10-19T15:59:00Z").label, at("2026-10-19T16:00:00Z").label],
+    ["Mon 19 Oct · Morning edition", "Mon 19 Oct · Afternoon edition", "Mon 19 Oct · Afternoon edition", "Mon 19 Oct · Evening edition"]);
+  assert.equal(at("2026-10-19T12:10:00Z").dayLabel, "Mon 19 Oct");
+  assert.deepEqual([...new Set(["10:59", "11:00", "16:00"].map(h => at("2026-10-19T" + h + ":00Z").editionId))], ["2026-10-19.1-abc123"]);
+  const B = c.bb8oShape({ bb8oPath: "/api/brief", bb8oEdition: at("2026-10-19T12:10:00Z") }, 200, { brief: { date: "2026-10-19", headline: "h" } });
+  assert.deepEqual([B.brief.date, B.brief.dateLabel, B.brief.editionLabel], ["2026-10-19", "Mon 19 Oct", "Mon 19 Oct · Afternoon edition"]);
+});
+test("QA P2: static desk thesis and rating / sentiment words in page context never reach the model; the question is untouched", () => {
+  const c = load();
+  const ctx = "Page: Ticker\nActive ticker: NVDA NVIDIA · Score 76/100 · Bullish · Strong Buy · $181.42 (-2.51%) · Beta 1.72 · 52.8x\nPlatform thesis: AI infrastructure spend accelerating. Data center revenue dominant. TSMC Q1 confirms demand strength. Elevated valuation justified by 90%+ growth.\nLive price: $181.42 (-2.51%) [feed]";
+  const b = c.bb8oScrubBody({ question: "Is NVDA's valuation justified by growth? Platform thesis: TSMC Q1 confirms demand.", context: ctx });
+  assert.equal(b.question, "Is NVDA's valuation justified by growth? Platform thesis: TSMC Q1 confirms demand.");
+  assert.equal(b.context, "Page: Ticker\nActive ticker: NVDA NVIDIA · Score 76/100 · $181.42 (-2.51%) · Beta 1.72 · 52.8x\nLive price: $181.42 (-2.51%) [feed]");
+  assert.equal(/TSMC Q1 confirms|Elevated valuation justified|Strong Buy|Bullish/.test(b.context), false);
+});
+
 const ET = (iso) => Date.parse(iso); // ET offsets in Oct 2026: UTC-4
 test("protocol: names, no timers, anchors, refuse marker, dry run", () => {
   const fns = [...B8O.matchAll(/(?:^|\n)(?:async\s+)?function\s+([A-Za-z0-9_$]+)\s*\(/g)].map(m => m[1]);
@@ -478,8 +626,144 @@ test("protocol: names, no timers, anchors, refuse marker, dry run", () => {
   assert.equal(/setInterval\(|setTimeout\(|CREATE TABLE|\.tier\b|stripe/i.test(B8O), false);
   assert.match(PATCH, /REFUSE: bb8o already applied/);
   assert.match(PATCH, /"--check" in sys\.argv/);
-  assert.match(PATCH, /"server\.js": "92cdce800208671ab32ded68d15e24d1"/);
-  assert.match(PATCH, /\/\/ BB8P_JS_END/, "stacked after the bb8p block");
+  assert.match(PATCH, /"server\.js": "af877dde4d73f4c19eeff011a0e98f89"/);
+  assert.match(PATCH, /\/\/ BB8Q2_JS_END/, "stacked after the bb8q2 block"); assert.match(PATCH, /stacked directly on bb8q2/);
   assert.equal(/BB8P_JS"\)|bb8pFigs\(|bb8pHayOf\(/.test(B8O), false, "bb8p's guard is not modified");
   assert.equal(/sec\.gov|edgar/i.test(B8O), false, "no new SEC requests");
+});
+
+// ── QA 1:44 (P0 a, P1 c–i): the answer post-pass, with bb8q's own document helpers (parse / token / render) ──
+const PQ = fs.readFileSync(path.join(__dirname, "../deploy/patch_bb8q.py"), "utf8");
+const fnSrc = (src, name) => { const a = src.indexOf("\nfunction " + name + "("); assert.ok(a >= 0, name); return src.slice(a + 1, src.indexOf("\n}\n", a) + 3); };
+function loadQ() {
+  const c = load();
+  vm.runInContext(["bb8qParse", "bb8qTok", "bb8qRender", "bb8qNum", "bb8qDayName", "bb8qIso", "bb8qSrc"].map(n => fnSrc(PQ, n)).join("\n") +
+    "\nfunction bb8qUk(ms) { return bb8dUk(ms); }\nvar bb8qSrcText = new WeakMap();\nfunction bb2Footer(s) { return s && s.length ? \"\\n\\nSources:\\n\" + s.map(function (x, i) { return \"[\" + (i + 1) + \"] \" + x.name; }).join(\"\\n\") : \"\"; }\n", c);
+  return c;
+}
+// the bb8qFinish wrapper's own steps (the same function both /api/chat paths call through bb8jAssemble)
+function finish(c, reply, sources, st) {
+  const doc = c.bb8qParse({ reply, sources });
+  doc.body = c.bb8oGoldSpotGuard(doc.body, st);
+  const stat = c.bb8oPost(doc, st);
+  const r = c.bb8qRender(doc); r.sources.forEach(c.bb8oSrcLabel);
+  return { reply: r.reply.split("\n\nSources:")[0], sources: r.sources, stat };
+}
+const SRC = (c, name, detail, key, ms) => c.bb8qSrc(name, "https://finance.yahoo.com/", ms || Date.parse("2026-10-19T12:39:00Z"), detail, key);
+
+test("QA P0 (a): gold YTD direction and % come from the two cited numbers; the exact QA case is corrected on both paths", () => {
+  const c = loadQ();
+  // the exact QA case: start 3,341.10, now ~4,185.90 (+25%); the answer said "down"
+  const dirs = [{ from: 3341.10, to: 4185.90, pct: (4185.90 / 3341.10 - 1) * 100 }];
+  const qa = "Year to date (from the Wed 31 Dec close of $3,341.10), gold futures (GC=F) are down 3.52%.";
+  const r = c.bb8oDirFix(qa, dirs);
+  assert.equal(r.fixed, true);
+  assert.equal(r.s, "Year to date (from the Wed 31 Dec close of $3,341.10), gold futures (GC=F) are up 25.29%.");
+  // explicit start and end in the sentence; a right claim is untouched; verbs flip too
+  assert.equal(c.bb8oDirFix("Gold fell 25.29% from $3,341.10 to $4,185.90 this year.", []).s, "Gold rose 25.29% from $3,341.10 to $4,185.90 this year.");
+  const ok = "MU fell 5.63% to $878.84 in its last session (previous close $931.24).";
+  assert.equal(c.bb8oDirFix(ok, []).fixed, false);
+  assert.equal(c.bb8oDirFix("MU rose 5.63% to $878.84 in its last session (previous close $931.24).", []).s, ok);
+  // the context line is computed in code: both numbers, direction and % (never from model text)
+  const ctx = { tf: { id: "ytd", sym: "GC=F", text: "Year to date, from last year's final close of $3,341.10 (Wed 31 Dec) to $4,185.90 now, gold futures (GC=F) are down 3.52% (Yahoo Finance daily closes, as of Mon 19 Oct, 13:29 UK)." },
+    tfMore: ["This month (from the Wed 30 Sept close of $4,186.70), gold futures (GC=F) are up 0.02%."], facts: [] };
+  ctx.tf.src = SRC(c, "Yahoo Finance chart", ctx.tf.text, "tf"); ctx.facts.push({ id: "tf:ytd", text: ctx.tf.text, src: ctx.tf.src });
+  c.bb8oDirCtx(ctx);
+  assert.match(ctx.tf.text, /to \$4,185\.90 now, gold futures \(GC=F\) are up 25\.29%/);
+  assert.equal(ctx.tfMore[0], "This month (from the Wed 30 Sept close of $4,186.70 to $4,185.90 now), gold futures (GC=F) are down 0.02%.");
+  assert.equal(ctx.facts[0].text, ctx.tf.text);
+  assert.match(ctx.tf.src.detail, /up 25\.29%/);
+  // the post-pass on the final document (stream and JSON call the same function): corrected, cited, counted
+  const st = { bb8qCtx: Object.assign(ctx, { q: "How has gold done this year?" }) };
+  const out = finish(c, "Gold spot is at $4,163.60. [1]\n\n" + qa + " [2]\n\nIn short: gold is higher this year. [2]", [SRC(c, "gold-api.com", "Gold spot is at $4,163.60", "spot"), ctx.tf.src], st);
+  assert.match(out.reply, /\(from the Wed 31 Dec close of \$3,341\.10\), gold futures \(GC=F\) are up 25\.29%\. \[2\]/);
+  assert.doesNotMatch(out.reply, /down 3\.52/);
+  assert.equal(out.stat.dir, 1);
+  // a direction claim on a start figure no source carries is dropped, not "corrected"
+  const out2 = finish(c, "Gold spot is at $4,163.60. [1] Gold is up 9.00% from $4,600.00 to $4,185.90. [1]", [SRC(c, "gold-api.com", "Gold spot is at $4,163.60, futures $4,185.90", "spot")], { bb8qCtx: { q: "gold?" } });
+  assert.doesNotMatch(out2.reply, /4,600|9\.00/);
+  assert.match(out2.reply, /^Gold spot is at \$4,163\.60\. \[1\]$/);
+});
+
+test("QA P1 (c): intent beats template: MU beta / P/E / dividend answer first with the cited value and source", () => {
+  const c = loadQ();
+  const move = SRC(c, "Yahoo Finance quote", "MU, SPY, SOXX last price and session change", "move");
+  const beta = SRC(c, "Yahoo Finance key statistics", "MU beta (5Y monthly) 2.23", "beta");
+  const tmpl = "MU's latest move, as of Fri 16 Oct, 21:00 UK:\nMU fell 5.63% to $878.84 in its last session (previous close $931.24). [1]\nMU's published beta is 2.23 (Yahoo Finance, 5-year monthly), so it has tended to move about 2.23 times as much as the market. [2]\n\nIn short: MU fell 5.63%; no confirmed cause. [1]";
+  const b = finish(c, tmpl, [move, beta], { bb8qCtx: { q: "What is Micron's beta?" } });
+  assert.match(b.reply, /^MU's published beta is 2\.23 \(Yahoo Finance, 5-year monthly\)[^\n]*\[1\]\n\nMU's latest move/);
+  assert.equal(b.stat.moved, "beta");
+  // P/E: the header plus its first P/E line already lead, so nothing moves
+  const pe = SRC(c, "Yahoo Finance", "trailing P/E (TTM) and forward P/E, refreshed on request", "val");
+  const p = finish(c, "Peer comparisons as of Fri 16 Oct, 21:00 UK:\nMU trailing P/E (TTM) 11.8x is lower than NVDA trailing P/E (TTM) 27.1x by 15.3x (56.5%).\n\nMU forward P/E (next 12 months) 4.9x is lower than NVDA forward P/E (next 12 months) 15.3x by 10.4x (68.0%). [1]", [pe], { bb8qCtx: { q: "What is Micron's P/E ratio?" } });
+  assert.match(p.reply, /^Peer comparisons as of Fri 16 Oct, 21:00 UK:\nMU trailing P\/E \(TTM\) 11\.8x [^\n]*\(56\.5%\)\. \[1\]/);   // every P/E sentence carries its own [n]
+  // dividend: no sentence answers it, so the server's cited dividend fact leads
+  const dv = SRC(c, "Yahoo Finance key statistics", "MU pays a dividend of $0.60 a share a year, a yield of 0.07% (Yahoo Finance, summary detail)", "bb8o:metric");
+  const d = finish(c, tmpl, [move, beta], { bb8qCtx: { q: "Does Micron pay a dividend?", bb8oMetric: { id: "dividend", text: "MU pays a dividend of $0.60 a share a year, a yield of 0.07% (Yahoo Finance, summary detail).", src: dv } } });
+  assert.match(d.reply, /^MU pays a dividend of \$0\.60 a share a year, a yield of 0\.07% \(Yahoo Finance, summary detail\)\. \[1\]\n\nMU's latest move/);
+  assert.equal(d.sources[0], dv);
+  // a non-factual question keeps the template order
+  assert.match(finish(c, tmpl, [move, beta], { bb8qCtx: { q: "Why did MU fall?" } }).reply, /^MU's latest move/);
+});
+
+test("QA P1 (d): 'this week' gets an outlook from cited levels and scheduled dates only; one line when nothing is citable", () => {
+  const c = loadQ();
+  const fut = SRC(c, "Yahoo Finance quote", "Gold futures (GC=F) 5 completed sessions high $4,242.30, low $4,095.00", "futures");
+  const lv = { n: 5, label: "gold futures (GC=F)", low: 4095, high: 4242.3, span: "sessions Mon 12 Oct to Fri 16 Oct", src: fut, fmt: v => "$" + c.bb8qNum(v, 2) };
+  const r = finish(c, "Gold futures are up 0.05%. [1]\n\nGold will probably test $4,300 this week.\n\nIn short: gold is flat. [1]", [fut], { bb8qCtx: { q: "What's the outlook for gold this week?", bb8oLevels: lv } });
+  assert.match(r.reply, /Outlook for this week \(from our data, not a forecast\): the 5-session range for gold futures \(GC=F\) is \$4,095\.00 \(low\) to \$4,242\.30 \(high\), sessions Mon 12 Oct to Fri 16 Oct \[1\]\. No scheduled Fed, economic-data or earnings dates for this week are in our feed\.\n\nIn short:/);
+  assert.doesNotMatch(r.reply, /4,300/);                       // the invented forecast is gone (uncited)
+  const ev = SRC(c, "Yahoo Finance", "MU next earnings date (Yahoo Finance calendarEvents, estimated)", "earn");
+  const r2 = finish(c, "MU fell 5.63%. [1]", [SRC(c, "Yahoo Finance quote", "MU fell 5.63%", "move")], { bb8qCtx: { q: "What's the outlook for MU this week?", bb8oEvents: [{ text: "MU next earnings: Wed 21 Oct 2026 (estimated)", src: ev }] } });
+  assert.match(r2.reply, /Outlook for this week \(from our data, not a forecast\): MU next earnings: Wed 21 Oct 2026 \(estimated\) \[2\]\.$/);
+  const r3 = finish(c, "Gold futures are up 0.05%. [1]", [fut], { bb8qCtx: { q: "What happens to gold this week?" } });
+  assert.match(r3.reply, /\n\nOutlook for this week: nothing in our feed is citable for the week ahead \(no scheduled Fed, data or earnings dates and no measured range\), so we give no outlook\.$/);
+  assert.doesNotMatch(finish(c, "Gold futures are up 0.05%. [1]", [fut], { bb8qCtx: { q: "How is gold today?" } }).reply, /Outlook/);
+});
+
+test("QA P1 (e/f/g/h/i): citation hygiene, proxy labels, headline as-of, one S&P figure, source title/label (QA China JSON case)", () => {
+  const c = loadQ();
+  const cnh = SRC(c, "Yahoo Finance quote", "USD/CNH (offshore yuan) (USDCNH=X) is down 0.07% at 6.6808, as of Mon 19 Oct, 13:31 UK", "USDCNH=X", Date.parse("2026-10-19T12:31:00Z")); cnh.bb8qProxy = { sym: "USDCNH=X", label: "USD/CNH (offshore yuan)" };
+  const hsi = SRC(c, "Yahoo Finance quote", "The Hang Seng (^HSI) rose 0.52% in its last session, to 24,186.83", "^HSI", Date.parse("2026-10-16T08:08:00Z")); hsi.bb8qProxy = { sym: "^HSI", label: "the Hang Seng" };
+  const vix = SRC(c, "Yahoo Finance quote", "VIX (CBOE volatility index) (^VIX) fell 7.05% in its last session, to 18.58", "^VIX");
+  const reg = SRC(c, "Dispatch regime model", "Our regime model (The Dispatch): Risk-Off, score 37/100", "regime");
+  const spx = SRC(c, "Yahoo Finance quote", "S&P 500 (^GSPC) fell 1.09% in its last session, to 7,659.44", "^GSPC");
+  const spy = SRC(c, "Yahoo Finance quote", "MU, SPY, SOXX last price and session change: SPY down 1.11%", "move");
+  const reply = [
+    "We don't have China GDP figures in our data feed right now, so this answer does not quote any.",
+    "",
+    "What we do have, from Yahoo Finance as of Mon 19 Oct, 13:30 UK: USD/CNH (offshore yuan) is down 0.07% at 6.6808 [1]; the Hang Seng rose 0.52% in its last session, to 24,186.83 [2].",
+    "The VIX, which measures market volatility, fell by 7.05% to 18.58, suggesting a slight easing in market fears [3]. The offshore yuan (USD/CNH) is down 0.07% at 6.6808, which may reflect ongoing pressures in the Chinese economy [1]. Additionally, the Hang Seng index rose by 0.52% in its last session, which could indicate some resilience [2]. This shift aligns with a broader trend of seeking safety amid uncertainty, which may be influenced by geopolitical developments and inflation expectations [4]. The market is in a Risk-Off regime with a score of 37/100. [4] As the market continues to navigate these conditions, it will be important to monitor any forthcoming economic data from China. The focus will likely remain on defensive sectors.",
+    "SPY (S&P 500 ETF) fell 1.11% in the same session, so gold outperformed. [6] The S&P 500 (^GSPC) fell 1.09% in its last session, to 7,659.44. [5]",
+    "",
+    "In short: no China GDP figures in our feed; related live markets are above."
+  ].join("\n");
+  const out = finish(c, reply, [cnh, hsi, vix, reg, spx, spy], { bb8qCtx: { q: "What did the latest China GDP data show?" } });
+  const R = out.reply;
+  for (const gone of [/geopolitic/, /seeking safety/, /important to monitor/, /defensive sectors/, /which may reflect/, /resilience/, /suggesting a slight easing/, /7,659\.44/]) assert.doesNotMatch(R, gone, String(gone));
+  assert.equal((R.match(/6\.6808/g) || []).length, 1, "USD/CNH once");
+  assert.equal((R.match(/24,186\.83|0\.52%/g) || []).length, 2, "HSI once (figure and level in one clause)");
+  assert.match(R, /What we do have, as proxies, from Yahoo Finance as of Mon 19 Oct, 13:31 UK:/);      // (f) + (g): source time 13:31 ≥ 13:30
+  assert.match(R, /The market is in a Risk-Off regime with a score of 37\/100\. \[\d\]/);               // regime cited only for its score
+  assert.match(R, /The VIX, which measures market volatility, fell by 7\.05% to 18\.58 \[\d\]\./);
+  assert.match(R, /SPY \(S&P 500 ETF\) fell 1\.11%/);                                                  // (h) one S&P figure
+  R.split("\n").forEach(l => { if (!l.trim() || /^In short:|^We don't have/.test(l)) return; c.bb8oSplit(l.replace(/\[(\d+)\]/g, "\u27e6$1\u27e7")).forEach(s => assert.match(s, /\u27e6\d+\u27e7/, "every claim sentence has its own [n]: " + s)); });
+  // every source the answer lists has a title and a label, and keeps its name
+  out.sources.forEach(s => { assert.ok(s.name && s.title && s.label, JSON.stringify(s)); });
+  assert.equal(out.sources.find(s => s === cnh).label, "USD/CNH (offshore yuan) (USDCNH=X) (proxy)");
+  assert.equal(out.sources.find(s => s === reg).title, "Dispatch regime model · Regime model (The Dispatch)");
+  // GBP/USD proxy sentence gets the in-text label
+  const gbp = SRC(c, "Yahoo Finance quote", "GBP/USD (GBPUSD=X) is down 0.06% at 1.3322", "GBPUSD=X"); gbp.bb8qProxy = { sym: "GBPUSD=X", label: "GBP/USD" };
+  assert.match(finish(c, "We don't have UK inflation figures in our data feed right now.\n\nGBP/USD is down 0.06% at 1.3322. [1]", [gbp], { bb8qCtx: { q: "UK inflation?" } }).reply, /\nAs a proxy, GBP\/USD is down 0\.06% at 1\.3322\. \[1\]/);
+});
+
+test("QA P1 (e): stream == JSON drops: the same model text gives byte-identical documents and sources on both paths", () => {
+  const c = loadQ();
+  const mk = () => { const s = SRC(c, "Yahoo Finance quote", "S&P 500 (^GSPC) fell 1.09% in its last session, to 7,659.44", "^GSPC"); const r = SRC(c, "Dispatch regime model", "Our regime model: Risk-Off, score 37/100", "regime"); return [s, r]; };
+  const text = "The S&P 500 (^GSPC) fell 1.09% in its last session, to 7,659.44. [1] This reflects geopolitical developments. [2] Investors should watch central bank statements.\n\nIn short: stocks fell. [1]";
+  const a = finish(c, text, mk(), { stream: true, bb8qCtx: { q: "How did stocks do?" } }), j = finish(c, text, mk(), { stream: false, bb8qCtx: { q: "How did stocks do?" } });
+  assert.equal(a.reply, j.reply);
+  assert.deepEqual(a.sources.map(s => [s.name, s.title, s.label, s.detail]), j.sources.map(s => [s.name, s.title, s.label, s.detail]));
+  assert.deepEqual(a.stat.dropped, j.stat.dropped);
+  assert.equal(a.reply, "The S&P 500 (^GSPC) fell 1.09% in its last session, to 7,659.44. [1]\n\nIn short: stocks fell. [1]");
 });

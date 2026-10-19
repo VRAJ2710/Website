@@ -1,14 +1,13 @@
 # bb8o: quote fallback, insider trade dates, LSE profile, canonical feed status, brief edition
 
-Server only (`deploy/patch_bb8o.py`), stacked on bb8p (PR #67, branch `cursor/bb8p-grounding-guard-p0`, server.js md5
-`92cdce800208671ab32ded68d15e24d1`, 16956 lines) giving md5 `0ac5d92b95f7b382841665c3ea4a8234` (17768 lines). The block is
-appended after the `// BB8P_JS_END` marker, so the first 16956 lines are byte-identical to bb8p, with no in-place edits.
-Its 30 anchors are long-standing declarations (json, handle, yahooQuote, fetchYahooQuote, bb5e/bb5g specs, bb7 Form 4 parser,
-parseForm4, bb8lRowDates, rt32Crumb/rt32Get, rt32Yahoo, RT32, readBody, the `var bb2Read0 = …` alias, _rt48sHeads, bb8cUnit,
-bb8dUk, crypto) plus the `// BB8N_JS_END` and `// BB8P_JS_END` markers. Section 7 also wraps `generateAi` (outermost) and
-reads the four AI validators by identity; those are found at load time with `typeof` checks, not anchors. bb8o doesn't wrap or anchor on bb8p's grounding rule,
-numeric guard, source relevance, provider/model, meta.quote or timeframe code. bb8o's hooks are installed after bb8p's, so
-they're the outer wrappers on `json` and `handle`.
+Server only (`deploy/patch_bb8o.py`). **Final stack (restacked 19 Oct):** bb8o is stacked directly on bb8q2 (PR #70, branch
+`cursor/bb8q2-dxy-gilt-goldmove-p0`, server.js md5 `af877dde4d73f4c19eeff011a0e98f89`, 18188 lines). Apply order from the live
+bb8q base: `b4f66c896a13a73fb03656386c4ae802` (17865 lines) → `patch_bb8q2.py` → af877dde → `patch_bb8o.py`. The bb8o block is
+appended after `// BB8Q2_JS_END` (one hunk, no base line changed); a base with another block after that marker ABORTs, a md5
+mismatch only WARNs (anchors decide). Required anchors add the bb8p/bb8q/bb8q2 end markers, `async function bb8qBuild(st, body) {`,
+`function bb8qSrc(name, link, ms, detail, key) {` and `var bb8qSrcText = new WeakMap();`. bb8o's hooks are installed last, so they are
+the outer wrappers on json, handle, generateAi, readBody/bb2Read0, yahooQuote/fetchYahooQuote, bb8qBuild, bb8qFinish, bb8pQuoteMeta
+and bb8qSpotQuote. Gold desk levels are untouched (on hold).
 No tables, timers, intervals, dependencies, secrets, paid feeds or Stripe changes, and no new SEC requests. The shared sec.gov
 limiter is untouched (itest_f: max 10 starts in any rolling second).
 Gold spot / headline gold and the Ask answer fixes (brief direct answer, paragraph breaks, "Live:" full stop, move-pack
@@ -322,9 +321,65 @@ recorded. AI context: "Overweight: Gold, Treasuries | Underweight: High-beta tec
 +1.14%, Gold (GLD) −0.67% | Lagging themes (…): High-beta tech (XLK) …". A segment with nothing measured is removed with its separator.
 The free local brief's OVERWEIGHT / UNDERWEIGHT labels are client-side (app.js) and stay with Frontend.
 
+## 9. Final restack on bb8q2: Fix A/B and the 1:38 / 1:44 QA items
+
+**Fix A (null spot change).** bb8q's gold spot row has `change`/`changePct`/`prevClose` = null with `changeAvailable:false`,
+`futuresChange` and `changeNote`. `bb8oNullChg` recognises an explicit null change (or `changeAvailable:false`); bb8oTidy keeps
+those nulls (junk values still become 0) and a null change is never a zero-price failure. bb8q's descriptive `feed` string is kept
+as `feedLabel` and `feed.label` when bb8o's canonical `feed{}` object is added.
+
+**Fix B (themes are a citable source).** `bb8oThemeFacts` adds ONE fact (`themes`) and ONE numbered source (key `themes`) to bb8q's
+shared context on both paths, when the question is about themes / leadership or names a theme. One source (not lead + lag) so
+the SPY figure isn't ambiguous under bb8q's citation rule.
+
+**P0 0700.HK duplicate daily bar.** `bb8oDistinctPrev`: bars on one session date collapse; two consecutive identical closes are a
+duplicate bar and the previous distinct close is used (else meta previousClose / chartPreviousClose). The row gets `prevFix`,
+`prevDay` and `prevNote`. It applies through the yahooQuote and fetchYahooQuote wrappers, for rows with exactly zero change (max 6,
+10-minute memory). `changeDay` / `changeDayLabel` ("Fri", "Fri 16 Oct") name the last session in exchange time. Live 19 Oct:
+Yahoo's Thu 15 and Fri 16 bars both close 417.80, with different OHLCV. Under this rule Fri's change is measured from the Wed 14
+close (423.40, −1.32%), and prevNote says so.
+
+**P0 MU "Gold spot".** "Gold spot $x" in any reply line may only carry XAU data. A non-XAU price is relabelled with the subject's own
+symbol/name when it is the subject's price, otherwise the clause is dropped. Non-XAU meta.quote rows get `label` = their own name.
+bb8qSpotQuote returns non-gold symbols unchanged.
+
+**P2 BTC 24h.** One rolling-24h baseline on every quote route: CoinGecko's 24h change when it's fresh (10 minutes or less), else
+Yahoo's rolling 24h. Fields: `baseline:'24h'`, `baselineSource`, `baselineAsOfUk`, `asOfUk`, with change and changePct consistent.
+
+**P2 edition.** `/api/brief/edition` and the brief carry `dayLabel` ("Mon 19 Oct"), `name` (by UK time: Morning before 12:00,
+Afternoon 12:00–17:00, Evening after 17:00), `label` ("Mon 19 Oct · Afternoon edition") and `nameBasis`. The edition id is unchanged.
+
+**P2 NVDA static text.** The client's static thesis reaches the server only as chat context ("Platform thesis:" and the
+"Active ticker:" rating words). Both are removed from the AI context; the user's question stays byte-identical. The static table is
+in app.js (Frontend).
+
+**P0 (a) direction from numbers.** `bb8oDirCtx` rewrites every timeframe context line from its two numbers, in code:
+"from the … close of S to E now … up/down X%". The pairs are kept on ctx. `bb8oDirGuard` runs on the final document of BOTH paths.
+A sentence whose up/down/rose/fell/gained/lost word or % contradicts its start and end figures is corrected when both figures are
+cited (in its sources, or a computed timeframe pair). Otherwise it is dropped. The exact QA case ("from the Wed 31 Dec close of
+$3,341.10 … down 3.52%" with E = $4,185.90) becomes "up 25.29%".
+
+**Stream assembly from the raw model text.** On the stream, bb8i used to compose from the painted text (`st.bb8iGen`), so it dropped different sentences from JSON (for example "In short"). bb8o wraps bb2OpenAi / bb2Gemini to keep the raw model text (`st.bb8oRaw`) when a stream callback is given. On the stream, bb8jAssemble then assembles from that raw text with bb8iGen cleared. JSON is unchanged: bb2Finish sets `bb8oJsonFinish`, so the swap never runs there. Both paths now run the same chain on the same text. The harness in evidence/f/stream_vs_json.txt shows 17 of 17 cases identical.
+
+**P1 post-pass (`bb8oPost`, inside bb8qFinish, so stream == JSON).**
+- (c) Direct factual questions (beta, P/E, dividend, market cap, EPS, yield) lead with the cited value. Dividend, market cap and EPS
+  come from a server fact via bb8l's shared Yahoo lookup (key `bb8o:metric`).
+- (d) "This week" questions get an outlook line. It uses only the 5-session high/low (daily bars, or gold's futures windows) and
+  a scheduled earnings date within 7 days. Otherwise it is one line saying nothing is citable. No forecasts.
+- (e) Hygiene. Uncited claim sentences are re-cited from their one matching source, or dropped. Filler is dropped (geopolitics,
+  "defensive sectors", "watch central bank statements", "it will be important to monitor"…). "…, suggesting/indicating…" tails
+  are cut. The regime source is cited only for a sentence about the regime score. Repeated figure lines are removed.
+- (f) A proxy-only sentence says "As a proxy, …". The no-data lead says "What we do have, as proxies, from …".
+- (g) Headline "as of" uses the latest as-of of the sources cited on its line (or the next line).
+- (h) One S&P figure: SPY or ^GSPC (both labelled), never both. Pure S&P sentences of the other kind are dropped.
+- (i) Every source gets `title` and `label`, and keeps `name`.
+
 ## Tests
 
-`node --test test/bb8o.test.js`: 20 tests (16–19: desk score and themes), offline, using vm with stubs. They cover items 1–5, Taiwan, ratings (target keys
+`node --test test/bb8o.test.js`: 32 tests (16–19: desk score and themes; 20–21: Fix A / Fix B; 22–26: QA P0 gold spot, P0 0700.HK,
+P2 BTC, P2 edition, P2 NVDA; 28–32: P0 (a) direction with the exact QA case, P1 (c) intent for MU beta / P/E / dividend, (d) week outlook,
+(e–i) hygiene / proxy / as-of / one S&P / title-label on the QA China case, and the stream == JSON drop test), offline, using vm with stubs
+and bb8q's own parse / token / render functions. They cover items 1–5, Taiwan, ratings (target keys
 global; generic keys on allowlisted routes only, with 10 non-market routes keeping `rating`/`ra`/`recommendation(s)`; AI body
 context sanitized while messages, question and userThesis stay byte-identical; a stub model capturing the prompt) and section 7 (29 advice and 24 factual sentences, every field of the four routes, takeaway, labels, the
 prompt rule on those routes only) and protocol
