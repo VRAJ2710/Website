@@ -16,8 +16,8 @@ commodity itself (oil price, OPEC, barrels, Brent, WTI) stays Commodities.
 
 2) Newsroom counts and the Academy intro. Desktop All was counting every loaded
 headline and painting 18. The cards and the "shown" count now come from the
-same list, so All renders every loaded card (the 80). The "In the news" intro
-is the Academy lesson, not a block on /, /news/ or /geo/; the sentence says so.
+same list, so All renders every loaded card (the 80). When today's headlines
+do not fit a practice scenario, the intro offers classic scenarios to try.
 
 3) One chip vocabulary on filters, the market table and cards: Stocks,
 Commodities, Crypto, Forex, Macro, Geopolitics, Regulation, Other. Earnings
@@ -131,7 +131,7 @@ s = sub1(s,
       <div class="eyebrow" style="margin:0 0 8px;padding:0;font-family:var(--mn);font-size:10px;font-weight:700;letter-spacing:0.16em;line-height:1.2;color:var(--gd);text-align:left">PREMIUM</div>
       <h2 id="login-gate-title" tabindex="-1" style="margin:0;padding:0;font-size:22px;line-height:1.25;letter-spacing:-0.02em;text-align:left;outline:none">${featureName}</h2>
       <p style="color:var(--text-secondary);max-width:none;margin:10px 0 16px;text-align:left;line-height:1.5">
-        Free users keep tape, regime, desk brief &amp; Lab. This feature needs Premium (£15/month, cancel anytime).
+        Free accounts keep prices, the market mood, the daily brief and the Lab. This feature needs Premium (£15/month, cancel anytime).
       </p>''',
 'ask paywall header')
 s = sub1(s,
@@ -376,12 +376,25 @@ s = sub1(s,
 'market table category cell')
 
 s = sub1(s,
-'''      if (exps.length) b += (b ? " Then " : "") + pl(exps.length, "short explainer") + " on how " + (exps.length === 1 ? "a headline" : "headlines") + " like " + (exps.length === 1 ? "this" : "these") + " usually " + (exps.length === 1 ? "moves" : "move") + " gold, oil, the dollar, yields, stocks or crypto.";
-      if (b) st[0] = Object.assign({}, st[0], { b: b });''',
-'''      if (exps.length) b += (b ? " Then " : "") + pl(exps.length, "short explainer") + " on how " + (exps.length === 1 ? "a headline" : "headlines") + " like " + (exps.length === 1 ? "this" : "these") + " usually " + (exps.length === 1 ? "moves" : "move") + " gold, oil, the dollar, yields, stocks or crypto.";
-      if (b) b += " These cards are this Academy lesson. Home, the Newsroom and Geo Ops do not include an In the news block.";
-      if (b) st[0] = Object.assign({}, st[0], { b: b });''',
-'academy intro does not promise a site block')
+'''      else if (bank.length) b = "None of the latest headlines matched a scenario template today, so here " + (bank.length === 1 ? "is 1 scenario" : "are " + bank.length + " scenarios") + " from the scenario bank instead.";''',
+'''      else if (bank.length) b = "Today's headlines didn't fit a practice scenario, so here " + (bank.length === 1 ? "is 1 classic scenario" : "are " + bank.length + " classic scenarios") + " to try instead.";''',
+'academy bank fallback')
+s = sub1(s,
+'''    : bank ? `None of the latest headlines matched a scenario template today, so here ${bank === 1 ? 'is one scenario' : 'are ' + bank + ' scenarios'} from the scenario bank instead.` : '';''',
+'''    : bank ? `Today's headlines didn't fit a practice scenario, so here ${bank === 1 ? "is 1 classic scenario" : "are " + bank + " classic scenarios"} to try instead.` : '';''',
+'earlier academy bank fallback')
+s = sub1(s,
+''' : 'None of the latest headlines matched a scenario template today, so here are three from the scenario bank instead.', fresh: _rt48Nw.at,''',
+''' : "Today's headlines didn't fit a practice scenario, so here are 3 classic scenarios to try instead.", fresh: _rt48Nw.at,''',
+'news steps bank fallback')
+s = sub1(s,
+'''          <li>Live/delayed free market tape</li>
+          <li>Regime engine (model)</li>
+          <li>Free desk brief (model)</li>''',
+'''          <li>Live and delayed market prices</li>
+          <li>Market mood reading</li>
+          <li>Daily desk brief</li>''',
+'paywall free list')
 
 s = sub1(s,
 '''    acc += chunk;''',
