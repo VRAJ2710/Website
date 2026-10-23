@@ -16,6 +16,9 @@
   "keywords": [],
   "author": "Vraj Patel",
   "license": "ISC",
+  "engines": {
+    "node": ">=24.22.1 <25"
+  },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
     "@replit/connectors-sdk": "^0.4.2",
