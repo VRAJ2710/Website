@@ -1,0 +1,354 @@
+--- app.js
++++ app.js
+@@ -1,3 +1,31 @@
++(function fe84_dtfShim(){
++  try {
++    if (!Intl || typeof Intl.DateTimeFormat !== "function" || Intl.DateTimeFormat.fe84) return;
++    var fe84_dtfOrig = Intl.DateTimeFormat;
++    var fe84_dtfCache = Object.create(null);
++    var fe84_dtfN = 0;
++    function fe84_dtf(locales, options) {
++      var key;
++      try {
++        var loc = locales == null ? "" : (Array.isArray(locales) ? ("a:" + locales.join(",")) : ("s:" + String(locales)));
++        key = loc + "|" + (options == null ? "" : JSON.stringify(options));
++      } catch (eKey) {
++        return new fe84_dtfOrig(locales, options);
++      }
++      var hit = fe84_dtfCache[key];
++      if (hit) return hit;
++      if (fe84_dtfN >= 200) { fe84_dtfCache = Object.create(null); fe84_dtfN = 0; }
++      var made = new fe84_dtfOrig(locales, options);
++      fe84_dtfCache[key] = made;
++      fe84_dtfN++;
++      return made;
++    }
++    fe84_dtf.prototype = fe84_dtfOrig.prototype;
++    if (typeof fe84_dtfOrig.supportedLocalesOf === "function") fe84_dtf.supportedLocalesOf = fe84_dtfOrig.supportedLocalesOf.bind(fe84_dtfOrig);
++    fe84_dtf.fe84 = 1;
++    Intl.DateTimeFormat = fe84_dtf;
++  } catch (e) {}
++})();
+ // ── rt59 ──
+ (function fe70_storage(){
+   function mem(){
+@@ -9001,8 +9029,17 @@
+ // ═══════════════════════════════════════════════════════════
+ // TERMINAL (DESKTOP) PANELS
+ // ═══════════════════════════════════════════════════════════
+-const IS_DESKTOP = () => window.innerWidth >= 768;
+-const MOBILE = () => !IS_DESKTOP() || (typeof window !== 'undefined' && window.innerWidth < 768);
++var fe84_dw = -1, fe84_desk = false;
++function fe84_deskSync() {
++  var w = 0;
++  try { w = window.innerWidth || 0; } catch (e) { w = 0; }
++  fe84_dw = w;
++  fe84_desk = w >= 768;
++  return fe84_desk;
++}
++try { window.addEventListener("resize", fe84_deskSync); } catch (eDesk) {}
++const IS_DESKTOP = () => (fe84_dw <= 0 ? fe84_deskSync() : fe84_desk);
++const MOBILE = () => !(fe84_dw <= 0 ? fe84_deskSync() : fe84_desk);
+ let _layoutMode = null;
+ 
+ const MOBILE_PRICE_FREQ = 180;   // 3 minutes minimum on mobile
+@@ -26520,15 +26557,24 @@
+   if (/x-dispatch|\basof\b|bb5|json|\bheader\b|status===|delaymin|nextopen|api\//i.test(s)) return "";
+   return s;
+ }
++var fe84_ukHmFmt = null;
++var fe84_ukHmMap = new Map();
+ function fe64_ukHm(iso) {
+   var ms = typeof iso === "number" ? iso : Date.parse(iso || "");
+   if (typeof iso === "string" && /^\d{11,}$/.test(iso)) ms = Number(iso);
+   if (!isFinite(ms)) return "";
+   try {
+-    var parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(new Date(ms));
++    var bucket = Math.floor(ms / 60000);
++    var cached = fe84_ukHmMap.get(bucket);
++    if (cached != null) return cached;
++    if (!fe84_ukHmFmt) fe84_ukHmFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
++    var parts = fe84_ukHmFmt.formatToParts(new Date(ms));
+     var h = "", mi = "";
+     parts.forEach(function (p) { if (p.type === "hour") h = p.value; if (p.type === "minute") mi = p.value; });
+-    return h && mi ? h + ":" + mi : "";
++    var out = h && mi ? h + ":" + mi : "";
++    if (fe84_ukHmMap.size >= 500) fe84_ukHmMap.clear();
++    fe84_ukHmMap.set(bucket, out);
++    return out;
+   } catch (e) { return ""; }
+ }
+ function fe64_closedWords(bag) {
+@@ -33267,7 +33313,16 @@
+   } else if (isFinite(pct) && pct !== 0) {
+     tail += " " + (pct > 0 ? "+" : "") + pct.toFixed(2) + "%";
+     if (crypto) tail += " 24h";
+-    else if (q.changeDay) tail += " " + q.changeDay;
++    else if (q.changeDay) {
++      var fe84_day = q.changeDay;
++      try {
++        if (typeof fe83f_pickDay === "function") {
++          var fe84_picked = fe83f_pickDay(q.symbol || q.ticker || "");
++          if (fe84_picked) fe84_day = fe84_picked;
++        }
++      } catch (eDay) {}
++      tail += " " + fe84_day;
++    }
+   }
+   if (!(isFinite(cash) && cash !== 0) && q.prevNote) tail += " · " + q.prevNote;
+   var asOf = q.asOfUk ? (" · " + q.asOfUk) : "";
+@@ -36676,7 +36731,7 @@
+ }
+ function fe83f_fixSigns(s) {
+   var t = String(s == null ? "" : s);
+-  var prev;
++  var prev, n = 0;
+   do {
+     prev = t;
+     t = t.replace(/\+\s*\(\s*\+\s*-(\d[\d,]*(?:\.\d+)?%?)\)/g, "-$1");
+@@ -36685,6 +36740,7 @@
+     t = t.replace(/\(\s*\+\s*-(\d)/g, "(-$1");
+     t = t.replace(/\+\s*-(\d)/g, "-$1");
+     t = t.replace(/--(\d)/g, "-$1");
++    if (++n > 8) break;
+   } while (t !== prev);
+   return t;
+ }
+@@ -36759,8 +36815,8 @@
+ }
+ function fe83f_pickDayPure(changeDay, label, feedDay, closed, todayWd) {
+   var a = fe83f_wd(changeDay) || fe83f_wd(label) || fe83f_wd(feedDay);
++  if (closed && (todayWd === "Sat" || todayWd === "Sun") && (!a || a === "Sat" || a === "Sun")) return "Fri";
+   if (a) return a;
+-  if (closed && (todayWd === "Sat" || todayWd === "Sun")) return "Fri";
+   return "";
+ }
+ function fe83f_isDxy(sym) {
+@@ -36838,8 +36894,17 @@
+   return fe83f_wd(b && b.changeDay) || fe83f_wd(b && b.changeDayLabel) || fe83f_wd(feedDay);
+ }
+ function fe83f_marketClosed(tk) {
+-  try { if (typeof fe78_isClosed === "function" && fe78_isClosed(tk)) return true; } catch (e) {}
+-  try { if (typeof _rt18MarketOpen === "function") return !_rt18MarketOpen(tk); } catch (e2) {}
++  // fe78_isClosed calls fe66_closedQuote, which calls hasSyncedQuote, which calls _quoteMeta.
++  // _quoteMeta calls fe83f_pickDay, which calls this. Read the bag and the session clock only.
++  try {
++    var b = typeof fe78_bag === "function" ? fe78_bag(tk) : null;
++    if (b && (b.status === "closed" || b.marketOpen === false)) return true;
++  } catch (e) {}
++  try {
++    var y = typeof fe64_yqBag === "function" ? fe64_yqBag(tk) : null;
++    if (y && (y.status === "closed" || y.marketOpen === false)) return true;
++  } catch (e2) {}
++  try { if (typeof _rt18MarketOpen === "function") return !_rt18MarketOpen(tk); } catch (e3) {}
+   return false;
+ }
+ function fe83f_pickDay(tk) {
+@@ -36979,8 +37044,8 @@
+     fe83f_afterPaint();
+   };
+   try {
+-    if (typeof queueMicrotask === "function") queueMicrotask(run);
+-    else setTimeout(run, 0);
++    // A microtask storm here starves the load event and the header clock. A timer yields.
++    setTimeout(run, 0);
+   } catch (e) { fe83f_paintQueued = false; }
+ }
+ function fe83f_arm(fn) {
+@@ -37046,13 +37111,20 @@
+ } catch (eDay) {}
+ try {
+   var fe83f_qm0 = _quoteMeta;
++  var fe83f_qmBusy = false;
+   _quoteMeta = function (tk) {
+-    var m = fe83f_qm0.apply(this, arguments);
++    if (fe83f_qmBusy) return fe83f_qm0.apply(this, arguments);
++    fe83f_qmBusy = true;
+     try {
+-      var day = fe83f_pickDay(tk);
+-      if (day && m && m.detail) m.detail = String(m.detail).replace(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/, day);
+-    } catch (e) {}
+-    return m;
++      var m = fe83f_qm0.apply(this, arguments);
++      try {
++        var day = fe83f_pickDay(tk);
++        if (day && m && m.detail) m.detail = String(m.detail).replace(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/, day);
++      } catch (eDay) {}
++      return m;
++    } finally {
++      fe83f_qmBusy = false;
++    }
+   };
+ } catch (eQm) {}
+ try {
+@@ -37237,6 +37309,28 @@
+ function fe83f_rssResponse(saved) {
+   return new Response(saved.body, { status: saved.status, headers: { "Content-Type": saved.type || "application/xml" } });
+ }
++function fe84_rssSettle(key, net) {
++  var timer = 0;
++  var timed = new Promise(function (_ok, reject) {
++    timer = setTimeout(function () { reject(new Error("rss-feed timeout")); }, 15000);
++  });
++  return Promise.race([
++    Promise.resolve(net).then(function (r) {
++      return r.text().then(function (t) {
++        return { status: r.status, body: t, type: (r.headers && r.headers.get && r.headers.get("content-type")) || "application/xml" };
++      });
++    }),
++    timed
++  ]).then(function (saved) {
++    if (timer) clearTimeout(timer);
++    if (!saved || !(saved.status >= 200 && saved.status < 400)) delete fe83f_rssFetch.map[key];
++    return saved;
++  }, function (err) {
++    if (timer) clearTimeout(timer);
++    delete fe83f_rssFetch.map[key];
++    throw err;
++  });
++}
+ function fe83f_rssFetch(input, init) {
+   var url = "";
+   try { url = typeof input === "string" ? input : (input && input.url) || ""; } catch (e0) { url = ""; }
+@@ -37249,15 +37343,7 @@
+   var hit = fe83f_rssFetch.map[key];
+   if (hit) return hit.then(fe83f_rssResponse);
+   if (!fe83f_rssFetch.orig) fe83f_rssFetch.orig = window.fetch.bind(window);
+-  var net = fe83f_rssFetch.orig(input, init);
+-  var savedP = Promise.resolve(net).then(function (r) {
+-    return r.text().then(function (t) {
+-      return { status: r.status, body: t, type: (r.headers && r.headers.get && r.headers.get("content-type")) || "application/xml" };
+-    });
+-  }, function (err) {
+-    delete fe83f_rssFetch.map[key];
+-    throw err;
+-  });
++  var savedP = fe84_rssSettle(key, fe83f_rssFetch.orig(input, init));
+   fe83f_rssFetch.map[key] = savedP;
+   return savedP.then(fe83f_rssResponse, function (err) {
+     delete fe83f_rssFetch.map[key];
+@@ -37334,3 +37420,113 @@
+   }
+ } catch (eNav) {}
+ try { fe83f_schedulePaint(); } catch (eBoot) {}
++
++// ── rt62g ──
++// fe84: closed-session day lookup must not re-enter _quoteMeta.
++// The rss-feed cache settles (15s) and a failed entry is dropped.
++// Intl.DateTimeFormat is memoized at the top of this file (200, then clear).
++// fe64_ukHm keeps one London hour-minute formatter.
++// Pure string helpers use a Map of 500 and clear it when it fills.
++// resolveInternalTicker is keyed on A.length, the last desk ticker, and a
++// YAHOO_SYMBOLS recount that runs only when A.length changes. A yahoo-only
++// edit that leaves A.length the same can stay stale until the next length
++// change. P does not change the result, so it is not part of the key.
++// The repeated A.find inside resolveInternalTicker is covered by that memo.
++// _rt18CloseLbl is keyed on the caller's timezone plus the timestamp.
++// fe84-memo-begin
++function fe84_key(raw) {
++  return typeof raw + ":" + (raw == null ? "" : String(raw));
++}
++function fe84_memo(fn, cap) {
++  var map = new Map();
++  var lim = cap || 500;
++  return function (raw) {
++    var key = fe84_key(raw);
++    if (map.has(key)) return map.get(key);
++    var out = fn.call(this, raw);
++    if (map.size >= lim) map.clear();
++    map.set(key, out);
++    return out;
++  };
++}
++var fe84_univLen = -1;
++var fe84_yahooN = 0;
++function fe84_univVer() {
++  var n = 0;
++  var tail = "";
++  try {
++    n = (typeof A !== "undefined" && A && A.length) || 0;
++    tail = n ? String((A[n - 1] && A[n - 1].tk) || "") : "";
++  } catch (e) { n = 0; tail = ""; }
++  if (n !== fe84_univLen) {
++    fe84_univLen = n;
++    fe84_yahooN = 0;
++    try {
++      if (typeof YAHOO_SYMBOLS !== "undefined" && YAHOO_SYMBOLS) {
++        for (var k in YAHOO_SYMBOLS) {
++          if (Object.prototype.hasOwnProperty.call(YAHOO_SYMBOLS, k)) fe84_yahooN++;
++        }
++      }
++    } catch (e2) { fe84_yahooN = 0; }
++  }
++  return n + ":" + fe84_yahooN + ":" + tail;
++}
++function fe84_memo2(fn, cap) {
++  var map = new Map();
++  var lim = cap || 500;
++  return function (a, b) {
++    var key = fe84_key(a) + "\\n" + fe84_key(b);
++    if (map.has(key)) return map.get(key);
++    var out = fn.call(this, a, b);
++    if (map.size >= lim) map.clear();
++    map.set(key, out);
++    return out;
++  };
++}
++function fe84_memoResolve(fn) {
++  var map = new Map();
++  return function (raw) {
++    var key = fe84_univVer() + "\n" + fe84_key(raw);
++    if (map.has(key)) return map.get(key);
++    var out = fn.call(this, raw);
++    if (map.size >= 500) map.clear();
++    map.set(key, out);
++    return out;
++  };
++}
++// fe84-memo-end
++try { if (typeof sanitizeTicker === "function") sanitizeTicker = fe84_memo(sanitizeTicker, 500); } catch (eSan) {}
++try { if (typeof fe77_fxKey === "function") fe77_fxKey = fe84_memo(fe77_fxKey, 500); } catch (eFx) {}
++try { if (typeof fe65_scrub === "function") fe65_scrub = fe84_memo(fe65_scrub, 500); } catch (eScr) {}
++try { if (typeof fe68_words === "function") fe68_words = fe84_memo(fe68_words, 500); } catch (eWrd) {}
++try { if (typeof fe76_group === "function") fe76_group = fe84_memo2(fe76_group, 500); } catch (eGrp) {}
++try { if (typeof fe64_plainNote === "function") fe64_plainNote = fe84_memo(fe64_plainNote, 500); } catch (eNote) {}
++try {
++  if (typeof fe82_scrubLoad === "function") {
++    var fe84_scrubLoad0 = fe82_scrubLoad;
++    var fe84_loadAt = 0;
++    fe82_scrubLoad = function () {
++      var now = Date.now();
++      if (now - fe84_loadAt < 1000) return;
++      fe84_loadAt = now;
++      return fe84_scrubLoad0.apply(this, arguments);
++    };
++  }
++} catch (eLoad) {}
++try { if (typeof resolveInternalTicker === "function") resolveInternalTicker = fe84_memoResolve(resolveInternalTicker); } catch (eRes) {}
++try {
++  if (typeof _rt18CloseLbl === "function") {
++    var fe84_close0 = _rt18CloseLbl;
++    var fe84_closeMap = new Map();
++    _rt18CloseLbl = function (ts) {
++      var tz = "Europe/London";
++      try { if (typeof _rt17Tz === "function") tz = _rt17Tz() || tz; } catch (eTz) {}
++      var key = String(tz || "Europe/London") + "|" + fe84_key(ts);
++      if (fe84_closeMap.has(key)) return fe84_closeMap.get(key);
++      var out = fe84_close0.call(this, ts);
++      if (fe84_closeMap.size >= 500) fe84_closeMap.clear();
++      fe84_closeMap.set(key, out);
++      return out;
++    };
++  }
++} catch (eLbl) {}
+--- index.html
++++ index.html
+@@ -343,7 +343,7 @@
+ 
+ <!-- Context menu -->
+ <div class="ctx-menu" id="ctxMenu"></div>
+-<script defer src="/app.js?v=chat83b"></script>
++<script defer src="/app.js?v=chat84"></script>
+ <script src="https://i.replit.com/script.js" async="" data-website-id="41c83e31-7da9-45c5-a194-58f8bc4f6608"></script></body>
+ </html>
+ 

@@ -1,0 +1,782 @@
+--- app.js
++++ app.js
+@@ -776,7 +776,7 @@
+         <div style="display:flex;align-items:center;gap:6px"><div style="font-size:8px;color:${re.col};font-family:var(--mn);font-weight:700;letter-spacing:0.1em">REGIME ENGINE · MODEL</div><span class="live-dot" title="Uses live inputs when synced"></span></div>
+         <div style="font-size:10px;color:var(--t3);margin-top:2px;font-family:var(--mn)">Educational score — not a forecast</div>
+         <div style="font-size:15px;font-weight:800;color:${re.col};margin-top:4px">${re.label}</div>${re.asOfUk ? `<div style="font-size:10px;color:var(--t3);margin-top:2px;font-family:var(--mn)">${_escHtml(re.asOfUk)}</div>` : ""}
+-        <div style="font-size:10px;color:var(--t2);margin-top:4px;line-height:1.5">${re.spxProxy ? "SPY" : "SPX"} ${re.spx === "—" ? "—" : "$" + re.spx}${re.spxChg === "—" ? "" : ` (${Number(re.spxChg) >= 0 ? "+" : ""}${re.spxChg}%)`}${re.spxProxy ? " · tracked via an ETF" : ""} · VIX ${re.vix} · Oil ${re.oil === "—" ? "—" : "$" + re.oil} · BTC ${re.btc === "—" ? "—" : "$" + re.btc}</div>
++        ${fe83_regimeLine(re)}
+         <div style="font-size:9px;color:var(--t3);margin-top:6px;font-family:var(--mn)">${re.rotation?.label || ""}</div>
+       </div>
+       <div style="text-align:center;flex-shrink:0">
+@@ -1430,7 +1430,7 @@
+     const synced = hasSyncedQuote(s.tk);
+     const chN = liveChg(s.tk);
+     const col = !synced || chN == null ? "var(--t3)" : chN > 0 ? "var(--gn)" : chN < 0 ? "var(--rd)" : "var(--t3)";
+-    const chg = !synced || chN == null ? "—" : fe78_chgHtml(s.tk, `${chN >= 0 ? "+" : ""}${d.c}%`);
++    const chg = !synced || chN == null ? "—" : fe78_chgHtml(s.tk, fe83_pctBit(d) || "—");
+     const fe77Lbl = s.tk === "DXY" && typeof fe77_dxyName === "function" ? fe77_dxyName() : s.lbl;
+     const title = _escAttr(`${fe77Lbl} · ${d.label || "NO SYNC"}${d.asOf ? ` · as of ${_fmtAsOf(d.asOf)}` : ""} · ${d.detail || "tap for Lab"}`);
+     return `<button type="button" class="spine-cell${synced ? "" : " spine-nosync"}" onclick="setLabTicker('${s.tk}');nav('lab')" title="${title}">
+@@ -2348,7 +2348,7 @@
+     <div class="ns-cell ns-sector-trail gc-a" role="button" tabindex="0" aria-label="Open lagging sectors" onclick="nav('sectors')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();nav('sectors')}"><span class="ns-lbl">LAG</span><span class="ns-val" style="color:${trailCol}">${trailTxt}</span></div>
+     <div class="ns-cell"><span class="ns-lbl">PRICED</span><span class="ns-val ns-live">${_rt42Ready()?_rt37Count().priced:"…"}</span></div>
+     <div class="ns-cell"><span class="ns-lbl">LIVE</span><span class="ns-val ns-live">${_rt42Ready()?_rt37Count().live:"…"}</span></div>
+-    <div class="ns-cell"><span class="ns-lbl">VIX</span><span class="ns-val">${re.vix}</span></div>
++    ${fe83_vixCell(re)}
+     <div class="ns-cell" title="${_escAttr(topSig ? `${topSig.a} · ${topSig.cf}% · ${topSig.x || ""}` : "No signal")}"><span class="ns-lbl">SIG</span><span class="ns-val">${(topSig?.a || "—").slice(0, 12)}</span></div>
+     <div class="ns-cell"><span class="ns-lbl">WL</span><span class="ns-val">${wl}</span></div>
+     <div class="ns-cell ns-neural ${aiOn ? "ns-neural-on" : ""}"><span class="ns-lbl">AI</span><span class="ns-val">${_siteIntel.aiLoad ? "Updating" : aiOn ? "On" : _isPremium() ? "Ready" : "Premium"}</span></div>
+@@ -2390,8 +2390,8 @@
+     const live = hasSyncedQuote(tk) ? '<span class="wl-g-live"></span>' : "";
+       const hasChange = retained && ch != null && d.chg !== "—" && Number.isFinite(Number(d.raw));
+      const arrow = d.d > 0 ? "▲" : d.d < 0 ? "▼" : "•";
+-     const abs = hasChange ? `${d.raw >= 0 ? "+" : ""}${d.chg}` : "";
+-     const chgLbl = hasChange ? `${arrow} ${sign}${d.c}% · ${abs}` : (retained && ch != null && Number.isFinite(Number(ch)) ? `${ch > 0 ? "▲" : ch < 0 ? "▼" : "•"} ${sign}${Number(ch).toFixed(2)}%` : "—");
++     const abs = hasChange ? fe83_ptsBit(d) : "";
++     const chgLbl = hasChange ? `${arrow} ${fe83_pctBit(d)} · ${abs}` : (retained && ch != null && Number.isFinite(Number(ch)) ? `${ch > 0 ? "▲" : ch < 0 ? "▼" : "•"} ${fe83_signed(ch, "%")}` : "—");
+      const changeLabel = hasChange
+        ? `${d.d > 0 ? "Up" : d.d < 0 ? "Down" : "Flat"} ${sign}${d.c} percent, ${abs} absolute change`
+        : "Change unavailable";
+@@ -6322,7 +6322,7 @@
+       if (next && /%$/.test(next.textContent.trim()) || next && next.textContent.trim() === "—") {
+         const arrow = ch == null || ch === 0 ? "" : (ch > 0 ? "↑" : "↓");
+         const keepArrow = /^[↑↓]/.test(next.textContent.trim()) || !!meta || !!el.closest("#wl-table");
+-        next.style.color = col; var fe78cell = ch == null ? "—" : fe78_chgHtml(tk, `${keepArrow ? arrow : ""}${sign}${d.c}%`); if (next.innerHTML !== fe78cell) { next.innerHTML = fe78cell; n++; }
++        next.style.color = col; var fe78cell = ch == null ? "—" : fe78_chgHtml(tk, `${keepArrow ? arrow : ""}${fe83_pctBit(d)}`); if (next.innerHTML !== fe78cell) { next.innerHTML = fe78cell; n++; }
+       }
+     } else if (el.matches("[data-price-card]")) {
+       const showDollar = el.dataset.priceDollar === "1", pctOnly = el.dataset.priceChg === "pct";
+@@ -6330,7 +6330,7 @@
+       if (pe && setText(pe, (showDollar ? "$" : "") + d.p)) _rtFlash(pe, tk);
+       if (ce) {
+         ce.style.color = col;
+-        var fe78ce = ch == null ? "—" : fe78_chgHtml(tk, pctOnly ? `${sign}${d.c}%` : `${sign}${d.chg} (${sign}${d.c}%)`); if (ce.innerHTML !== fe78ce) { ce.innerHTML = fe78ce; n++; }
++        var fe78ce = ch == null ? "—" : fe78_chgHtml(tk, pctOnly ? `${fe83_pctBit(d)}` : `${fe83_chgPair(d)}`); if (ce.innerHTML !== fe78ce) { ce.innerHTML = fe78ce; n++; }
+         ce.classList.remove("px-up", "px-dn", "px-flat");
+         ce.classList.add(ch == null || ch === 0 ? "px-flat" : ch > 0 ? "px-up" : "px-dn");
+       }
+@@ -6343,7 +6343,7 @@
+     } else if (el.matches(".data-card[data-tk]")) {
+       const v = el.querySelector(".value"), c = el.querySelector(".change");
+       if (v && setText(v, d.p)) _rtFlash(v, tk);
+-      if (c) { c.style.color = col; var fe78dc = ch == null ? "—" : fe78_chgHtml(tk, `${sign}${d.chg} (${sign}${d.c}%)`); if (c.innerHTML !== fe78dc) { c.innerHTML = fe78dc; n++; } }
++      if (c) { c.style.color = col; var fe78dc = ch == null ? "—" : fe78_chgHtml(tk, `${fe83_chgPair(d)}`); if (c.innerHTML !== fe78dc) { c.innerHTML = fe78dc; n++; } }
+     } else if (el.matches(".wl-glance-chip")) {
+       if (_rtPaintChip(el, tk)) _rtFlash(el.querySelector(".wl-g-p"), tk);
+     } else if (el.matches("[data-rt-px],[data-rt-c24]")) {
+@@ -6792,7 +6792,7 @@
+     if(priceEl)priceEl.textContent=hasSyncedQuote(tk)?(showDollar?"$":"")+d.p:_rt22NoSync();
+     if(chgEl){
+       chgEl.style.color=col;
+-       chgEl.innerHTML=chgN==null?"—":fe78_chgHtml(tk, pctOnly?`${sign}${d.c}%`:`${sign}${d.chg} (${sign}${d.c}%)`);
++       chgEl.innerHTML=chgN==null?"—":fe78_chgHtml(tk, pctOnly?`${fe83_pctBit(d)}`:`${fe83_chgPair(d)}`);
+       chgEl.classList.remove("px-up","px-dn","px-flat");
+       chgEl.classList.add(chgN==null||chgN===0?"px-flat":chgN>0?"px-up":"px-dn");
+     }
+@@ -8088,7 +8088,7 @@
+       const col=na||ch==null?"var(--t3)":ch>0?"var(--gn)":ch<0?"var(--rd)":"var(--t3)";
+       const sign=ch!=null&&ch>=0?"+":"";
+       const money=(a.cat==="Stock"||a.cat==="Crypto"||a.cat==="Commodity");
+-       return{tk:a.tk,name:a.nm,price:na?_rt22NoSync():`${money?"$":""}${d.p}`,chg:na||ch==null?"":`${sign}${d.c}%`,chgCol:col,type:a.cat,local:true};
++       return{tk:a.tk,name:a.nm,price:na?_rt22NoSync():`${money?"$":""}${d.p}`,chg:na||ch==null?"":`${fe83_pctBit(d)}`,chgCol:col,type:a.cat,local:true};
+     }),
+     ...globals.map(r=>({
+       tk:r.symbol,name:r.name,price:'',chg:'',chgCol:'var(--t3)',type:r.type||'Stock',exchange:r.exchange,local:false
+@@ -9600,7 +9600,7 @@
+       <td style="font-weight:800"><button type="button" class="table-action" onclick="termSelect('${idx.tk}')" aria-label="Select ${_escAttr(idx.nm)}">${idx.nm}</button></td>
+       <td style="color:var(--t3)">${idx.rg}</td>
+       <td data-fl="${idx.tk}" style="font-weight:700">${na?'<span style="color:var(--t3);opacity:0.55">—</span>':d.p}</td>
+-      <td style="color:${col};font-weight:700">${na?chgDim():`${sign}${d.c}%`}</td>
++      <td style="color:${col};font-weight:700">${na?chgDim():`${fe83_pctBit(d)}`}</td>
+       <td style="color:${col};font-size:12px">${na?'':trend}</td>
+     </tr>`;
+   });
+@@ -9653,7 +9653,7 @@
+         <td style="color:var(--t3);cursor:grab">⠿</td>
+         <td style="font-weight:800;color:${catBd(a.cat)}">${a.tk}${d.status==="lunch"?` <span class="tape-badge tape-cache">${_escHtml(d.fe64Note||d.label||"")}</span>`:""}</td>
+         <td data-fl="${a.tk}">${na?'<span style="color:var(--t3);opacity:0.55">—</span>':((a.cat==='Stock'||a.cat==='Crypto'||a.cat==='Commodity')?'$':'')+d.p}</td>
+-        <td style="color:${col};font-weight:700">${na||ch==null?chgDim():`${arrow}${sign}${d.c}%`}</td>
++        <td style="color:${col};font-weight:700">${na||ch==null?chgDim():`${arrow}${fe83_pctBit(d)}`}</td>
+         <td style="color:${scC(scShow)};font-weight:800" title="${a._dyn?'Regime fit (model)':'Desk score'}">${scShow}</td>
+         <td onclick="event.stopPropagation();removeFromWatchlist('${a.tk}')" style="color:var(--t3);cursor:pointer;text-align:center;font-size:12px">✕</td>
+       </tr>`;
+@@ -10986,7 +10986,7 @@
+       if (chEl) {
+         const ch = liveChg(tkAttr);
+         const sign = ch != null && ch >= 0 ? '+' : '';
+-        chEl.innerHTML = ch == null ? "—" : fe78_chgHtml(tkAttr, `${sign}${d.chg} (${sign}${d.c}%)`);
++        chEl.innerHTML = ch == null ? "—" : fe78_chgHtml(tkAttr, `${fe83_chgPair(d)}`);
+         chEl.style.color = ch == null ? 'var(--t3)' : ch > 0 ? 'var(--gn)' : ch < 0 ? 'var(--rd)' : 'var(--t3)';
+       }
+     });
+@@ -13030,7 +13030,7 @@
+     h+=`<button type="button" class="idx-card" onclick="nav('mkt')" data-price-card="${idx.tk}">
+       <div class="idx-card-top"><span class="idx-card-name">${idx.nm}</span><span class="idx-card-stat">${stat(idx.tk)}</span></div>
+       <div class="idx-card-px asset-price">${na?_rt22NoSync():d.p}</div>
+-      <div class="idx-card-chg asset-chg ${chgCls}">${na||chN==null?chgDim():fe78_chgHtml(idx.tk, `${sign}${d.chg} (${sign}${d.c}%)`)}</div>
++      <div class="idx-card-chg asset-chg ${chgCls}">${na||chN==null?chgDim():fe78_chgHtml(idx.tk, `${fe83_chgPair(d)}`)}</div>
+       <div class="idx-card-spark">${spark(idx.tk,108,16)}</div>
+       <div>${asOfTag(idx.tk)}</div>
+     </button>`;
+@@ -13047,7 +13047,7 @@
+     const chgCls=na||chN==null?"px-flat":(chN>0?"px-up":(chN<0?"px-dn":"px-flat"));
+     const sign=chN!=null&&chN>=0?"+":"";
+     h+=`<button type="button" class="conv-card" onclick="openA('${a.tk}')" data-price-card="${a.tk}" data-price-dollar="1" data-price-chg="pct">
+-      <div class="conv-card-top"><span class="conv-tk">${a.tk}</span><span class="conv-chg asset-chg ${chgCls}">${na||chN==null?chgDim():fe78_chgHtml(a.tk, `${sign}${d.c}%`)}</span></div>
++      <div class="conv-card-top"><span class="conv-tk">${a.tk}</span><span class="conv-chg asset-chg ${chgCls}">${na||chN==null?chgDim():fe78_chgHtml(a.tk, `${fe83_pctBit(d)}`)}</span></div>
+       <div class="conv-nm">${a.nm}</div>
+       <div class="conv-px asset-price">${na?_rt22NoSync():"$"+d.p}</div>
+       <div>${asOfTag(a.tk)}</div>
+@@ -14068,7 +14068,7 @@
+     const chN=liveChg(tk);
+     const chgCls=d.status==="unavailable"||chN==null?"px-flat":(chN>0?"px-up":(chN<0?"px-dn":"px-flat"));
+     const sign=chN!=null&&chN>0?"+":"";
+-    const chgTxt=d.status==="unavailable"||chN==null?"—":`${sign}${d.c}%`;
++    const chgTxt=d.status==="unavailable"||chN==null?"—":`${fe83_pctBit(d)}`;
+     h+=`<button type="button" class="book-px-chip" role="listitem" data-price-card="${tk}" onclick="openA('${tk}')" title="${tk}">
+       <span class="book-px-tk">${tk}</span>
+        <span class="book-px-p asset-price">${hasSyncedQuote(tk) && d?.p != null ? d.p : _rt22NoSync()}</span>
+@@ -14238,7 +14238,7 @@
+   const cls=na?"paper-idx-flat":(ch>0?"paper-idx-up":(ch<0?"paper-idx-dn":"paper-idx-flat"));
+   const sign=ch!=null&&ch>0?"+":"";
+    const px=na?_rt22NoSync():d.p;
+-  const chg=na?"—":`${sign}${d.c}%`;
++  const chg=na?"—":`${fe83_pctBit(d)}`;
+   return `<button type="button" class="paper-idx ${cls}" onclick="openA('${tk}')" title="${label||tk}">
+     <span class="paper-idx-tk">${label||tk}</span>
+     <span class="paper-idx-px">${px}</span>
+@@ -14454,7 +14454,7 @@
+             const na=d.status==="unavailable"||ch==null;
+             const cls=na?"px-flat":(ch>0?"px-up":(ch<0?"px-dn":"px-flat"));
+             const sign=ch!=null&&ch>0?"+":"";
+-            return `<button type="button" class="paper-book-row" onclick="openA('${tk}')"><span>${tk}</span><span class="${cls}">${na?"—":d.p}</span><span class="${cls}">${na?"—":sign+d.c+"%"}</span></button>`;
++            return `<button type="button" class="paper-book-row" onclick="openA('${tk}')"><span>${tk}</span><span class="${cls}">${na?"—":d.p}</span><span class="${cls}">${na?"—":fe83_pctBit(d)}</span></button>`;
+           }).join("")}
+         </div>
+         <div class="paper-rail-card">
+@@ -14470,7 +14470,7 @@
+             const na=d.status==="unavailable"||ch==null;
+             const cls=na?"px-flat":(ch>0?"px-up":(ch<0?"px-dn":"px-flat"));
+             const sign=ch!=null&&ch>0?"+":"";
+-            return `<button type="button" class="paper-book-row" onclick="openA('${tk}')"><span>${tk}</span><span class="${cls}">${na?"—":d.p}</span><span class="${cls}">${na?"—":sign+d.c+"%"}</span></button>`;
++            return `<button type="button" class="paper-book-row" onclick="openA('${tk}')"><span>${tk}</span><span class="${cls}">${na?"—":d.p}</span><span class="${cls}">${na?"—":fe83_pctBit(d)}</span></button>`;
+           }).join(""):`<div class="paper-rail-muted">Empty book · <button type="button" class="news-act" onclick="nav('watch')">Watchlist</button></div>`}
+         </div>
+         <div class="paper-rail-card paper-rail-foot">
+@@ -14711,7 +14711,7 @@
+       h += `<div class="sector-dash-tile gc gc-a" role="button" tabindex="0" aria-label="Open ${s.name} sector rotation" onclick="nav('sectors')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();nav('sectors')}" style="border-top:2px solid ${s.col}">
+         <div class="sector-dash-name">${s.name}</div>
+         <div class="sector-dash-etf">${s.etf}</div>
+-        <div class="sector-dash-pct" style="color:${col}">${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%</div>
++        <div class="sector-dash-pct" style="color:${col}">${fe83_signed(pct, "%")}</div>
+       </div>`;
+     });
+     h += `</div>`;
+@@ -14731,7 +14731,7 @@
+     const nLive = vals.length;
+     const avg = nLive ? vals.reduce((a, b) => a + b, 0) / nLive : null;
+     const avgCol = avg == null ? "var(--t3)" : avg >= 0 ? "var(--gn)" : "var(--rd)";
+-    const avgLbl = avg == null ? "—" : `${avg >= 0 ? "+" : ""}${avg.toFixed(2)}%`;
++    const avgLbl = avg == null ? "—" : (fe83_signed(avg, "%") || "—");
+     h += `<div class="gc gc-a" role="button" tabindex="0" aria-label="Open ${s.nm} sector rotation" onclick="nav('sectors')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();nav('sectors')}" style="border-top:2px solid ${s.cl}">
+       <div style="font-size:11px;font-weight:700;color:${s.cl};margin-bottom:4px">${s.nm}</div>
+       <div style="font-family:var(--mn);font-weight:800;font-size:16px;color:${avgCol}">${avgLbl}</div>
+@@ -16742,7 +16742,7 @@
+     const ch=liveChg(a.tk);
+     const col=na?"var(--t3)":(ch==null?"var(--t3)":ch>0?"var(--gn)":ch<0?"var(--rd)":"var(--t3)");
+      const pxLbl=na?_rt22NoSync():"$"+d.p;
+-     const chgLbl=na?(d.status==="unavailable"?"NO SYNC":d.label):`${ch!=null&&ch>=0?"+":""}${d.c}%`;
++     const chgLbl=na?(d.status==="unavailable"?"NO SYNC":d.label):fe83_pctBit(d);
+     const scShow=_rt53ShownScore(a);
+     h+=`<div class="gc" style="padding:10px;margin-bottom:6px;cursor:pointer" onclick="openA('${a.tk}')">
+       <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+@@ -20442,7 +20442,7 @@
+             <div class="data-card hover-lift" role="button" tabindex="0" aria-label="Open ${a.nm} analysis" data-tk="${a.tk}" onclick="openA('${a.tk}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openA('${a.tk}')}">
+               <div class="label">${a.nm}</div>
+               <div class="value">${na?_rt22NoSync():d.p}</div>
+-              <div class="change ${chgCol}">${na||chN==null?"—":fe78_chgHtml(a.tk, `${sign}${d.chg} (${sign}${d.c}%)`)}</div>
++              <div class="change ${chgCol}">${na||chN==null?"—":fe78_chgHtml(a.tk, `${fe83_chgPair(d)}`)}</div>
+               <div style="margin-top:10px; font-size:11px; color:var(--text-tertiary);">${fe78_deskScore(a.sc)}</div>
+             </div>
+           `;
+@@ -24202,7 +24202,7 @@
+   if (id === 'econ') return S.cal.ok ? `${S.cal.ok} called right` : 'New';
+   if (id === 'match' || id === 'asset') { const b = S.mt.best[id]; return b ? `Best ${(b / 1000).toFixed(1)}s` : 'New'; }
+   if (id === 'price') return S.pr.best ? `Best ${S.pr.best}%` : 'New';
+-  if (id === 'week') return _rt48WkReady() ? _rt48Fresh(_rt48Wk.at) : 'Building from live data…';
++  if (id === 'week') { var fe83w = (typeof fe83_weekLine==="function" ? fe83_weekLine() : ""); return fe83w || (_rt48WkReady() ? _rt48Fresh(_rt48Wk.at) : 'Building from live data…'); }
+   if (id === 'news') return _rt48NwReady() ? _rt48Fresh(_rt48Nw.at) : 'Reading today\'s headlines…';
+ } catch (e) {} return ''; }
+ function _rt48HubHtml() { const w = _rt48WeekSync(), ts = _rt48WeekTasks(), all = ts.every(t => (w.c[t[0]] || 0) >= t[2]);
+@@ -27074,7 +27074,7 @@
+   try { abs = d && d.chg != null ? d.chg : Number(ch).toFixed(2); } catch (e) { abs = Number(ch).toFixed(2); }
+   var pctBody = "";
+   try { pctBody = d && d.c != null ? d.c : Number(ch).toFixed(2); } catch (e) { pctBody = Number(ch).toFixed(2); }
+-  return arrow + sign + abs + " (" + sign + pctBody + "%)" + (day && day !== "today" ? " " + day : "");
++  return fe83_fixSigns(arrow + fe83_signed(abs, "") + " (" + fe83_signed(pctBody, "%") + ")" + (day && day !== "today" ? " " + fe83_pickDayPure(day, "", "", false, "") : ""));
+ }
+ function fe66_feedLbl(d, tk) {
+   if (fe66_closedQuote(tk, d)) {
+@@ -31680,7 +31680,7 @@
+   var abs = px - prev;
+   var pct = (abs / prev) * 100;
+   var sign = abs > 0 ? "+" : "";
+-  return " " + sign + fe76_group(abs, 2) + " (" + sign + pct.toFixed(2) + "%)";
++  return " " + fe83_chgPair({ raw: abs, c: pct });
+ }
+ function fe76_quoteBlock(meta) {
+   var q = fe76_quoteOf(meta);
+@@ -36648,3 +36648,541 @@
+     try { if (fe82_onSig()) fe82_sigTick(); } catch (e2) {}
+   }, 400);
+ } catch (eIv) {}
++
++// ── rt62e ──
++// FE83_PURE_START
++function fe83_num(v) {
++  if (v == null || typeof v === "boolean") return null;
++  if (typeof v === "number") return isFinite(v) ? v : null;
++  var s = String(v).trim();
++  if (!s || s === "—" || s === "–" || s === "-" || /undefined|nan|^null$/i.test(s)) return null;
++  s = s.replace(/[$,%\s]/g, "").replace(/[−–]/g, "-").replace(/^\((.*)\)$/, "$1");
++  var neg = false;
++  s = s.replace(/^[+-]+/, function (m) {
++    neg = (m.split("-").length - 1) % 2 === 1;
++    return "";
++  });
++  if (!s || /[^0-9.]/.test(s)) return null;
++  var n = Number(s);
++  if (!isFinite(n)) return null;
++  return neg ? -Math.abs(n) : n;
++}
++function fe83_signed(v, suffix) {
++  var n = fe83_num(v);
++  if (n == null) return "";
++  var body = Math.abs(n).toFixed(2);
++  var sign = n > 0 ? "+" : (n < 0 ? "-" : "");
++  return sign + body + (suffix || "");
++}
++function fe83_fixSigns(s) {
++  var t = String(s == null ? "" : s);
++  var prev;
++  do {
++    prev = t;
++    t = t.replace(/\+\s*\(\s*\+\s*-(\d[\d,]*(?:\.\d+)?%?)\)/g, "-$1");
++    t = t.replace(/\+\s*\(\s*-(\d[\d,]*(?:\.\d+)?%?)\)/g, "-$1");
++    t = t.replace(/\+\s*\(\s*\+(\d[\d,]*(?:\.\d+)?%?)\)/g, "+$1");
++    t = t.replace(/\(\s*\+\s*-(\d)/g, "(-$1");
++    t = t.replace(/\+\s*-(\d)/g, "-$1");
++    t = t.replace(/--(\d)/g, "-$1");
++  } while (t !== prev);
++  return t;
++}
++function fe83_pctBit(d) {
++  var n = fe83_num(d && d.c);
++  if (n == null) return "—";
++  return fe83_signed(n, "%");
++}
++function fe83_ptsBit(d) {
++  var n = null;
++  if (d && typeof d.raw === "number" && isFinite(d.raw)) n = d.raw;
++  else n = fe83_num(d && d.chg);
++  if (n == null) return "";
++  return fe83_signed(n, "");
++}
++function fe83_chgPair(d) {
++  var pts = fe83_ptsBit(d);
++  var pct = fe83_num(d && d.c);
++  var p = pct == null ? "" : fe83_signed(pct, "%");
++  if (pts && p) return pts + " (" + p + ")";
++  if (p) return p;
++  if (pts) return pts;
++  return "—";
++}
++function fe83_lvl(v) {
++  var n = fe83_num(v);
++  if (n == null) return "";
++  if (Math.abs(n) >= 1000) return n.toLocaleString("en-GB", { maximumFractionDigits: 2 });
++  var s = String(n);
++  if (s.indexOf("e") >= 0 || s.indexOf("E") >= 0) s = n.toFixed(2);
++  return s;
++}
++function fe83_px(n) {
++  var v = fe83_num(n);
++  if (v == null) return "";
++  return v.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
++}
++function fe83_regimeLine(re) {
++  re = re || {};
++  var bits = [];
++  var name = re.spxProxy ? "SPY" : "SPX";
++  var px = fe83_lvl(re.spx);
++  var ch = fe83_num(re.spxChg);
++  if (px) {
++    var bit = name + " " + px;
++    if (ch != null) bit += " (" + fe83_signed(ch, "%") + ")";
++    if (re.spxProxy) bit += " · tracked via an ETF";
++    bits.push(bit);
++  } else if (ch != null) bits.push(name + " (" + fe83_signed(ch, "%") + ")");
++  var vix = fe83_lvl(re.vix);
++  if (vix) bits.push("VIX " + vix);
++  var oil = fe83_lvl(re.oil);
++  if (oil) bits.push("Oil " + oil);
++  var btc = fe83_lvl(re.btc);
++  if (btc) bits.push("BTC " + btc);
++  if (!bits.length) return "";
++  return '<div class="fe83-regime-in" style="font-size:10px;color:var(--t2);margin-top:4px;line-height:1.5">' + bits.join(" · ") + "</div>";
++}
++function fe83_vixCell(re) {
++  var vix = fe83_lvl(re && re.vix);
++  if (!vix) return "";
++  return '<div class="ns-cell"><span class="ns-lbl">VIX</span><span class="ns-val">' + vix + "</span></div>";
++}
++function fe83_scrubText(s) {
++  return String(s == null ? "" : s).replace(/(^|[^A-Za-z0-9_])(undefined|NaN|null)(?![A-Za-z0-9_])/g, "$1");
++}
++function fe83_wd(s) {
++  var m = String(s || "").trim().match(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/i);
++  if (!m) return "";
++  var x = m[1].toLowerCase();
++  return x.charAt(0).toUpperCase() + x.slice(1, 3);
++}
++function fe83_pickDayPure(changeDay, label, feedDay, closed, todayWd) {
++  var a = fe83_wd(changeDay) || fe83_wd(label) || fe83_wd(feedDay);
++  if (a) return a;
++  if (closed && (todayWd === "Sat" || todayWd === "Sun")) return "Fri";
++  return "";
++}
++function fe83_isDxy(sym) {
++  var s = String(sym == null ? "" : sym).toUpperCase().replace(/\s/g, "");
++  return s === "DXY" || s === "DX-Y.NYB" || s.indexOf("DX-Y.NYB") >= 0;
++}
++function fe83_goldFrom(g, dc, fut, spotPx) {
++  g = g || {};
++  dc = (dc && typeof dc === "object") ? dc : {};
++  fut = (fut && typeof fut === "object") ? fut : {};
++  var pct = fe83_num(g.pct != null ? g.pct : (dc.pct != null ? dc.pct : (fut.changePct != null ? fut.changePct : (fut.c != null ? fut.c : fut.change))));
++  var futPx = fe83_num(g.futuresPrice != null ? g.futuresPrice : (g.instrument === "futures" ? (g.price != null ? g.price : g.p) : null));
++  if (futPx == null) futPx = fe83_num(dc.price != null ? dc.price : (dc.futuresPrice != null ? dc.futuresPrice : (fut.price != null ? fut.price : fut.p)));
++  var spot = fe83_num(g.spotPrice != null ? g.spotPrice : (g.instrument === "spot" ? (g.price != null ? g.price : g.p) : spotPx));
++  var inst = String(g.instrument || dc.instrument || "");
++  var ptsN = fe83_num(g.points != null ? g.points : (g.pointChange != null ? g.pointChange : (dc.points != null ? dc.points : (dc.pointChange != null ? dc.pointChange : (dc.changePoints != null ? dc.changePoints : fut.points)))));
++  var wantFut = inst === "futures" || (futPx != null && pct != null && inst !== "spot");
++  if (wantFut && futPx != null) {
++    return { kind: "futures", px: futPx, pct: pct, pts: ptsN == null ? "" : fe83_signed(ptsN, ""), label: "Gold futures (GC=F)" };
++  }
++  if (spot != null) return { kind: "spot", px: spot, pct: null, pts: "", label: "Gold spot" };
++  return null;
++}
++function fe83_goldText(b) {
++  if (!b || b.px == null) return "";
++  var px = fe83_px(b.px);
++  if (!px) return "";
++  if (b.kind === "spot") return "Gold spot " + px;
++  var pct = b.pct == null ? "" : fe83_signed(b.pct, "%");
++  var pts = b.pts ? " · " + b.pts : "";
++  return "Gold futures (GC=F) " + px + (pct ? " " + pct : "") + pts;
++}
++function fe83_sigMode(st) {
++  st = st || {};
++  if (st.have) return "cards";
++  var age = Number(st.age) || 0;
++  var hard = !!st.hard || (!!st.err && !st.soft);
++  if (age >= 20000) return "unavailable";
++  if (st.open || st.pending) return "skeleton";
++  if (st.soft && !hard) return "skeleton";
++  if (hard) return "unavailable";
++  if (st.settled && !st.have && !st.soft) return "unavailable";
++  return "skeleton";
++}
++function fe83_weekLine() {
++  var line = "";
++  try { if (typeof fe82_acadLabel === "string" && fe82_acadLabel) line = fe82_acadLabel; } catch (e) { line = ""; }
++  if (!line) {
++    try { if (typeof fe82_hubLine === "function") line = fe82_hubLine() || ""; } catch (e2) { line = ""; }
++  }
++  return line || "";
++}
++// FE83_PURE_END
++function fe83_todayWd() {
++  try { return new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short" }).format(new Date()); } catch (e) { return ""; }
++}
++function fe83_sessionDay(tk) {
++  var b = null, f = null;
++  try { b = typeof fe78_bag === "function" ? fe78_bag(tk) : null; } catch (e) { b = null; }
++  try { f = typeof fe76_feedOf === "function" ? fe76_feedOf(tk) : null; } catch (e2) { f = null; }
++  var feedDay = "";
++  if (f) feedDay = f.changeDay || f.sessionDay || f.sessionDayUk || "";
++  return fe83_wd(b && b.changeDay) || fe83_wd(b && b.changeDayLabel) || fe83_wd(feedDay);
++}
++function fe83_marketClosed(tk) {
++  try { if (typeof fe78_isClosed === "function" && fe78_isClosed(tk)) return true; } catch (e) {}
++  try { if (typeof _rt18MarketOpen === "function") return !_rt18MarketOpen(tk); } catch (e2) {}
++  return false;
++}
++function fe83_pickDay(tk) {
++  try { if (typeof fe79_isCryptoTk === "function" && fe79_isCryptoTk(tk)) return ""; } catch (e) {}
++  return fe83_pickDayPure(fe83_sessionDay(tk), "", "", fe83_marketClosed(tk), fe83_todayWd());
++}
++function fe83_goldBits() {
++  var g = null, dc = null, fut = null, spot = null;
++  try { g = (typeof fe81_goldHeld === "function" && fe81_goldHeld()) || (typeof fe79_goldNow === "function" && fe79_goldNow()); } catch (e) { g = null; }
++  try { dc = fe82_goldDc; } catch (e2) { dc = null; }
++  try { fut = typeof fe77_futObj === "function" ? fe77_futObj() : null; } catch (e3) { fut = null; }
++  try { spot = (typeof P !== "undefined" && P.XAU) ? P.XAU.p : null; } catch (e4) { spot = null; }
++  return fe83_goldFrom(g, dc, fut, spot);
++}
++function fe83_goldLine() {
++  return fe83_goldText(fe83_goldBits());
++}
++function fe83_scrubDom() {
++  if (typeof document === "undefined" || !document.body) return;
++  var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
++  var n;
++  while ((n = walker.nextNode())) {
++    var p = n.parentNode;
++    if (!p || /^(SCRIPT|STYLE|NOSCRIPT|TEXTAREA)$/.test(p.tagName || "")) continue;
++    var v = n.nodeValue;
++    if (!v) continue;
++    if (/undefined|\bNaN\b|\bnull\b/.test(v)) n.nodeValue = fe83_scrubText(v);
++    if (v.indexOf("Dispatch FX basket") >= 0) n.nodeValue = n.nodeValue.replace(/Dispatch FX basket/g, "US Dollar Index (ICE)");
++  }
++}
++function fe83_paintGold() {
++  var b = fe83_goldBits();
++  if (!b || typeof document === "undefined") return;
++  var px = fe83_px(b.px);
++  var pct = b.kind === "futures" && b.pct != null ? fe83_signed(b.pct, "%") : "";
++  var day = fe83_pickDay("XAU");
++  var chg = b.kind === "spot" ? "Gold spot" : ((pct || "") + (b.pts ? " · " + b.pts : "") + (day ? " " + day : "")).replace(/^\s+/, "");
++  document.querySelectorAll(".wl-glance-chip").forEach(function (el) {
++    var oc = el.getAttribute("onclick") || "";
++    if (oc.indexOf("XAU") < 0 && oc.indexOf("GC=F") < 0) return;
++    var pe = el.querySelector(".wl-g-p"), ce = el.querySelector(".wl-g-c");
++    if (pe) { pe.textContent = px; pe.title = b.label; }
++    if (ce) ce.textContent = (b.label + (chg ? " " + chg : "")).replace(/\s+/g, " ").trim();
++  });
++  document.querySelectorAll(".rt47-qrow").forEach(function (row) {
++    var html = row.innerHTML || "";
++    if (html.indexOf("XAU") < 0 && html.indexOf("Gold") < 0 && html.indexOf("GC=F") < 0) return;
++    var qn = row.querySelector(".rt47-qn"), qp = row.querySelector(".rt47-qp"), qc = row.querySelector(".rt47-qc");
++    if (qn) qn.textContent = b.label;
++    if (qp) qp.textContent = px;
++    if (qc) qc.textContent = pct;
++  });
++  document.querySelectorAll("[data-price-card='XAU'],[data-tk='XAU']").forEach(function (el) {
++    var pe = el.querySelector(".asset-price,.conv-px,.idx-card-px");
++    var ce = el.querySelector(".asset-chg,.change,.conv-chg,.idx-card-chg");
++    var nm = el.querySelector(".conv-nm,.idx-card-name,.spine-lbl");
++    if (nm) nm.textContent = b.label;
++    if (pe && px) pe.textContent = (el.getAttribute("data-price-dollar") === "1" ? "$" : "") + px;
++    if (ce && b.kind === "futures") ce.textContent = fe83_fixSigns((pct || "") + (b.pts ? " · " + b.pts : "") + (day ? " " + day : ""));
++    if (ce && b.kind === "spot") ce.textContent = "Gold spot";
++  });
++  document.querySelectorAll(".spine-cell").forEach(function (el) {
++    var tk = el.querySelector(".spine-tk");
++    if (!tk || String(tk.textContent || "").trim() !== "XAU") return;
++    var lb = el.querySelector(".spine-lbl");
++    var pe = el.querySelector(".spine-px");
++    var ce = el.querySelector(".spine-chg");
++    if (lb) {
++      var rest = lb.innerHTML.replace(/^[^<]*/, "");
++      lb.innerHTML = b.label + (rest && rest.charAt(0) !== " " && rest.charAt(0) !== "<" ? " " : "") + rest;
++    }
++    if (pe && px) pe.textContent = px;
++    if (ce && b.kind === "futures") ce.textContent = fe83_fixSigns((pct || "") + (b.pts ? " · " + b.pts : "") + (day ? " " + day : ""));
++    if (ce && b.kind === "spot") ce.textContent = "Gold spot";
++  });
++}
++function fe83_paintDays() {
++  if (typeof document === "undefined") return;
++  document.querySelectorAll(".asset-chg,.wl-g-c,.spine-chg,.idx-card-chg,.conv-chg,.sector-dash-pct").forEach(function (el) {
++    if (el.children && el.children.length) return;
++    var t = el.textContent || "";
++    var n = fe83_fixSigns(t);
++    var card = el.closest("[data-price-card],[data-tk]");
++    var tk = card ? (card.getAttribute("data-price-card") || card.getAttribute("data-tk") || "") : "";
++    if (!tk && el.classList.contains("wl-g-c")) {
++      var chip = el.closest(".wl-glance-chip");
++      var oc = chip ? (chip.getAttribute("onclick") || "") : "";
++      var m = oc.match(/openA\('([^']+)'\)/);
++      tk = m ? m[1] : "";
++    }
++    var day = tk ? fe83_pickDay(tk) : "";
++    if (day) n = n.replace(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b(?!.*\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b)/, day);
++    if (n !== t) el.textContent = n;
++  });
++}
++function fe83_afterPaint() {
++  try { fe83_scrubDom(); } catch (e) {}
++  try { fe83_paintGold(); } catch (e2) {}
++  try { fe83_paintDays(); } catch (e3) {}
++}
++function fe83_sigView() {
++  var have = false, open = false, hard = false, soft = false, pending = false, settled = false;
++  try {
++    have = (typeof SIGS !== "undefined" ? SIGS : []).some(function (s) {
++      return s && typeof hasSyncedQuote === "function" && hasSyncedQuote(s.tk);
++    });
++  } catch (e) { have = false; }
++  var slots = (typeof fe82_quoteWait !== "undefined" && fe82_quoteWait) ? fe82_quoteWait : [];
++  if (slots.length) settled = true;
++  for (var i = 0; i < slots.length; i++) {
++    var s = slots[i];
++    if (!s.done || s.pendingBody) { open = true; settled = false; }
++    if (s.pendingBody) pending = true;
++    if (s.soft) soft = true;
++    else if (s.err) hard = true;
++  }
++  var age = 0;
++  try { age = fe82_sigT0 ? (Date.now() - fe82_sigT0) : 0; } catch (e2) { age = 0; }
++  return fe83_sigMode({ have: have, open: open, hard: hard, soft: soft, pending: pending, settled: settled, age: age });
++}
++var fe83_sigShown = "";
++try {
++  var fe83_chgText0 = fe78_chgText;
++  fe78_chgText = function (tk, s) {
++    var out = "";
++    try { out = fe83_chgText0.apply(this, arguments); } catch (e) { out = String(s || ""); }
++    out = fe83_fixSigns(out);
++    var day = fe83_pickDay(tk);
++    if (day && /\d/.test(out)) {
++      out = String(out).replace(/\s+(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b(?!.*\b(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b)/i, "");
++      if (out.indexOf(day) < 0) out = out.replace(/\s+$/, "") + " " + day;
++    }
++    return fe83_scrubText(out);
++  };
++} catch (eChg) {}
++try {
++  var fe83_day0 = _rt26Day;
++  _rt26Day = function (tk) {
++    var sess = fe83_sessionDay(tk);
++    if (sess) return sess;
++    var prev = "";
++    try { prev = fe83_day0.apply(this, arguments) || ""; } catch (e) { prev = ""; }
++    var today = fe83_todayWd();
++    if (fe83_marketClosed(tk) && (prev === today || /^sat|^sun/i.test(prev))) {
++      if (today === "Sat" || today === "Sun" || /^sat|^sun/i.test(prev)) return "Fri";
++      return "";
++    }
++    return prev;
++  };
++} catch (eDay) {}
++try {
++  var fe83_qm0 = _quoteMeta;
++  _quoteMeta = function (tk) {
++    var m = fe83_qm0.apply(this, arguments);
++    try {
++      var day = fe83_pickDay(tk);
++      if (day && m && m.detail) m.detail = String(m.detail).replace(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/, day);
++    } catch (e) {}
++    return m;
++  };
++} catch (eQm) {}
++try {
++  var fe83_fp0 = fp;
++  fp = function (tk) {
++    var d = fe83_fp0.apply(this, arguments);
++    try {
++      var id = (typeof resolveInternalTicker === "function" && resolveInternalTicker(tk)) || tk;
++      if ((id === "XAU" || id === "GC=F") && d) {
++        var b = fe83_goldBits();
++        if (b && b.kind === "futures") {
++          d.p = fe83_px(b.px);
++          if (b.pct != null) d.c = Number(b.pct).toFixed(2);
++          if (b.pts) d.chg = b.pts;
++        } else if (b && b.kind === "spot") {
++          d.p = fe83_px(b.px);
++          d.c = "";
++          d.chg = "";
++        }
++      }
++    } catch (e) {}
++    return d;
++  };
++} catch (eFp) {}
++try {
++  var fe83_lc0 = liveChg;
++  liveChg = function (tk) {
++    var id = (typeof resolveInternalTicker === "function" && resolveInternalTicker(tk)) || tk;
++    if (id === "XAU" || id === "GC=F") {
++      var b = null;
++      try { b = fe83_goldBits(); } catch (e) { b = null; }
++      if (b && b.kind === "futures" && b.pct != null) return b.pct;
++      if (b && b.kind === "spot") return null;
++    }
++    return fe83_lc0.apply(this, arguments);
++  };
++} catch (eLc) {}
++try {
++  var fe83_tape0 = fe65_tapeName;
++  fe65_tapeName = function (tk) {
++    var key = tk;
++    try { key = (typeof resolveInternalTicker === "function" && resolveInternalTicker(tk)) || tk; } catch (e) { key = tk; }
++    if (fe83_isDxy(key) || fe83_isDxy(tk)) return "US Dollar Index (ICE)";
++    if (key === "XAU" || key === "GC=F") {
++      var b = fe83_goldBits();
++      if (b) return b.label;
++    }
++    return fe83_tape0.apply(this, arguments);
++  };
++} catch (eTape) {}
++try { fe77_dxyName = function () { return "US Dollar Index (ICE)"; }; } catch (eDn) {}
++try { fe77_dxyTitle = function () { return "US Dollar Index (ICE)"; }; } catch (eDt) {}
++try { fe78_dxyLabel = function () { return "US Dollar Index (ICE)"; }; } catch (eDl) {}
++try {
++  var fe83_prep0 = fe77_prepDxy;
++  fe77_prepDxy = function (data) {
++    var q = fe83_prep0.apply(this, arguments);
++    if (q && typeof q === "object") q.name = "US Dollar Index (ICE)";
++    try { if (typeof liveQuoteName !== "undefined") liveQuoteName.DXY = "US Dollar Index (ICE)"; } catch (e) {}
++    return q;
++  };
++} catch (ePrep) {}
++try {
++  var fe83_ref0 = fe77_takeRef;
++  fe77_takeRef = function (data) {
++    var r = fe83_ref0.apply(this, arguments);
++    try { fe77_dxyLabel = "US Dollar Index (ICE)"; } catch (e) {}
++    try { if (typeof liveQuoteName !== "undefined") liveQuoteName.DXY = "US Dollar Index (ICE)"; } catch (e2) {}
++    return r;
++  };
++} catch (eRef) {}
++try {
++  var fe83_chip0 = fe82_fixChip;
++  fe82_fixChip = function (el, tk) {
++    try { fe83_chip0.apply(this, arguments); } catch (e) {}
++    try { if (tk === "XAU" || tk === "GC=F") fe83_paintGold(); } catch (e2) {}
++  };
++} catch (eChip) {}
++try {
++  var fe83_re0 = _renderRegimeEngine;
++  _renderRegimeEngine = function (re) {
++    var h = "";
++    try { h = fe83_re0.apply(this, arguments); } catch (e) { h = ""; }
++    return fe83_scrubText(h);
++  };
++} catch (eRe) {}
++try {
++  var fe83_ctx0 = _buildChatContext;
++  _buildChatContext = function () {
++    var t = "";
++    try { t = fe83_ctx0.apply(this, arguments); } catch (e) { t = ""; }
++    return fe83_scrubText(fe83_fixSigns(t));
++  };
++} catch (eCtx) {}
++try {
++  var fe83_br0 = _renderDispatchBrief;
++  _renderDispatchBrief = function () {
++    var h = "";
++    try { h = fe83_br0.apply(this, arguments); } catch (e) { h = ""; }
++    return fe83_scrubText(h);
++  };
++} catch (eBr) {}
++try {
++  var fe83_intel0 = _computeLocalIntel;
++  _computeLocalIntel = function () {
++    var o = null;
++    try { o = fe83_intel0.apply(this, arguments); } catch (e) { o = null; }
++    try {
++      if (o && typeof o.insight === "string") o.insight = fe83_scrubText(fe83_fixSigns(o.insight));
++      if (o && typeof o.headline === "string") o.headline = fe83_scrubText(o.headline);
++    } catch (e2) {}
++    return o;
++  };
++} catch (eIn) {}
++try {
++  var fe83_fresh0 = _rt48Fresh;
++  _rt48Fresh = function (t) {
++    try {
++      if (typeof t === "number" && typeof _rt48Wk !== "undefined" && _rt48Wk && t === _rt48Wk.at && fe82_acadLabel) return fe82_acadLabel;
++    } catch (e) {}
++    var line = "";
++    try { line = fe83_fresh0.apply(this, arguments); } catch (e2) { line = ""; }
++    return fe83_scrubText(line);
++  };
++} catch (eFr) {}
++try {
++  fe82_sigMode = function (st) { return fe83_sigMode(st); };
++  fe82_sigState = function () { return fe83_sigView(); };
++} catch (eMode) {}
++try {
++  var fe83_tick0 = fe82_sigTick;
++  fe82_sigTick = function () {
++    var mode = "";
++    try { mode = fe82_sigState(); } catch (e) { mode = ""; }
++    var prev = fe83_sigShown;
++    try { fe83_tick0.apply(this, arguments); } catch (e2) {}
++    try {
++      if (!fe82_onSig()) return;
++      var desk = typeof IS_DESKTOP === "function" && IS_DESKTOP();
++      var root = desk ? document.getElementById("p3body") : document.getElementById("main");
++      if (!root) return;
++      var skel = !!root.querySelector("[data-fe82=sig-skel]");
++      var bad = /UNAVAILABLE|No price yet|No source returned/i.test(root.textContent || "");
++      if ((mode === "cards" || mode === "unavailable") && (skel || (bad && prev !== mode) || prev === "skeleton" || prev === "unavailable")) {
++        if (desk && typeof fe82_p30 === "function") fe82_p30();
++        else if (!desk && typeof renderMain === "function") renderMain();
++      }
++    } catch (e3) {}
++    if (mode) fe83_sigShown = mode;
++  };
++} catch (eTick) {}
++try {
++  var fe83_fetch0 = window.fetch.bind(window);
++  window.fetch = function (input) {
++    var url = "";
++    try { url = typeof input === "string" ? input : (input && input.url) || ""; } catch (e0) { url = ""; }
++    var p = fe83_fetch0.apply(window, arguments);
++    if (typeof fe82_isQuoteUrl !== "function" || !fe82_isQuoteUrl(url)) return p;
++    var slot = (fe82_quoteWait && fe82_quoteWait.length) ? fe82_quoteWait[fe82_quoteWait.length - 1] : null;
++    return Promise.resolve(p).then(function (r) {
++      if (slot) slot.pendingBody = true;
++      try {
++        r.clone().text().then(function (t) {
++          if (!slot) return;
++          slot.pendingBody = false;
++          if (/no source returned/i.test(String(t || "")) && !/"p"\s*:\s*[1-9]/.test(String(t || ""))) {
++            slot.soft = true;
++            slot.err = false;
++          }
++        }).catch(function () { if (slot) slot.pendingBody = false; });
++      } catch (e2) { if (slot) slot.pendingBody = false; }
++      return r;
++    }, function (err) {
++      var msg = String((err && err.message) || err || "");
++      if (slot && /no source returned/i.test(msg)) { slot.soft = true; slot.err = false; slot.pendingBody = false; }
++      throw err;
++    });
++  };
++} catch (eFetch) {}
++try {
++  var fe83_ask0 = fe79_askChip;
++  fe79_askChip = function (meta) {
++    var chip = fe83_ask0.apply(this, arguments);
++    try {
++      var q = (meta && meta.quote) || meta || {};
++      if (q && q.quoteLine) return chip;
++      var blob = [q.symbol, q.ticker, q.tk, q.label, q.name].join(" ");
++      if (/XAU|GC=F|gold/i.test(blob) && chip && typeof chip === "object") {
++        var line = fe83_goldLine();
++        if (line) {
++          chip.line = line;
++          if (line.indexOf("%") < 0) chip.basis = "";
++        }
++      }
++    } catch (e) {}
++    return chip;
++  };
++} catch (eAsk) {}
++try { setInterval(fe83_afterPaint, 400); } catch (eIv) {}
+--- index.html
++++ index.html
+@@ -343,7 +343,7 @@
+ 
+ <!-- Context menu -->
+ <div class="ctx-menu" id="ctxMenu"></div>
+-<script defer src="/app.js?v=chat82"></script>
++<script defer src="/app.js?v=chat83"></script>
+ <script src="https://i.replit.com/script.js" async="" data-website-id="41c83e31-7da9-45c5-a194-58f8bc4f6608"></script></body>
+ </html>
+ 
