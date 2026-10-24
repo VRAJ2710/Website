@@ -1,0 +1,1832 @@
+diff --git a/app.js b/app.js
+--- a/app.js
++++ b/app.js
+@@ -226,244 +226,244 @@
+ 
+ const A = [
+   {tk:"AAPL",nm:"Apple Inc",cat:"Stock",ex:"NASDAQ",sc:68,se:"Neutral",beta:1.18,pe:"33.4x",mc:"$3.28T",
+-   th:"iPhone 17 cycle intact but $4 gasoline and supply chain bottlenecks weighing on demand. AI integration via Apple Intelligence is the next catalyst."},
++   th:"Apple Inc (AAPL) is a Stock listed on NASDAQ. Source: the desk instrument table."},
+   {tk:"NVDA",nm:"NVIDIA",cat:"Stock",ex:"NASDAQ",sc:76,se:"Bullish",beta:1.72,pe:"52.8x",mc:"$2.91T",
+-   th:"AI infrastructure spend accelerating. Data center revenue dominant. TSMC Q1 confirms demand strength. Elevated valuation justified by 90%+ growth."},
++   th:"NVIDIA (NVDA) is a Stock listed on NASDAQ. Source: the desk instrument table."},
+   {tk:"XOM",nm:"Exxon Mobil",cat:"Stock",ex:"NYSE",sc:84,se:"Bullish",beta:0.82,pe:"12.4x",mc:"$476B",
+-   th:"Primary beneficiary of Iran oil shock. +42% YTD. Crude at $93 with Hormuz closed. Cash flow machine at current prices. Pioneer acquisition adds scale."},
++   th:"Exxon Mobil (XOM) is a Stock listed on NYSE. Source: the desk instrument table."},
+   {tk:"MSFT",nm:"Microsoft",cat:"Stock",ex:"NASDAQ",sc:62,se:"Neutral",beta:0.92,pe:"34.2x",mc:"$2.89T",
+-   th:"Cloud resilient (Azure +28%) but $80B AI capex under scrutiny. Down 23% YTD. Copilot monetization slower than expected."},
++   th:"Microsoft (MSFT) is a Stock listed on NASDAQ. Source: the desk instrument table."},
+   {tk:"AVGO",nm:"Broadcom",cat:"Stock",ex:"NASDAQ",sc:82,se:"Bullish",beta:1.28,pe:"35.8x",mc:"$1.02T",
+-   th:"+18.1% in 2 weeks. Custom AI accelerator wins from Google, Meta, ByteDance. VMware integration driving margin expansion."},
++   th:"Broadcom (AVGO) is a Stock listed on NASDAQ. Source: the desk instrument table."},
+   {tk:"BTC",nm:"Bitcoin",cat:"Crypto",ex:"GLOBAL",sc:65,se:"Neutral-Bull",beta:1.85,pe:"-",mc:"$1.43T",
+-   th:"Largest crypto asset by market cap. Spot ETF flows, exchange reserves and real yields drive the medium-term trend; check the live price and flows above before acting."},
++   th:"Bitcoin (BTC) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
+   {tk:"XAU",nm:"Gold",cat:"Commodity",ex:"COMEX",sc:78,se:"Bullish",beta:-0.15,pe:"-",mc:"-",
+-   th:"Gold remains a macro safe-haven reference. Compare the thesis with the current XAU quote, dollar conditions, and central-bank demand."},
++   th:"Gold (XAU) is a Commodity listed on COMEX. Source: the desk instrument table."},
+   {tk:"WTI",nm:"Crude Oil",cat:"Commodity",ex:"NYMEX",sc:72,se:"Volatile",beta:0.45,pe:"-",mc:"-",
+-   th:"Ceasefire crashed WTI 16% from $110+ to ~$93. But Hormuz STILL CLOSED. Iran imposing $2M/tanker fee. Ceasefire expires Apr 22."},
++   th:"Crude Oil (WTI) is a Commodity listed on NYMEX. Source: the desk instrument table."},
+   {tk:"TSLA",nm:"Tesla Inc",cat:"Stock",ex:"NASDAQ",sc:58,se:"Volatile",beta:2.05,pe:"68.2x",mc:"$790B",
+-   th:"EV market share eroding globally. Robotaxi narrative intact but execution unclear. Energy storage strong. Valuation pricing in perfect execution."},
++   th:"Tesla Inc (TSLA) is a Stock listed on NASDAQ. Source: the desk instrument table."},
+   {tk:"AMZN",nm:"Amazon",cat:"Stock",ex:"NASDAQ",sc:74,se:"Bullish",beta:1.22,pe:"58.4x",mc:"$1.94T",
+-   th:"AWS revenue acceleration to 19% growth. Retail margins expanding. Advertising segment $14B quarterly run-rate. Strong free cash flow generation."},
++   th:"Amazon (AMZN) is a Stock listed on NASDAQ. Source: the desk instrument table."},
+   {tk:"GOOGL",nm:"Alphabet",cat:"Stock",ex:"NASDAQ",sc:72,se:"Bullish",beta:1.08,pe:"22.8x",mc:"$2.05T",
+-   th:"Search moat remains. Cloud growing at 28%. YouTube ad revenue at $8.9B. Waymo autonomous driving optionality. AI integration across products."},
++   th:"Alphabet (GOOGL) is a Stock listed on NASDAQ. Source: the desk instrument table."},
+   {tk:"META",nm:"Meta Platforms",cat:"Stock",ex:"NASDAQ",sc:70,se:"Bullish",beta:1.35,pe:"24.6x",mc:"$1.31T",
+-   th:"Reels monetization catching up to Stories. Reality Labs losses narrowing. AI recommendation engine driving engagement. $40B+ annual buyback."},
++   th:"Meta Platforms (META) is a Stock listed on NASDAQ. Source: the desk instrument table."},
+   {tk:"JPM",nm:"JPMorgan Chase",cat:"Stock",ex:"NYSE",sc:75,se:"Bullish",beta:1.12,pe:"11.8x",mc:"$580B",
+-   th:"Q1 trading revenue +28% YoY. NII resilient. Consumer credit stable. Investment banking pipeline recovering. Best-in-class management."},
++   th:"JPMorgan Chase (JPM) is a Stock listed on NYSE. Source: the desk instrument table."},
+   {tk:"GS",nm:"Goldman Sachs",cat:"Stock",ex:"NYSE",sc:71,se:"Bullish",beta:1.38,pe:"14.2x",mc:"$152B",
+-   th:"Q1 beat: EPS $14.12 vs $12.85 est. Trading dominant. Asset management pivot working. Platform Solutions losses contained."},
++   th:"Goldman Sachs (GS) is a Stock listed on NYSE. Source: the desk instrument table."},
+   {tk:"AMD",nm:"AMD",cat:"Stock",ex:"NASDAQ",sc:69,se:"Neutral-Bull",beta:1.68,pe:"42.6x",mc:"$264B",
+-   th:"MI300X AI accelerator gaining traction. Data center revenue doubling. PC cycle bottoming. Xilinx integration complete. NVDA competitor narrative."},
++   th:"AMD (AMD) is a Stock listed on NASDAQ. Source: the desk instrument table."},
+   {tk:"ETH",nm:"Ethereum",cat:"Crypto",ex:"GLOBAL",sc:62,se:"Neutral",beta:1.65,pe:"-",mc:"$221B",
+-   th:"ETH ETF approved but flows disappointing. Layer 2 adoption growing. Staking yield ~3.8%. Dencun upgrade reducing L2 costs. Network revenue declining."},
++   th:"Ethereum (ETH) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
+   {tk:"SOL",nm:"Solana",cat:"Crypto",ex:"GLOBAL",sc:67,se:"Neutral-Bull",beta:2.10,pe:"-",mc:"$68B",
+-   th:"Transaction throughput leader. DeFi TVL growing. NFT marketplace dominant. Firedancer client launch imminent. MEV revenue model emerging."},
++   th:"Solana (SOL) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
+   {tk:"XRP",nm:"XRP",cat:"Crypto",ex:"GLOBAL",sc:55,se:"Neutral",beta:1.42,pe:"-",mc:"$28B",
+-   th:"SEC clarity pending. Cross-border payment use case narrowing. Institutional adoption stalled. Ripple IPO speculation driving sentiment."},
++   th:"XRP (XRP) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
+   {tk:"SLV",nm:"Silver",cat:"Commodity",ex:"COMEX",sc:74,se:"Bullish",beta:0.35,pe:"-",mc:"-",
+-   th:"Industrial demand from solar panels surging. Gold-silver ratio historically elevated. Central bank buying. Supply deficit widening for third consecutive year."},
++   th:"Silver (SLV) is a Commodity listed on COMEX. Source: the desk instrument table."},
+   {tk:"NG",nm:"Natural Gas",cat:"Commodity",ex:"NYMEX",sc:52,se:"Bearish",beta:0.55,pe:"-",mc:"-",
+-   th:"Storage levels above 5-year average. LNG export capacity additions delayed. Mild weather forecast. Permian associated gas flooding market."},
++   th:"Natural Gas (NG) is a Commodity listed on NYMEX. Source: the desk instrument table."},
+   {tk:"EURUSD",nm:"EUR/USD",cat:"FX",ex:"FOREX",sc:60,se:"Neutral",beta:0.15,pe:"-",mc:"-",
+-   th:"ECB rate path diverging from Fed. Euro area PMI recovery supports currency. Trade balance improving. DXY weakness benefiting EUR."},
++   th:"EUR/USD (EURUSD) is a FX listed on FOREX. Source: the desk instrument table."},
+   {tk:"GBPUSD",nm:"GBP/USD",cat:"FX",ex:"FOREX",sc:58,se:"Neutral",beta:0.18,pe:"-",mc:"-",
+-   th:"BOE holding rates longer than expected. UK services inflation sticky. Political uncertainty post-budget. Sterling range-bound 1.25-1.28."},
++   th:"GBP/USD (GBPUSD) is a FX listed on FOREX. Source: the desk instrument table."},
+   {tk:"USDJPY",nm:"USD/JPY",cat:"FX",ex:"FOREX",sc:64,se:"Volatile",beta:0.22,pe:"-",mc:"-",
+-   th:"BOJ intervention risk above 155. Carry trade unwinding fears. Japan Q1 GDP contracting. Rate differential narrowing slowly."},
++   th:"USD/JPY (USDJPY) is a FX listed on FOREX. Source: the desk instrument table."},
+   // ─── Additional US Stocks ───
+-  {tk:"NFLX",nm:"Netflix",cat:"Stock",ex:"NASDAQ",sc:72,se:"Bullish",beta:1.20,pe:"38.4x",mc:"$290B",th:"Ad-supported tier gaining subscribers. Password sharing crackdown drove growth. Content spend discipline improving margins."},
+-  {tk:"DIS",nm:"Walt Disney",cat:"Stock",ex:"NYSE",sc:58,se:"Neutral",beta:1.05,pe:"22.1x",mc:"$205B",th:"Streaming finally profitable. Parks remain resilient. Linear TV decline headwind. CEO succession uncertainty weighing on multiple."},
+-  {tk:"V",nm:"Visa Inc",cat:"Stock",ex:"NYSE",sc:78,se:"Bullish",beta:0.92,pe:"29.6x",mc:"$560B",th:"Payment volume growth stable. Cross-border travel recovery intact. Network effects unassailable. Fee pricing power strong."},
+-  {tk:"MA",nm:"Mastercard",cat:"Stock",ex:"NYSE",sc:77,se:"Bullish",beta:0.95,pe:"31.2x",mc:"$430B",th:"Premium card spending resilient. International expansion driving growth. Value-added services revenue accelerating above network fees."},
+-  {tk:"PYPL",nm:"PayPal Holdings",cat:"Stock",ex:"NASDAQ",sc:54,se:"Neutral",beta:1.38,pe:"14.2x",mc:"$72B",th:"Branded checkout losing share to Apple Pay. Venmo monetization slow. Cheap on earnings but secular headwinds from big tech."},
+-  {tk:"CRM",nm:"Salesforce",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:1.18,pe:"27.4x",mc:"$256B",th:"AI features driving upsell in enterprise. Agentforce platform emerging as key differentiator. Margin expansion story on track."},
+-  {tk:"ORCL",nm:"Oracle",cat:"Stock",ex:"NYSE",sc:74,se:"Bullish",beta:0.88,pe:"22.6x",mc:"$380B",th:"Cloud revenue growth accelerating above 20%. AI GPU capacity partnerships with MSFT and OpenAI. Database moat still intact."},
+-  {tk:"ADBE",nm:"Adobe Inc",cat:"Stock",ex:"NASDAQ",sc:65,se:"Neutral",beta:1.22,pe:"26.8x",mc:"$210B",th:"Figma deal blocked but cash returned. AI Firefly features gaining traction. Creative suite subscription growth slowing at scale."},
+-  {tk:"INTC",nm:"Intel",cat:"Stock",ex:"NASDAQ",sc:42,se:"Bearish",beta:1.28,pe:"N/A",mc:"$95B",th:"Foundry losses widening. Market share losses to AMD and ARM. Pat Gelsinger exit raised strategic uncertainty. Turnaround multi-year."},
+-  {tk:"QCOM",nm:"Qualcomm",cat:"Stock",ex:"NASDAQ",sc:70,se:"Bullish",beta:1.32,pe:"15.8x",mc:"$178B",th:"Snapdragon AI PC chip gaining PC market. Auto diversification on track. Smartphone cycle recovery supporting near-term earnings."},
+-  {tk:"MU",nm:"Micron Technology",cat:"Stock",ex:"NASDAQ",sc:73,se:"Bullish",beta:1.62,pe:"—",mc:"—",th:"HBM memory for AI servers driving supercycle. DRAM pricing recovery ahead of expectations. US CHIPS Act funding secured."},
+-  {tk:"CSCO",nm:"Cisco Systems",cat:"Stock",ex:"NASDAQ",sc:62,se:"Neutral",beta:0.82,pe:"14.2x",mc:"$218B",th:"Splunk acquisition integration ongoing. AI networking demand emerging. Subscription transition reducing revenue visibility near-term."},
+-  {tk:"NOW",nm:"ServiceNow",cat:"Stock",ex:"NYSE",sc:76,se:"Bullish",beta:1.08,pe:"56.2x",mc:"$190B",th:"AI workflow automation the core thesis. Enterprise IT spending sticky. 98%+ net revenue retention. CRO AI agent platform leading."},
+-  {tk:"PANW",nm:"Palo Alto Networks",cat:"Stock",ex:"NASDAQ",sc:74,se:"Bullish",beta:1.18,pe:"48.6x",mc:"$115B",th:"Platformisation strategy taking share from point products. AI-powered SASE the growth engine. Free cash flow inflecting positively."},
+-  {tk:"CRWD",nm:"CrowdStrike",cat:"Stock",ex:"NASDAQ",sc:72,se:"Bullish",beta:1.42,pe:"82.4x",mc:"$88B",th:"Endpoint security dominant. Recovery from July 2024 outage complete. Falcon platform expansion into identity and cloud security."},
+-  {tk:"PLTR",nm:"Palantir Technologies",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:2.12,pe:"165x",mc:"$58B",th:"AIP AI platform driving US commercial growth. Government contracts resilient. Valuation stretched but software operating leverage emerging."},
+-  {tk:"COIN",nm:"Coinbase Global",cat:"Stock",ex:"NASDAQ",sc:63,se:"Neutral-Bull",beta:3.20,pe:"28.4x",mc:"$55B",th:"Crypto cycle dependent. Regulatory clarity improving post-election. Base L2 chain adding revenue stream. Institutional custody growing."},
+-  {tk:"UBER",nm:"Uber Technologies",cat:"Stock",ex:"NYSE",sc:74,se:"Bullish",beta:1.35,pe:"28.6x",mc:"$148B",th:"First GAAP profitable year. Delivery margins expanding. Autonomous vehicle partnerships optionality. Advertising growing fast."},
+-  {tk:"SHOP",nm:"Shopify",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:1.65,pe:"68.2x",mc:"$110B",th:"Merchant solutions outgrowing subscriptions. Payments penetration increasing. Logistics exit improving margin. Enterprise moving upmarket."},
+-  {tk:"SNOW",nm:"Snowflake",cat:"Stock",ex:"NYSE",sc:60,se:"Neutral",beta:1.42,pe:"N/A",mc:"$44B",th:"Consumption model makes revenue hard to predict. AI features not yet monetised. CEO transition to Sridhar Ramaswamy positive but early."},
+-  {tk:"RIVN",nm:"Rivian Automotive",cat:"Stock",ex:"NASDAQ",sc:38,se:"Bearish",beta:2.85,pe:"N/A",mc:"$12B",th:"Cash burn remains significant. R2 vehicle critical to unit economics. Amazon delivery van contract stabilising. Multi-year path to profitability."},
+-  {tk:"F",nm:"Ford Motor",cat:"Stock",ex:"NYSE",sc:52,se:"Neutral",beta:1.38,pe:"7.2x",mc:"$48B",th:"EV losses widening. Pro commercial truck segment strong. ICE cash flow funding EV transition. UAW contract costs weighing on margins."},
+-  {tk:"GM",nm:"General Motors",cat:"Stock",ex:"NYSE",sc:58,se:"Neutral",beta:1.22,pe:"6.4x",mc:"$52B",th:"Cruise autonomous unit losses contained. Strong truck and SUV margins. $10B+ buyback executing. EV ramp slower than planned."},
+-  {tk:"BA",nm:"Boeing",cat:"Stock",ex:"NYSE",sc:44,se:"Bearish",beta:1.42,pe:"N/A",mc:"$125B",th:"737 MAX production ramp constrained by FAA. 787 deliveries recovering. Defense losses persistent. Balance sheet stretched post-strike."},
+-  {tk:"CAT",nm:"Caterpillar",cat:"Stock",ex:"NYSE",sc:72,se:"Bullish",beta:1.08,pe:"14.8x",mc:"$178B",th:"Infrastructure spending supercycle early innings. Mining equipment demand from EV battery metals. Pricing power demonstrated through cycle."},
+-  {tk:"DE",nm:"John Deere",cat:"Stock",ex:"NYSE",sc:65,se:"Neutral",beta:0.95,pe:"12.4x",mc:"$108B",th:"Ag equipment destocking cycle ongoing. Precision agriculture software the long-term story. Cash generation strong through downturn."},
+-  {tk:"NKE",nm:"Nike Inc",cat:"Stock",ex:"NYSE",sc:52,se:"Neutral",beta:0.92,pe:"24.6x",mc:"$106B",th:"DTC inventory digestion ongoing. China recovery slower than expected. New CEO pivoting back to wholesale. Brand heat fading vs emerging competitors."},
+-  {tk:"SBUX",nm:"Starbucks",cat:"Stock",ex:"NASDAQ",sc:55,se:"Neutral",beta:0.88,pe:"22.4x",mc:"$82B",th:"Brian Niccol turnaround in early stages. US traffic recovering. China market challenged. Menu simplification and staffing models being reset."},
+-  {tk:"MCD",nm:"McDonald's",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:0.72,pe:"22.8x",mc:"$208B",th:"Value platform resonating with inflation-fatigued consumer. Drive-through and digital ordering mix improving margins. Franchise model insulated."},
+-  {tk:"JNJ",nm:"Johnson & Johnson",cat:"Stock",ex:"NYSE",sc:65,se:"Neutral",beta:0.62,pe:"14.2x",mc:"$408B",th:"MedTech the growth driver post-Kenvue spin. Pharma pipeline solid. Talc litigation settlement progress reducing overhang."},
+-  {tk:"UNH",nm:"UnitedHealth Group",cat:"Stock",ex:"NYSE",sc:70,se:"Bullish",beta:0.68,pe:"—",mc:"—",th:"Optum platform expanding. Medical loss ratio normalising. CEO transition managed well. Healthcare AI integration ahead of peers."},
+-  {tk:"PFE",nm:"Pfizer",cat:"Stock",ex:"NYSE",sc:45,se:"Bearish",beta:0.58,pe:"12.6x",mc:"$158B",th:"Post-COVID revenue normalisation complete. Pipeline rebuilding via Seagen oncology acquisition. Dividend yield attractive floor."},
+-  {tk:"LLY",nm:"Eli Lilly",cat:"Stock",ex:"NYSE",sc:84,se:"Bullish",beta:0.48,pe:"48.6x",mc:"$798B",th:"GLP-1 obesity/diabetes market dominant position. Mounjaro and Zepbound supply expanding. Pipeline deep. Pricing power substantial."},
+-  {tk:"ABBV",nm:"AbbVie",cat:"Stock",ex:"NYSE",sc:72,se:"Bullish",beta:0.62,pe:"16.8x",mc:"$340B",th:"Humira biosimilar cliff navigated. Skyrizi and Rinvoq growing strongly. Neuroscience pipeline addition via Cerevel acquisition."},
+-  {tk:"MRK",nm:"Merck & Co",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:0.55,pe:"12.4x",mc:"$268B",th:"Keytruda the world's top cancer drug. IRA pricing headwind manageable. Cardiovascular pipeline emerging. Robust free cash generation."},
+-  {tk:"WMT",nm:"Walmart",cat:"Stock",ex:"NYSE",sc:74,se:"Bullish",beta:0.52,pe:"36.2x",mc:"$690B",th:"Advertising revenue growing 26%. Membership and delivery economics improving. High-income consumer trading down adding addressable market."},
+-  {tk:"COST",nm:"Costco Wholesale",cat:"Stock",ex:"NASDAQ",sc:76,se:"Bullish",beta:0.72,pe:"52.4x",mc:"$385B",th:"Membership renewal rate 93%+. Private label Kirkland gaining share. International expansion runway. Premium to market justified by execution."},
+-  {tk:"HD",nm:"Home Depot",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:1.02,pe:"22.6x",mc:"$362B",th:"Housing turnover recovery slow but coming. Pro contractor segment outperforming. SRS Distribution adds professional customer access."},
+-  {tk:"BAC",nm:"Bank of America",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:1.38,pe:"12.8x",mc:"$318B",th:"NII sensitivity highest among big banks. Rate cut cycle headwind temporary. Consumer banking deposits stable. Capital return accelerating."},
+-  {tk:"WFC",nm:"Wells Fargo",cat:"Stock",ex:"NYSE",sc:65,se:"Neutral",beta:1.18,pe:"12.2x",mc:"$225B",th:"Asset cap removal catalyst pending OCC approval. Fee income rebuilding. Expense discipline under CEO Scharf. Rate sensitivity manageable."},
+-  {tk:"C",nm:"Citigroup",cat:"Stock",ex:"NYSE",sc:62,se:"Neutral",beta:1.45,pe:"9.8x",mc:"$128B",th:"Transformation plan multi-year. Services and markets performing. Consent order remediation costing capital. Cheap on tangible book."},
+-  {tk:"BLK",nm:"BlackRock",cat:"Stock",ex:"NYSE",sc:76,se:"Bullish",beta:1.28,pe:"22.4x",mc:"$145B",th:"GIP infrastructure acquisition adds alternatives scale. ETF market share dominant. Aladdin technology revenue recurring. Preqin data adds."},
+-  {tk:"ISRG",nm:"Intuitive Surgical",cat:"Stock",ex:"NASDAQ",sc:78,se:"Bullish",beta:0.92,pe:"62.4x",mc:"$185B",th:"Da Vinci 5 surgical robot next-gen launch. Installed base procedure growth compounding. Razors-and-blades instrument revenue sticky."},
+-  {tk:"TSM",nm:"TSMC ADR",cat:"Stock",ex:"NYSE",sc:82,se:"Bullish",beta:1.22,pe:"22.8x",mc:"$845B",th:"Sole manufacturer of most advanced chips. AI demand driving CoWoS packaging capacity constraints. Arizona fab on track."},
+-  {tk:"ASML",nm:"ASML Holding",cat:"Stock",ex:"NASDAQ",sc:80,se:"Bullish",beta:1.18,pe:"34.2x",mc:"$388B",th:"EUV lithography monopoly with no viable competitor. AI chip demand = ASML demand with 2-3yr lag. China export restrictions manageable."},
+-  {tk:"NVO",nm:"Novo Nordisk ADR",cat:"Stock",ex:"NYSE",sc:78,se:"Bullish",beta:0.45,pe:"22.4x",mc:"$412B",th:"Ozempic/Wegovy GLP-1 co-leader with Eli Lilly. EU pricing advantage. CagriSema next-gen obesity drug in trials. Manufacturing scaling."},
+-  {tk:"SAP",nm:"SAP SE ADR",cat:"Stock",ex:"NYSE",sc:72,se:"Bullish",beta:0.82,pe:"42.6x",mc:"$282B",th:"Cloud ERP migration driving recurring revenue. Business AI integration sticky. Large enterprise switching costs substantial. Europe tech champion."},
+-  {tk:"BABA",nm:"Alibaba Group ADR",cat:"Stock",ex:"NYSE",sc:52,se:"Neutral",beta:0.92,pe:"10.2x",mc:"$212B",th:"China consumer recovery slow. Cloud business growing but competitive. Regulatory risk receding. Cheap on earnings but structural headwinds."},
+-  {tk:"BP",nm:"BP PLC ADR",cat:"Stock",ex:"NYSE",sc:60,se:"Neutral",beta:0.68,pe:"8.4x",mc:"$92B",th:"Strategy pivot back to oil from renewables. Dividend secure. Activist Elliott pressure for performance. Energy transition credibility lost."},
+-  {tk:"SHEL",nm:"Shell PLC ADR",cat:"Stock",ex:"NYSE",sc:65,se:"Neutral",beta:0.72,pe:"9.2x",mc:"$218B",th:"LNG leadership position valuable. Capital discipline improving. Buyback yield attractive. Energy transition slower than planned acceptable."},
++  {tk:"NFLX",nm:"Netflix",cat:"Stock",ex:"NASDAQ",sc:72,se:"Bullish",beta:1.20,pe:"38.4x",mc:"$290B",th:"Netflix (NFLX) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"DIS",nm:"Walt Disney",cat:"Stock",ex:"NYSE",sc:58,se:"Neutral",beta:1.05,pe:"22.1x",mc:"$205B",th:"Walt Disney (DIS) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"V",nm:"Visa Inc",cat:"Stock",ex:"NYSE",sc:78,se:"Bullish",beta:0.92,pe:"29.6x",mc:"$560B",th:"Visa Inc (V) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"MA",nm:"Mastercard",cat:"Stock",ex:"NYSE",sc:77,se:"Bullish",beta:0.95,pe:"31.2x",mc:"$430B",th:"Mastercard (MA) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"PYPL",nm:"PayPal Holdings",cat:"Stock",ex:"NASDAQ",sc:54,se:"Neutral",beta:1.38,pe:"14.2x",mc:"$72B",th:"PayPal Holdings (PYPL) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"CRM",nm:"Salesforce",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:1.18,pe:"27.4x",mc:"$256B",th:"Salesforce (CRM) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"ORCL",nm:"Oracle",cat:"Stock",ex:"NYSE",sc:74,se:"Bullish",beta:0.88,pe:"22.6x",mc:"$380B",th:"Oracle (ORCL) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"ADBE",nm:"Adobe Inc",cat:"Stock",ex:"NASDAQ",sc:65,se:"Neutral",beta:1.22,pe:"26.8x",mc:"$210B",th:"Adobe Inc (ADBE) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"INTC",nm:"Intel",cat:"Stock",ex:"NASDAQ",sc:42,se:"Bearish",beta:1.28,pe:"N/A",mc:"$95B",th:"Intel (INTC) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"QCOM",nm:"Qualcomm",cat:"Stock",ex:"NASDAQ",sc:70,se:"Bullish",beta:1.32,pe:"15.8x",mc:"$178B",th:"Qualcomm (QCOM) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"MU",nm:"Micron Technology",cat:"Stock",ex:"NASDAQ",sc:73,se:"Bullish",beta:1.62,pe:"—",mc:"—",th:"Micron Technology (MU) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"CSCO",nm:"Cisco Systems",cat:"Stock",ex:"NASDAQ",sc:62,se:"Neutral",beta:0.82,pe:"14.2x",mc:"$218B",th:"Cisco Systems (CSCO) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"NOW",nm:"ServiceNow",cat:"Stock",ex:"NYSE",sc:76,se:"Bullish",beta:1.08,pe:"56.2x",mc:"$190B",th:"ServiceNow (NOW) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"PANW",nm:"Palo Alto Networks",cat:"Stock",ex:"NASDAQ",sc:74,se:"Bullish",beta:1.18,pe:"48.6x",mc:"$115B",th:"Palo Alto Networks (PANW) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"CRWD",nm:"CrowdStrike",cat:"Stock",ex:"NASDAQ",sc:72,se:"Bullish",beta:1.42,pe:"82.4x",mc:"$88B",th:"CrowdStrike (CRWD) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"PLTR",nm:"Palantir Technologies",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:2.12,pe:"165x",mc:"$58B",th:"Palantir Technologies (PLTR) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"COIN",nm:"Coinbase Global",cat:"Stock",ex:"NASDAQ",sc:63,se:"Neutral-Bull",beta:3.20,pe:"28.4x",mc:"$55B",th:"Coinbase Global (COIN) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"UBER",nm:"Uber Technologies",cat:"Stock",ex:"NYSE",sc:74,se:"Bullish",beta:1.35,pe:"28.6x",mc:"$148B",th:"Uber Technologies (UBER) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"SHOP",nm:"Shopify",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:1.65,pe:"68.2x",mc:"$110B",th:"Shopify (SHOP) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"SNOW",nm:"Snowflake",cat:"Stock",ex:"NYSE",sc:60,se:"Neutral",beta:1.42,pe:"N/A",mc:"$44B",th:"Snowflake (SNOW) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"RIVN",nm:"Rivian Automotive",cat:"Stock",ex:"NASDAQ",sc:38,se:"Bearish",beta:2.85,pe:"N/A",mc:"$12B",th:"Rivian Automotive (RIVN) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"F",nm:"Ford Motor",cat:"Stock",ex:"NYSE",sc:52,se:"Neutral",beta:1.38,pe:"7.2x",mc:"$48B",th:"Ford Motor (F) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"GM",nm:"General Motors",cat:"Stock",ex:"NYSE",sc:58,se:"Neutral",beta:1.22,pe:"6.4x",mc:"$52B",th:"General Motors (GM) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"BA",nm:"Boeing",cat:"Stock",ex:"NYSE",sc:44,se:"Bearish",beta:1.42,pe:"N/A",mc:"$125B",th:"Boeing (BA) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"CAT",nm:"Caterpillar",cat:"Stock",ex:"NYSE",sc:72,se:"Bullish",beta:1.08,pe:"14.8x",mc:"$178B",th:"Caterpillar (CAT) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"DE",nm:"John Deere",cat:"Stock",ex:"NYSE",sc:65,se:"Neutral",beta:0.95,pe:"12.4x",mc:"$108B",th:"John Deere (DE) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"NKE",nm:"Nike Inc",cat:"Stock",ex:"NYSE",sc:52,se:"Neutral",beta:0.92,pe:"24.6x",mc:"$106B",th:"Nike Inc (NKE) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"SBUX",nm:"Starbucks",cat:"Stock",ex:"NASDAQ",sc:55,se:"Neutral",beta:0.88,pe:"22.4x",mc:"$82B",th:"Starbucks (SBUX) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"MCD",nm:"McDonald's",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:0.72,pe:"22.8x",mc:"$208B",th:"McDonald's (MCD) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"JNJ",nm:"Johnson & Johnson",cat:"Stock",ex:"NYSE",sc:65,se:"Neutral",beta:0.62,pe:"14.2x",mc:"$408B",th:"Johnson & Johnson (JNJ) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"UNH",nm:"UnitedHealth Group",cat:"Stock",ex:"NYSE",sc:70,se:"Bullish",beta:0.68,pe:"—",mc:"—",th:"UnitedHealth Group (UNH) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"PFE",nm:"Pfizer",cat:"Stock",ex:"NYSE",sc:45,se:"Bearish",beta:0.58,pe:"12.6x",mc:"$158B",th:"Pfizer (PFE) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"LLY",nm:"Eli Lilly",cat:"Stock",ex:"NYSE",sc:84,se:"Bullish",beta:0.48,pe:"48.6x",mc:"$798B",th:"Eli Lilly (LLY) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"ABBV",nm:"AbbVie",cat:"Stock",ex:"NYSE",sc:72,se:"Bullish",beta:0.62,pe:"16.8x",mc:"$340B",th:"AbbVie (ABBV) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"MRK",nm:"Merck & Co",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:0.55,pe:"12.4x",mc:"$268B",th:"Merck & Co (MRK) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"WMT",nm:"Walmart",cat:"Stock",ex:"NYSE",sc:74,se:"Bullish",beta:0.52,pe:"36.2x",mc:"$690B",th:"Walmart (WMT) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"COST",nm:"Costco Wholesale",cat:"Stock",ex:"NASDAQ",sc:76,se:"Bullish",beta:0.72,pe:"52.4x",mc:"$385B",th:"Costco Wholesale (COST) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"HD",nm:"Home Depot",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:1.02,pe:"22.6x",mc:"$362B",th:"Home Depot (HD) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"BAC",nm:"Bank of America",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:1.38,pe:"12.8x",mc:"$318B",th:"Bank of America (BAC) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"WFC",nm:"Wells Fargo",cat:"Stock",ex:"NYSE",sc:65,se:"Neutral",beta:1.18,pe:"12.2x",mc:"$225B",th:"Wells Fargo (WFC) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"C",nm:"Citigroup",cat:"Stock",ex:"NYSE",sc:62,se:"Neutral",beta:1.45,pe:"9.8x",mc:"$128B",th:"Citigroup (C) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"BLK",nm:"BlackRock",cat:"Stock",ex:"NYSE",sc:76,se:"Bullish",beta:1.28,pe:"22.4x",mc:"$145B",th:"BlackRock (BLK) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"ISRG",nm:"Intuitive Surgical",cat:"Stock",ex:"NASDAQ",sc:78,se:"Bullish",beta:0.92,pe:"62.4x",mc:"$185B",th:"Intuitive Surgical (ISRG) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"TSM",nm:"TSMC ADR",cat:"Stock",ex:"NYSE",sc:82,se:"Bullish",beta:1.22,pe:"22.8x",mc:"$845B",th:"TSMC ADR (TSM) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"ASML",nm:"ASML Holding",cat:"Stock",ex:"NASDAQ",sc:80,se:"Bullish",beta:1.18,pe:"34.2x",mc:"$388B",th:"ASML Holding (ASML) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"NVO",nm:"Novo Nordisk ADR",cat:"Stock",ex:"NYSE",sc:78,se:"Bullish",beta:0.45,pe:"22.4x",mc:"$412B",th:"Novo Nordisk ADR (NVO) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"SAP",nm:"SAP SE ADR",cat:"Stock",ex:"NYSE",sc:72,se:"Bullish",beta:0.82,pe:"42.6x",mc:"$282B",th:"SAP SE ADR (SAP) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"BABA",nm:"Alibaba Group ADR",cat:"Stock",ex:"NYSE",sc:52,se:"Neutral",beta:0.92,pe:"10.2x",mc:"$212B",th:"Alibaba Group ADR (BABA) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"BP",nm:"BP PLC ADR",cat:"Stock",ex:"NYSE",sc:60,se:"Neutral",beta:0.68,pe:"8.4x",mc:"$92B",th:"BP PLC ADR (BP) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"SHEL",nm:"Shell PLC ADR",cat:"Stock",ex:"NYSE",sc:65,se:"Neutral",beta:0.72,pe:"9.2x",mc:"$218B",th:"Shell PLC ADR (SHEL) is a Stock listed on NYSE. Source: the desk instrument table."},
+   // ─── Additional Crypto ───
+-  {tk:"DOGE",nm:"Dogecoin",cat:"Crypto",ex:"GLOBAL",sc:42,se:"Volatile",beta:3.20,pe:"-",mc:"$24B",th:"Meme coin with limited utility but massive retail following. Elon Musk association drives sentiment. DOGE payment acceptance growing slowly."},
+-  {tk:"ADA",nm:"Cardano",cat:"Crypto",ex:"GLOBAL",sc:48,se:"Neutral",beta:2.20,pe:"-",mc:"$16B",th:"Proof-of-stake pioneer. Academic research approach slow to deliver. DeFi ecosystem developing. Hydra scalability solution in progress."},
+-  {tk:"AVAX",nm:"Avalanche",cat:"Crypto",ex:"GLOBAL",sc:58,se:"Neutral-Bull",beta:2.45,pe:"-",mc:"$12B",th:"Subnet architecture enabling enterprise blockchain. Amazon Web Services partnership. Gaming and institutional finance use cases growing."},
+-  {tk:"LINK",nm:"Chainlink",cat:"Crypto",ex:"GLOBAL",sc:62,se:"Neutral-Bull",beta:1.95,pe:"-",mc:"$8B",th:"Oracle network dominant. CCIP cross-chain interoperability protocol strategic. Real-world asset tokenisation the core long-term thesis."},
+-  {tk:"DOT",nm:"Polkadot",cat:"Crypto",ex:"GLOBAL",sc:48,se:"Neutral",beta:2.10,pe:"-",mc:"$9B",th:"Parachain architecture interesting but execution slow. Ecosystem development lagging Ethereum L2s. JAM upgrade could re-ignite interest."},
+-  {tk:"LTC",nm:"Litecoin",cat:"Crypto",ex:"GLOBAL",sc:40,se:"Neutral",beta:1.65,pe:"-",mc:"$6B",th:"Digital silver narrative weakening. Halving cycle impact diminishing. Lightning Network competition from Bitcoin. Utility case narrow."},
+-  {tk:"UNI",nm:"Uniswap",cat:"Crypto",ex:"GLOBAL",sc:60,se:"Neutral-Bull",beta:2.25,pe:"-",mc:"$5B",th:"DEX volume leader. Fee switch governance vote pending. V4 hooks enabling customizable liquidity. Regulatory risk from SEC action lingering."},
++  {tk:"DOGE",nm:"Dogecoin",cat:"Crypto",ex:"GLOBAL",sc:42,se:"Volatile",beta:3.20,pe:"-",mc:"$24B",th:"Dogecoin (DOGE) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
++  {tk:"ADA",nm:"Cardano",cat:"Crypto",ex:"GLOBAL",sc:48,se:"Neutral",beta:2.20,pe:"-",mc:"$16B",th:"Cardano (ADA) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
++  {tk:"AVAX",nm:"Avalanche",cat:"Crypto",ex:"GLOBAL",sc:58,se:"Neutral-Bull",beta:2.45,pe:"-",mc:"$12B",th:"Avalanche (AVAX) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
++  {tk:"LINK",nm:"Chainlink",cat:"Crypto",ex:"GLOBAL",sc:62,se:"Neutral-Bull",beta:1.95,pe:"-",mc:"$8B",th:"Chainlink (LINK) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
++  {tk:"DOT",nm:"Polkadot",cat:"Crypto",ex:"GLOBAL",sc:48,se:"Neutral",beta:2.10,pe:"-",mc:"$9B",th:"Polkadot (DOT) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
++  {tk:"LTC",nm:"Litecoin",cat:"Crypto",ex:"GLOBAL",sc:40,se:"Neutral",beta:1.65,pe:"-",mc:"$6B",th:"Litecoin (LTC) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
++  {tk:"UNI",nm:"Uniswap",cat:"Crypto",ex:"GLOBAL",sc:60,se:"Neutral-Bull",beta:2.25,pe:"-",mc:"$5B",th:"Uniswap (UNI) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
+   // ─── Additional FX ───
+-  {tk:"AUDUSD",nm:"AUD/USD",cat:"FX",ex:"FOREX",sc:52,se:"Neutral",beta:0.18,pe:"-",mc:"-",th:"Tracks China commodity demand. RBA rate path diverging. Iron ore prices supporting. Risk-off environment headwind for commodity currencies."},
+-  {tk:"USDCAD",nm:"USD/CAD",cat:"FX",ex:"FOREX",sc:55,se:"Neutral",beta:0.15,pe:"-",mc:"-",th:"Oil price sensitivity high. BOC cutting rates ahead of Fed. Housing market vulnerability. Trade war risk with US largest partner."},
+-  {tk:"USDCHF",nm:"USD/CHF",cat:"FX",ex:"FOREX",sc:58,se:"Neutral",beta:0.12,pe:"-",mc:"-",th:"Safe haven franc demand elevated. SNB interventions capping appreciation. Negative real rates structural. Risk-off flows support CHF."},
+-  {tk:"NZDUSD",nm:"NZD/USD",cat:"FX",ex:"FOREX",sc:48,se:"Bearish",beta:0.22,pe:"-",mc:"-",th:"RBNZ cutting rates aggressively. China export exposure. Commodity agricultural prices weak. Moves with risk sentiment, at lower volatility."},
+-  {tk:"EURGBP",nm:"EUR/GBP",cat:"FX",ex:"FOREX",sc:50,se:"Neutral",beta:0.10,pe:"-",mc:"-",th:"UK services inflation keeping BOE cautious vs ECB cuts. Post-Brexit trade normalisation slow. Rates differential moving in GBP favour."},
++  {tk:"AUDUSD",nm:"AUD/USD",cat:"FX",ex:"FOREX",sc:52,se:"Neutral",beta:0.18,pe:"-",mc:"-",th:"AUD/USD (AUDUSD) is a FX listed on FOREX. Source: the desk instrument table."},
++  {tk:"USDCAD",nm:"USD/CAD",cat:"FX",ex:"FOREX",sc:55,se:"Neutral",beta:0.15,pe:"-",mc:"-",th:"USD/CAD (USDCAD) is a FX listed on FOREX. Source: the desk instrument table."},
++  {tk:"USDCHF",nm:"USD/CHF",cat:"FX",ex:"FOREX",sc:58,se:"Neutral",beta:0.12,pe:"-",mc:"-",th:"USD/CHF (USDCHF) is a FX listed on FOREX. Source: the desk instrument table."},
++  {tk:"NZDUSD",nm:"NZD/USD",cat:"FX",ex:"FOREX",sc:48,se:"Bearish",beta:0.22,pe:"-",mc:"-",th:"NZD/USD (NZDUSD) is a FX listed on FOREX. Source: the desk instrument table."},
++  {tk:"EURGBP",nm:"EUR/GBP",cat:"FX",ex:"FOREX",sc:50,se:"Neutral",beta:0.10,pe:"-",mc:"-",th:"EUR/GBP (EURGBP) is a FX listed on FOREX. Source: the desk instrument table."},
+   // ─── Additional Commodities ───
+-  {tk:"COPPER",nm:"Copper",cat:"Commodity",ex:"COMEX",sc:72,se:"Bullish",beta:0.42,pe:"-",mc:"-",th:"EV and renewable energy copper intensity 3-4x ICE vehicles. Supply constrained by long permitting cycles. China restocking cycle due."},
+-  {tk:"WHEAT",nm:"Wheat",cat:"Commodity",ex:"CBOT",sc:58,se:"Neutral",beta:0.35,pe:"-",mc:"-",th:"Ukraine supply disruption structural floor. La Nina weather risk in Southern Hemisphere. India export ban limiting global supply."},
+-  {tk:"CORN",nm:"Corn",cat:"Commodity",ex:"CBOT",sc:50,se:"Neutral",beta:0.30,pe:"-",mc:"-",th:"US acreage competition with soybeans. Ethanol demand floor. Brazil record harvest capping upside. Livestock feed demand stable."},
+-  {tk:"COFFEE",nm:"Coffee (Arabica)",cat:"Commodity",ex:"ICE",sc:62,se:"Bullish",beta:0.28,pe:"-",mc:"-",th:"Brazil drought reduced supply. Vietnam robusta shortage. Structural demand growth in Asia. Climate change reducing suitable growing regions."},
+-  {tk:"PLAT",nm:"Platinum",cat:"Commodity",ex:"NYMEX",sc:58,se:"Neutral",beta:0.32,pe:"-",mc:"-",th:"Hydrogen fuel cell catalyst demand emerging. Autocatalyst demand falling with EV shift. South Africa supply constraints. Gold-platinum ratio historically stretched."},
+-  {tk:"COCOA",nm:"Cocoa",cat:"Commodity",ex:"ICE",sc:65,se:"Bullish",beta:0.25,pe:"-",mc:"-",th:"West Africa crop failures drove cocoa to all-time highs. El Nino disrupting production. Supply deficit for third consecutive year. Premium chocolate demand resilient."},
++  {tk:"COPPER",nm:"Copper",cat:"Commodity",ex:"COMEX",sc:72,se:"Bullish",beta:0.42,pe:"-",mc:"-",th:"Copper (COPPER) is a Commodity listed on COMEX. Source: the desk instrument table."},
++  {tk:"WHEAT",nm:"Wheat",cat:"Commodity",ex:"CBOT",sc:58,se:"Neutral",beta:0.35,pe:"-",mc:"-",th:"Wheat (WHEAT) is a Commodity listed on CBOT. Source: the desk instrument table."},
++  {tk:"CORN",nm:"Corn",cat:"Commodity",ex:"CBOT",sc:50,se:"Neutral",beta:0.30,pe:"-",mc:"-",th:"Corn (CORN) is a Commodity listed on CBOT. Source: the desk instrument table."},
++  {tk:"COFFEE",nm:"Coffee (Arabica)",cat:"Commodity",ex:"ICE",sc:62,se:"Bullish",beta:0.28,pe:"-",mc:"-",th:"Coffee (Arabica) (COFFEE) is a Commodity listed on ICE. Source: the desk instrument table."},
++  {tk:"PLAT",nm:"Platinum",cat:"Commodity",ex:"NYMEX",sc:58,se:"Neutral",beta:0.32,pe:"-",mc:"-",th:"Platinum (PLAT) is a Commodity listed on NYMEX. Source: the desk instrument table."},
++  {tk:"COCOA",nm:"Cocoa",cat:"Commodity",ex:"ICE",sc:65,se:"Bullish",beta:0.25,pe:"-",mc:"-",th:"Cocoa (COCOA) is a Commodity listed on ICE. Source: the desk instrument table."},
+   // ─── Additional US Stocks ───
+-  {tk:"ARM",nm:"ARM Holdings",cat:"Stock",ex:"NASDAQ",sc:78,se:"Bullish",beta:1.85,pe:"120x",mc:"$148B",th:"Every AI chip uses ARM architecture. Royalty model scales with silicon boom. Smartphone recovery adding. Licensing revenue highly recurring and sticky."},
+-  {tk:"SMCI",nm:"Super Micro Computer",cat:"Stock",ex:"NASDAQ",sc:65,se:"Neutral-Bull",beta:2.20,pe:"18x",mc:"$28B",th:"AI server manufacturer with NVDA GPU advantage. Accounting restatement overhang. Fastest time-to-market for AI infrastructure. Margin expansion story intact if issues resolve."},
+-  {tk:"MRVL",nm:"Marvell Technology",cat:"Stock",ex:"NASDAQ",sc:72,se:"Bullish",beta:1.65,pe:"42x",mc:"$62B",th:"Custom AI accelerator silicon for cloud hyperscalers. Data center networking essential. 5G infrastructure exposure. Electro-optics for AI data centre interconnects."},
+-  {tk:"KO",nm:"Coca-Cola",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:0.58,pe:"22x",mc:"$306B",th:"Pricing power demonstrated through inflation. Emerging market volume growth. Brand moat unassailable. Dividend Aristocrat 62 consecutive years of dividend growth."},
+-  {tk:"PEP",nm:"PepsiCo",cat:"Stock",ex:"NASDAQ",sc:66,se:"Bullish",beta:0.52,pe:"20x",mc:"$218B",th:"Frito-Lay snacks more resilient than beverages. Pricing power through inflation. Dividend growth 51 consecutive years. International exposure to emerging middle class."},
+-  {tk:"PG",nm:"Procter & Gamble",cat:"Stock",ex:"NYSE",sc:70,se:"Bullish",beta:0.48,pe:"24x",mc:"$388B",th:"Essential consumer brands with pricing power. Dividend Aristocrat 67 years. Premium product mix shift. Emerging market penetration growing. Recession-resistant revenue base."},
+-  {tk:"ABNB",nm:"Airbnb",cat:"Stock",ex:"NASDAQ",sc:68,se:"Bullish",beta:1.42,pe:"16x",mc:"$85B",th:"Travel demand structurally higher post-COVID. Experiences category emerging. No debt. $10B+ buyback. International expansion in high-growth markets. Margin expansion story."},
+-  {tk:"DASH",nm:"DoorDash",cat:"Stock",ex:"NYSE",sc:62,se:"Neutral-Bull",beta:1.52,pe:"N/A",mc:"$48B",th:"Food delivery market consolidating. International DashPass growing. Advertising layer emerging. Unit economics improving but path to profitability still multi-year."},
+-  {tk:"BRKB",nm:"Berkshire Hathaway B",cat:"Stock",ex:"NYSE",sc:74,se:"Bullish",beta:0.88,pe:"21x",mc:"$1.1T",th:"$320B+ cash pile at record. Warren Buffett's 60-year compounding machine. Insurance float funding investments. Defensive in downturns. Dividend-free capital compounder."},
+-  {tk:"ACN",nm:"Accenture",cat:"Stock",ex:"NYSE",sc:70,se:"Bullish",beta:1.02,pe:"27x",mc:"$200B",th:"AI consulting demand accelerating. GenAI bookings exceeding $3B. Digital transformation multi-year secular trend. Government and enterprise contracts sticky."},
+-  {tk:"SONY",nm:"Sony Group ADR",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:0.92,pe:"18x",mc:"$118B",th:"PlayStation 5 cycle mature but profitable. Music and film IP valuable. Imaging sensors dominant (60%+ market share). Financial services optionality. AI integration in content."},
+-  {tk:"VALE",nm:"Vale SA ADR",cat:"Stock",ex:"NYSE",sc:58,se:"Neutral",beta:1.02,pe:"6x",mc:"$46B",th:"Iron ore price dependent on China construction. Nickel division key for EV batteries. Brazilian political risk. Deep discount to peers on P/E. High dividend yield."},
+-  {tk:"RIO",nm:"Rio Tinto ADR",cat:"Stock",ex:"NYSE",sc:64,se:"Neutral",beta:0.78,pe:"9x",mc:"$98B",th:"Lithium via Rincon project for EV supply. Iron ore dominant. Copper exposure via Oyu Tolgoi. Capital discipline post-2010s write-downs. High dividend yield."},
+-  {tk:"INFY",nm:"Infosys ADR",cat:"Stock",ex:"NYSE",sc:62,se:"Neutral",beta:0.82,pe:"22x",mc:"$72B",th:"AI-driven IT outsourcing disruption risk. But also AI implementation beneficiary. Margin pressure from wage inflation. Strong balance sheet. Indian tech bellwether."},
++  {tk:"ARM",nm:"ARM Holdings",cat:"Stock",ex:"NASDAQ",sc:78,se:"Bullish",beta:1.85,pe:"120x",mc:"$148B",th:"ARM Holdings (ARM) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"SMCI",nm:"Super Micro Computer",cat:"Stock",ex:"NASDAQ",sc:65,se:"Neutral-Bull",beta:2.20,pe:"18x",mc:"$28B",th:"Super Micro Computer (SMCI) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"MRVL",nm:"Marvell Technology",cat:"Stock",ex:"NASDAQ",sc:72,se:"Bullish",beta:1.65,pe:"42x",mc:"$62B",th:"Marvell Technology (MRVL) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"KO",nm:"Coca-Cola",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:0.58,pe:"22x",mc:"$306B",th:"Coca-Cola (KO) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"PEP",nm:"PepsiCo",cat:"Stock",ex:"NASDAQ",sc:66,se:"Bullish",beta:0.52,pe:"20x",mc:"$218B",th:"PepsiCo (PEP) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"PG",nm:"Procter & Gamble",cat:"Stock",ex:"NYSE",sc:70,se:"Bullish",beta:0.48,pe:"24x",mc:"$388B",th:"Procter & Gamble (PG) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"ABNB",nm:"Airbnb",cat:"Stock",ex:"NASDAQ",sc:68,se:"Bullish",beta:1.42,pe:"16x",mc:"$85B",th:"Airbnb (ABNB) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"DASH",nm:"DoorDash",cat:"Stock",ex:"NYSE",sc:62,se:"Neutral-Bull",beta:1.52,pe:"N/A",mc:"$48B",th:"DoorDash (DASH) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"BRKB",nm:"Berkshire Hathaway B",cat:"Stock",ex:"NYSE",sc:74,se:"Bullish",beta:0.88,pe:"21x",mc:"$1.1T",th:"Berkshire Hathaway B (BRKB) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"ACN",nm:"Accenture",cat:"Stock",ex:"NYSE",sc:70,se:"Bullish",beta:1.02,pe:"27x",mc:"$200B",th:"Accenture (ACN) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"SONY",nm:"Sony Group ADR",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:0.92,pe:"18x",mc:"$118B",th:"Sony Group ADR (SONY) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"VALE",nm:"Vale SA ADR",cat:"Stock",ex:"NYSE",sc:58,se:"Neutral",beta:1.02,pe:"6x",mc:"$46B",th:"Vale SA ADR (VALE) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"RIO",nm:"Rio Tinto ADR",cat:"Stock",ex:"NYSE",sc:64,se:"Neutral",beta:0.78,pe:"9x",mc:"$98B",th:"Rio Tinto ADR (RIO) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"INFY",nm:"Infosys ADR",cat:"Stock",ex:"NYSE",sc:62,se:"Neutral",beta:0.82,pe:"22x",mc:"$72B",th:"Infosys ADR (INFY) is a Stock listed on NYSE. Source: the desk instrument table."},
+   // ─── Additional Crypto ───
+-  {tk:"POL",nm:"Polygon (POL)",cat:"Crypto",ex:"GLOBAL",sc:55,se:"Neutral",beta:2.40,pe:"-",mc:"$4B",th:"Ethereum Layer 2 scaling leader. zkEVM technology competitive. Rebranded to POL. Institutional adoption via CDBC pilots. Competition from Arbitrum and Optimism intensifying."},
+-  {tk:"NEAR",nm:"NEAR Protocol",cat:"Crypto",ex:"GLOBAL",sc:58,se:"Neutral-Bull",beta:2.15,pe:"-",mc:"$3B",th:"Sharding architecture enables high throughput. AI-blockchain integration narrative. Developer-friendly. Nightshade upgrade improving scalability. Ecosystem growing steadily."},
+-  {tk:"ALGO",nm:"Algorand",cat:"Crypto",ex:"GLOBAL",sc:45,se:"Neutral",beta:1.80,pe:"-",mc:"$2B",th:"Pure proof-of-stake pioneer. Government and institutional blockchain use cases. Marshall Islands sovereign currency. Carbon-negative network. Execution slower than roadmap."},
+-  {tk:"HBAR",nm:"Hedera",cat:"Crypto",ex:"GLOBAL",sc:52,se:"Neutral",beta:1.95,pe:"-",mc:"$4B",th:"Enterprise-grade hashgraph consensus. Google, IBM on governing council. Tokenisation of real-world assets. HBAR Foundation grants driving adoption. Not a traditional blockchain."},
+-  {tk:"TON",nm:"Toncoin",cat:"Crypto",ex:"GLOBAL",sc:60,se:"Neutral-Bull",beta:2.30,pe:"-",mc:"$12B",th:"Telegram integration gives access to 900M users. Mini-apps ecosystem growing. Pavel Durov legal issues an overhang. Payment layer for Telegram commerce could be transformative."},
++  {tk:"POL",nm:"Polygon (POL)",cat:"Crypto",ex:"GLOBAL",sc:55,se:"Neutral",beta:2.40,pe:"-",mc:"$4B",th:"Polygon (POL) (POL) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
++  {tk:"NEAR",nm:"NEAR Protocol",cat:"Crypto",ex:"GLOBAL",sc:58,se:"Neutral-Bull",beta:2.15,pe:"-",mc:"$3B",th:"NEAR Protocol (NEAR) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
++  {tk:"ALGO",nm:"Algorand",cat:"Crypto",ex:"GLOBAL",sc:45,se:"Neutral",beta:1.80,pe:"-",mc:"$2B",th:"Algorand (ALGO) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
++  {tk:"HBAR",nm:"Hedera",cat:"Crypto",ex:"GLOBAL",sc:52,se:"Neutral",beta:1.95,pe:"-",mc:"$4B",th:"Hedera (HBAR) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
++  {tk:"TON",nm:"Toncoin",cat:"Crypto",ex:"GLOBAL",sc:60,se:"Neutral-Bull",beta:2.30,pe:"-",mc:"$12B",th:"Toncoin (TON) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
+   // ─── Additional Global Indices ───
+-  {tk:"CAC",nm:"CAC 40",cat:"Stock",ex:"EURONEXT",sc:62,se:"Neutral",beta:1.12,pe:"-",mc:"-",th:"French large-cap index. Luxury sector (LVMH, Hermes) dominant weighting. Political risk from France deficit concerns. ECB rate cuts supportive. Export-heavy composition."},
+-  {tk:"ASX200",nm:"ASX 200",cat:"Stock",ex:"ASX",sc:64,se:"Neutral",beta:0.85,pe:"-",mc:"-",th:"Australian large-cap index. Commodities and banks dominant. Tracks China demand. RBA rate path key driver. Strong mining sector with lithium and iron ore exposure."},
+-  {tk:"KOSPI",nm:"KOSPI",cat:"Stock",ex:"KRX",sc:58,se:"Neutral",beta:1.05,pe:"-",mc:"-",th:"South Korea large-cap. Samsung Electronics dominant. Semiconductor cycle highly influential. Won weakness vs dollar headwind. North Korea geopolitical premium persistent."},
++  {tk:"CAC",nm:"CAC 40",cat:"Stock",ex:"EURONEXT",sc:62,se:"Neutral",beta:1.12,pe:"-",mc:"-",th:"CAC 40 (CAC) is a Stock listed on EURONEXT. Source: the desk instrument table."},
++  {tk:"ASX200",nm:"ASX 200",cat:"Stock",ex:"ASX",sc:64,se:"Neutral",beta:0.85,pe:"-",mc:"-",th:"ASX 200 (ASX200) is a Stock listed on ASX. Source: the desk instrument table."},
++  {tk:"KOSPI",nm:"KOSPI",cat:"Stock",ex:"KRX",sc:58,se:"Neutral",beta:1.05,pe:"-",mc:"-",th:"KOSPI (KOSPI) is a Stock listed on KRX. Source: the desk instrument table."},
+   // ─── More US Large Cap ───
+-  {tk:"TMO",nm:"Thermo Fisher Scientific",cat:"Stock",ex:"NYSE",sc:72,se:"Bullish",beta:0.72,pe:"28x",mc:"$212B",th:"Life science tools essential for drug discovery and manufacturing. Bioproduction recovery underway. AI-driven lab automation. Consistent double-digit earnings growth."},
+-  {tk:"ABT",nm:"Abbott Laboratories",cat:"Stock",ex:"NYSE",sc:70,se:"Bullish",beta:0.75,pe:"22x",mc:"$198B",th:"Medical devices and diagnostics diversified business. FreeStyle Libre CGM dominant. COVID test normalisation complete. Emerging market healthcare penetration opportunity."},
+-  {tk:"PM",nm:"Philip Morris International",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:0.62,pe:"18x",mc:"$200B",th:"IQOS smoke-free product driving transformation. ZYN nicotine pouch leader. High dividend yield. Emerging market volume resilience. Regulatory risk manageable outside US."},
+-  {tk:"NEE",nm:"NextEra Energy",cat:"Stock",ex:"NYSE",sc:66,se:"Neutral",beta:0.52,pe:"20x",mc:"$152B",th:"Largest clean energy producer globally. Renewables buildout accelerating. AI data centre power demand tailwind. Rate sensitivity headwind from higher-for-longer environment."},
+-  {tk:"RTX",nm:"RTX Corporation",cat:"Stock",ex:"NYSE",sc:70,se:"Bullish",beta:0.92,pe:"32x",mc:"$162B",th:"Defence budget increases globally post-Russia-Ukraine. Pratt & Whitney GTF engine backlog massive. Commercial aerospace recovery supporting Collins Aerospace. Dual revenue streams."},
+-  {tk:"HON",nm:"Honeywell International",cat:"Stock",ex:"NASDAQ",sc:65,se:"Neutral",beta:0.95,pe:"22x",mc:"$138B",th:"Industrial conglomerate breakup under consideration. Aerospace the crown jewel. Building automation benefiting from energy efficiency focus. Valuation reasonable for quality."},
+-  {tk:"T",nm:"AT&T",cat:"Stock",ex:"NYSE",sc:52,se:"Neutral",beta:0.62,pe:"12x",mc:"$155B",th:"Debt reduction on track post-DirecTV disposal. 5G network build maturing. Dividend sustainable at current level. ARPU growth from price increases offsetting subscriber churn."},
+-  {tk:"VZ",nm:"Verizon Communications",cat:"Stock",ex:"NYSE",sc:50,se:"Neutral",beta:0.42,pe:"10x",mc:"$168B",th:"5G fixed wireless access growth offset by wireless subscriber losses. High yield attractive floor. Lead cable liability a wildcard. Capital allocation improving post-investment peak."},
+-  {tk:"MS",nm:"Morgan Stanley",cat:"Stock",ex:"NYSE",sc:70,se:"Bullish",beta:1.42,pe:"16x",mc:"$195B",th:"Wealth management the jewel — $7T+ client assets recurring revenue. Investment banking recovery. E*Trade integration complete. CEO Ted Pick executing well on Gorman's strategy."},
+-  {tk:"SCHW",nm:"Charles Schwab",cat:"Stock",ex:"NYSE",sc:65,se:"Neutral",beta:1.28,pe:"24x",mc:"$138B",th:"Ameritrade integration complete. Net interest income sensitive to rates. Cash sorting headwind fading. Scale in discount brokerage unassailable. Long runway as population ages."},
+-  {tk:"TXN",nm:"Texas Instruments",cat:"Stock",ex:"NASDAQ",sc:68,se:"Bullish",beta:1.08,pe:"30x",mc:"$175B",th:"Analog chip leader with 100,000+ product SKUs. Auto and industrial cycle bottoming. Fab expansion complete. Long dividend growth history. Capital returns generous."},
+-  {tk:"AMAT",nm:"Applied Materials",cat:"Stock",ex:"NASDAQ",sc:72,se:"Bullish",beta:1.45,pe:"22x",mc:"$158B",th:"Semiconductor equipment essential for chip fabrication. AI chip complexity driving equipment intensity higher. China exposure risk partially offset by US demand. Materials engineering leader."},
+-  {tk:"LRCX",nm:"Lam Research",cat:"Stock",ex:"NASDAQ",sc:70,se:"Bullish",beta:1.55,pe:"20x",mc:"$88B",th:"Etch and deposition equipment for leading-edge chips. AI-driven wafer starts rising. NAND cycle recovering. Customer concentration risk (Samsung, SK Hynix, Micron)."},
+-  {tk:"REGN",nm:"Regeneron Pharmaceuticals",cat:"Stock",ex:"NASDAQ",sc:72,se:"Bullish",beta:0.52,pe:"22x",mc:"$96B",th:"Eylea and Dupixent blockbusters. Oncology pipeline entering Phase 3. Weight loss drug Trevogrumab potential. Collaboration with Sanofi durable. Strong FCF generation."},
+-  {tk:"AMGN",nm:"Amgen",cat:"Stock",ex:"NASDAQ",sc:66,se:"Neutral",beta:0.55,pe:"16x",mc:"$152B",th:"MariTide obesity drug Phase 3 data critical. Horizon Therapeutics integration ongoing. Biosimilar competition to legacy products. Dividend growth 12+ years. FCF-generative."},
+-  {tk:"CVX",nm:"Chevron",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:0.92,pe:"13x",mc:"$262B",th:"Permian Basin production growing. Hess merger adds Guyana exposure. $75B buyback authorisation. Lower breakeven vs majors. Renewable energy exposure via Chevron New Energies."},
+-  {tk:"COP",nm:"ConocoPhillips",cat:"Stock",ex:"NYSE",sc:70,se:"Bullish",beta:0.98,pe:"12x",mc:"$118B",th:"Pure-play E&P with lowest cost structure among majors. Marathon acquisition strengthens Permian. Disciplined capital allocation and return of cash. LNG exposure via APLNG."},
+-  {tk:"INTU",nm:"Intuit",cat:"Stock",ex:"NASDAQ",sc:68,se:"Bullish",beta:1.18,pe:"35x",mc:"$178B",th:"TurboTax and QuickBooks monopoly-like positions. AI-powered financial tools emerging. SMB accounting platform sticky. Credit Karma adds consumer data value. Margins expanding."},
+-  {tk:"ADSK",nm:"Autodesk",cat:"Stock",ex:"NASDAQ",sc:65,se:"Neutral",beta:1.12,pe:"30x",mc:"$58B",th:"3D design software essential for AEC and manufacturing. Transition to subscription complete. AI integration in Forma platform. Construction digitisation long runway."},
+-  {tk:"NET",nm:"Cloudflare",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:1.42,pe:"N/A",mc:"$42B",th:"Network edge security platform attacking $100B+ TAM. Workers AI inference platform differentiator. Zero trust architecture adoption accelerating. Rule-of-40 approaching."},
+-  {tk:"DDOG",nm:"Datadog",cat:"Stock",ex:"NASDAQ",sc:70,se:"Bullish",beta:1.35,pe:"65x",mc:"$38B",th:"Observability platform essential for cloud operations. AI infrastructure monitoring demand. 20+ products expanding from monitoring to security. Net retention rate 120%+."},
+-  {tk:"ZS",nm:"Zscaler",cat:"Stock",ex:"NASDAQ",sc:68,se:"Bullish",beta:1.38,pe:"N/A",mc:"$32B",th:"Zero Trust cloud security leader. Government and enterprise digitalisation driving adoption. AI-powered threat detection. Large deal momentum. $4B ARR target approaching."},
+-  {tk:"UPS",nm:"United Parcel Service",cat:"Stock",ex:"NYSE",sc:58,se:"Neutral",beta:1.02,pe:"18x",mc:"$88B",th:"E-commerce volume recovery post-Amazon in-housing. Healthcare logistics growing. Restructuring accelerating. Dividend yield attractive at current valuation. Labour costs elevated."},
+-  {tk:"LOW",nm:"Lowe's Companies",cat:"Stock",ex:"NYSE",sc:66,se:"Neutral",beta:1.12,pe:"18x",mc:"$146B",th:"Housing turnover cycle recovery delayed but coming. Pro customer penetration increasing. Total Home Strategy executing. Technology investments in productivity. DIY mix normalising."},
+-  {tk:"DUK",nm:"Duke Energy",cat:"Stock",ex:"NYSE",sc:60,se:"Neutral",beta:0.42,pe:"18x",mc:"$88B",th:"Regulated utility with rate base growing 7%+. Data centre power demand in Carolinas. Clean energy transition adding capital deployment opportunities. Dividend yield 3.8%."},
++  {tk:"TMO",nm:"Thermo Fisher Scientific",cat:"Stock",ex:"NYSE",sc:72,se:"Bullish",beta:0.72,pe:"28x",mc:"$212B",th:"Thermo Fisher Scientific (TMO) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"ABT",nm:"Abbott Laboratories",cat:"Stock",ex:"NYSE",sc:70,se:"Bullish",beta:0.75,pe:"22x",mc:"$198B",th:"Abbott Laboratories (ABT) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"PM",nm:"Philip Morris International",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:0.62,pe:"18x",mc:"$200B",th:"Philip Morris International (PM) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"NEE",nm:"NextEra Energy",cat:"Stock",ex:"NYSE",sc:66,se:"Neutral",beta:0.52,pe:"20x",mc:"$152B",th:"NextEra Energy (NEE) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"RTX",nm:"RTX Corporation",cat:"Stock",ex:"NYSE",sc:70,se:"Bullish",beta:0.92,pe:"32x",mc:"$162B",th:"RTX Corporation (RTX) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"HON",nm:"Honeywell International",cat:"Stock",ex:"NASDAQ",sc:65,se:"Neutral",beta:0.95,pe:"22x",mc:"$138B",th:"Honeywell International (HON) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"T",nm:"AT&T",cat:"Stock",ex:"NYSE",sc:52,se:"Neutral",beta:0.62,pe:"12x",mc:"$155B",th:"AT&T (T) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"VZ",nm:"Verizon Communications",cat:"Stock",ex:"NYSE",sc:50,se:"Neutral",beta:0.42,pe:"10x",mc:"$168B",th:"Verizon Communications (VZ) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"MS",nm:"Morgan Stanley",cat:"Stock",ex:"NYSE",sc:70,se:"Bullish",beta:1.42,pe:"16x",mc:"$195B",th:"Morgan Stanley (MS) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"SCHW",nm:"Charles Schwab",cat:"Stock",ex:"NYSE",sc:65,se:"Neutral",beta:1.28,pe:"24x",mc:"$138B",th:"Charles Schwab (SCHW) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"TXN",nm:"Texas Instruments",cat:"Stock",ex:"NASDAQ",sc:68,se:"Bullish",beta:1.08,pe:"30x",mc:"$175B",th:"Texas Instruments (TXN) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"AMAT",nm:"Applied Materials",cat:"Stock",ex:"NASDAQ",sc:72,se:"Bullish",beta:1.45,pe:"22x",mc:"$158B",th:"Applied Materials (AMAT) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"LRCX",nm:"Lam Research",cat:"Stock",ex:"NASDAQ",sc:70,se:"Bullish",beta:1.55,pe:"20x",mc:"$88B",th:"Lam Research (LRCX) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"REGN",nm:"Regeneron Pharmaceuticals",cat:"Stock",ex:"NASDAQ",sc:72,se:"Bullish",beta:0.52,pe:"22x",mc:"$96B",th:"Regeneron Pharmaceuticals (REGN) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"AMGN",nm:"Amgen",cat:"Stock",ex:"NASDAQ",sc:66,se:"Neutral",beta:0.55,pe:"16x",mc:"$152B",th:"Amgen (AMGN) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"CVX",nm:"Chevron",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:0.92,pe:"13x",mc:"$262B",th:"Chevron (CVX) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"COP",nm:"ConocoPhillips",cat:"Stock",ex:"NYSE",sc:70,se:"Bullish",beta:0.98,pe:"12x",mc:"$118B",th:"ConocoPhillips (COP) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"INTU",nm:"Intuit",cat:"Stock",ex:"NASDAQ",sc:68,se:"Bullish",beta:1.18,pe:"35x",mc:"$178B",th:"Intuit (INTU) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"ADSK",nm:"Autodesk",cat:"Stock",ex:"NASDAQ",sc:65,se:"Neutral",beta:1.12,pe:"30x",mc:"$58B",th:"Autodesk (ADSK) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"NET",nm:"Cloudflare",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:1.42,pe:"N/A",mc:"$42B",th:"Cloudflare (NET) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"DDOG",nm:"Datadog",cat:"Stock",ex:"NASDAQ",sc:70,se:"Bullish",beta:1.35,pe:"65x",mc:"$38B",th:"Datadog (DDOG) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"ZS",nm:"Zscaler",cat:"Stock",ex:"NASDAQ",sc:68,se:"Bullish",beta:1.38,pe:"N/A",mc:"$32B",th:"Zscaler (ZS) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"UPS",nm:"United Parcel Service",cat:"Stock",ex:"NYSE",sc:58,se:"Neutral",beta:1.02,pe:"18x",mc:"$88B",th:"United Parcel Service (UPS) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"LOW",nm:"Lowe's Companies",cat:"Stock",ex:"NYSE",sc:66,se:"Neutral",beta:1.12,pe:"18x",mc:"$146B",th:"Lowe's Companies (LOW) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"DUK",nm:"Duke Energy",cat:"Stock",ex:"NYSE",sc:60,se:"Neutral",beta:0.42,pe:"18x",mc:"$88B",th:"Duke Energy (DUK) is a Stock listed on NYSE. Source: the desk instrument table."},
+   // ─── More International ───
+-  {tk:"TM",nm:"Toyota Motor ADR",cat:"Stock",ex:"NYSE",sc:65,se:"Neutral",beta:0.72,pe:"9x",mc:"$248B",th:"Hybrid strategy vindicated over pure EV pivot. Production volumes recovering. Hydrogen fuel cell long-term bet. Yen weakness boosts overseas earnings. Stable dividend payer."},
+-  {tk:"NVS",nm:"Novartis ADR",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:0.48,pe:"16x",mc:"$248B",th:"Innovative core spin-off of Sandoz generics complete. Kisqali breast cancer blockbuster. Gene therapy pipeline. Swiss franc exposure. Dividend growth history strong."},
+-  {tk:"UL",nm:"Unilever ADR",cat:"Stock",ex:"NYSE",sc:58,se:"Neutral",beta:0.52,pe:"18x",mc:"$128B",th:"Beauty & Wellbeing separation potential value unlock. Emerging market volume growth. Ice cream IPO simplification. CEO Hein Schumacher restructuring underway. Dividend yield 3.5%."},
+-  {tk:"DEO",nm:"Diageo ADR",cat:"Stock",ex:"NYSE",sc:60,se:"Neutral",beta:0.58,pe:"18x",mc:"$65B",th:"Premium spirits challenged by US consumer destocking. Johnnie Walker and Guinness brands iconic. Emerging market long-term growth thesis intact. Valuation at multi-year lows."},
++  {tk:"TM",nm:"Toyota Motor ADR",cat:"Stock",ex:"NYSE",sc:65,se:"Neutral",beta:0.72,pe:"9x",mc:"$248B",th:"Toyota Motor ADR (TM) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"NVS",nm:"Novartis ADR",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:0.48,pe:"16x",mc:"$248B",th:"Novartis ADR (NVS) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"UL",nm:"Unilever ADR",cat:"Stock",ex:"NYSE",sc:58,se:"Neutral",beta:0.52,pe:"18x",mc:"$128B",th:"Unilever ADR (UL) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"DEO",nm:"Diageo ADR",cat:"Stock",ex:"NYSE",sc:60,se:"Neutral",beta:0.58,pe:"18x",mc:"$65B",th:"Diageo ADR (DEO) is a Stock listed on NYSE. Source: the desk instrument table."},
+   // ─── More Crypto ───
+-  {tk:"BCH",nm:"Bitcoin Cash",cat:"Crypto",ex:"GLOBAL",sc:38,se:"Neutral",beta:1.85,pe:"-",mc:"$8B",th:"Bitcoin fork with larger blocks. Payment use case limited vs Lightning Network. Halving cycle impact diminishing. Losing relevance vs newer L1s."},
+-  {tk:"XLM",nm:"Stellar",cat:"Crypto",ex:"GLOBAL",sc:42,se:"Neutral",beta:1.62,pe:"-",mc:"$3B",th:"Cross-border payments focus. IBM World Wire partnership. Central bank digital currency experiments. Limited DeFi ecosystem vs competitors. PaySend integration positive."},
+-  {tk:"FIL",nm:"Filecoin",cat:"Crypto",ex:"GLOBAL",sc:45,se:"Neutral",beta:2.15,pe:"-",mc:"$3B",th:"Decentralised storage network. AI data storage demand narrative. Competition from Arweave. Storage capacity growth but tokenomics complex. Developer adoption slowly increasing."},
+-  {tk:"APT",nm:"Aptos",cat:"Crypto",ex:"GLOBAL",sc:52,se:"Neutral",beta:2.40,pe:"-",mc:"$3B",th:"Move language blockchain from ex-Meta engineers. High TPS architecture. Ecosystem building slowly. Institutional backing from a16z. Competition from SUI which shares same origins."},
+-  {tk:"SUI",nm:"Sui",cat:"Crypto",ex:"GLOBAL",sc:55,se:"Neutral-Bull",beta:2.60,pe:"-",mc:"$7B",th:"High throughput Move-based blockchain. Gaming and NFT ecosystem growing fastest. Mysticeti consensus mechanism. Korean retail interest significant. Strong VC backing."},
++  {tk:"BCH",nm:"Bitcoin Cash",cat:"Crypto",ex:"GLOBAL",sc:38,se:"Neutral",beta:1.85,pe:"-",mc:"$8B",th:"Bitcoin Cash (BCH) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
++  {tk:"XLM",nm:"Stellar",cat:"Crypto",ex:"GLOBAL",sc:42,se:"Neutral",beta:1.62,pe:"-",mc:"$3B",th:"Stellar (XLM) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
++  {tk:"FIL",nm:"Filecoin",cat:"Crypto",ex:"GLOBAL",sc:45,se:"Neutral",beta:2.15,pe:"-",mc:"$3B",th:"Filecoin (FIL) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
++  {tk:"APT",nm:"Aptos",cat:"Crypto",ex:"GLOBAL",sc:52,se:"Neutral",beta:2.40,pe:"-",mc:"$3B",th:"Aptos (APT) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
++  {tk:"SUI",nm:"Sui",cat:"Crypto",ex:"GLOBAL",sc:55,se:"Neutral-Bull",beta:2.60,pe:"-",mc:"$7B",th:"Sui (SUI) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
+   // ─── More FX ───
+-  {tk:"USDMXN",nm:"USD/MXN",cat:"FX",ex:"FOREX",sc:52,se:"Volatile",beta:0.28,pe:"-",mc:"-",th:"Mexican peso carry trade popular given high rates. Nearshoring manufacturing boom supporting economy. AMLO successor policy uncertainty. US election trade policy risk significant."},
+-  {tk:"USDBRL",nm:"USD/BRL",cat:"FX",ex:"FOREX",sc:48,se:"Bearish",beta:0.35,pe:"-",mc:"-",th:"Brazil fiscal deficit concerns weakening real. Lula spending plans under market scrutiny. High interest rates providing some support. Commodity exports backstop."},
+-  {tk:"USDINR",nm:"USD/INR",cat:"FX",ex:"FOREX",sc:55,se:"Neutral",beta:0.12,pe:"-",mc:"-",th:"RBI managing rupee carefully. India strong growth supporting currency. FPI inflows from index inclusion. Limited volatility vs EM peers due to RBI intervention."},
++  {tk:"USDMXN",nm:"USD/MXN",cat:"FX",ex:"FOREX",sc:52,se:"Volatile",beta:0.28,pe:"-",mc:"-",th:"USD/MXN (USDMXN) is a FX listed on FOREX. Source: the desk instrument table."},
++  {tk:"USDBRL",nm:"USD/BRL",cat:"FX",ex:"FOREX",sc:48,se:"Bearish",beta:0.35,pe:"-",mc:"-",th:"USD/BRL (USDBRL) is a FX listed on FOREX. Source: the desk instrument table."},
++  {tk:"USDINR",nm:"USD/INR",cat:"FX",ex:"FOREX",sc:55,se:"Neutral",beta:0.12,pe:"-",mc:"-",th:"USD/INR (USDINR) is a FX listed on FOREX. Source: the desk instrument table."},
+   // ─── More Commodities ───
+-  {tk:"OJ",nm:"Orange Juice",cat:"Commodity",ex:"ICE",sc:58,se:"Bullish",beta:0.22,pe:"-",mc:"-",th:"Florida citrus greening disease destroying supply. Brazil crop variable. Record prices reflecting genuine supply crisis. Substitution risk at extreme prices."},
+-  {tk:"LUMBER",nm:"Lumber",cat:"Commodity",ex:"CME",sc:50,se:"Neutral",beta:0.45,pe:"-",mc:"-",th:"Housing starts the key driver. Sawmill capacity additions capped upside. Canadian supply constraints. Housing affordability crisis reducing demand. High volatility commodity."},
+-  {tk:"PALLADIUM",nm:"Palladium",cat:"Commodity",ex:"NYMEX",sc:45,se:"Bearish",beta:0.55,pe:"-",mc:"-",th:"EV transition reducing autocatalyst demand structurally. Russia supply risk partially priced. Platinum substitution ongoing in catalytic converters. Secular headwind from EV adoption."},
++  {tk:"OJ",nm:"Orange Juice",cat:"Commodity",ex:"ICE",sc:58,se:"Bullish",beta:0.22,pe:"-",mc:"-",th:"Orange Juice (OJ) is a Commodity listed on ICE. Source: the desk instrument table."},
++  {tk:"LUMBER",nm:"Lumber",cat:"Commodity",ex:"CME",sc:50,se:"Neutral",beta:0.45,pe:"-",mc:"-",th:"Lumber (LUMBER) is a Commodity listed on CME. Source: the desk instrument table."},
++  {tk:"PALLADIUM",nm:"Palladium",cat:"Commodity",ex:"NYMEX",sc:45,se:"Bearish",beta:0.55,pe:"-",mc:"-",th:"Palladium (PALLADIUM) is a Commodity listed on NYMEX. Source: the desk instrument table."},
+   // ─── ETFs, Indices & Macro ───
+-  {tk:"SPY",nm:"SPDR S&P 500 ETF",cat:"Stock",ex:"NYSE",sc:70,se:"Neutral",beta:1.0,pe:"-",mc:"-",th:"Broad US large-cap benchmark ETF. Most liquid equity instrument globally. Tracks S&P 500."},
+-  {tk:"QQQ",nm:"Invesco QQQ",cat:"Stock",ex:"NASDAQ",sc:72,se:"Bullish",beta:1.15,pe:"-",mc:"-",th:"Nasdaq-100 tracker. Mag 7 heavy. AI and growth tilt. Higher beta than SPY."},
+-  {tk:"IWM",nm:"iShares Russell 2000",cat:"Stock",ex:"NYSE",sc:58,se:"Neutral",beta:1.25,pe:"-",mc:"-",th:"Small-cap US equities. Rate-sensitive and tracks the domestic economy. Outperforms early cycle."},
+-  {tk:"RUT",nm:"Russell 2000 Index",cat:"Stock",ex:"US",sc:58,se:"Neutral",beta:1.25,pe:"-",mc:"-",th:"Small-cap benchmark. Credit conditions and domestic GDP sensitive."},
+-  {tk:"EEM",nm:"iShares EM ETF",cat:"Stock",ex:"NYSE",sc:55,se:"Neutral",beta:1.1,pe:"-",mc:"-",th:"Emerging markets equities. China and India heavy. Dollar and commodity sensitive."},
+-  {tk:"SOXX",nm:"iShares Semiconductor",cat:"Stock",ex:"NASDAQ",sc:76,se:"Bullish",beta:1.6,pe:"-",mc:"-",th:"Semiconductor sector ETF. AI capex beneficiary. NVDA, AVGO, AMD weighted."},
+-  {tk:"TLT",nm:"iShares 20+ Year Treasury",cat:"Stock",ex:"NASDAQ",sc:48,se:"Bearish",beta:-0.2,pe:"-",mc:"-",th:"Tracks long-duration Treasuries. Inverse to yields. Risk-off hedge when rates fall."},
+-  {tk:"ARKK",nm:"ARK Innovation ETF",cat:"Stock",ex:"NYSE",sc:52,se:"Volatile",beta:1.8,pe:"-",mc:"-",th:"Disruptive innovation basket. High beta growth. Rate-sensitive and speculative."},
+-  {tk:"TNX",nm:"US 10Y Treasury Yield",cat:"FX",ex:"US",sc:60,se:"Neutral",beta:0.1,pe:"-",mc:"-",th:"Benchmark risk-free rate. Drives equity multiples and mortgage rates. Fed policy anchor."},
+-  {tk:"XLK",nm:"Tech Select Sector",cat:"Stock",ex:"NYSE",sc:74,se:"Bullish",beta:1.2,pe:"-",mc:"-",th:"S&P 500 Technology sector ETF. Largest S&P sector weight."},
+-  {tk:"XLC",nm:"Communication Services",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:1.1,pe:"-",mc:"-",th:"GOOGL, META, NFLX weighted communication sector ETF."},
+-  {tk:"XLY",nm:"Consumer Discretionary",cat:"Stock",ex:"NYSE",sc:65,se:"Neutral",beta:1.15,pe:"-",mc:"-",th:"AMZN, TSLA, HD weighted. Consumer spending and rate sensitive."},
+-  {tk:"XLF",nm:"Financial Select Sector",cat:"Stock",ex:"NYSE",sc:70,se:"Bullish",beta:1.1,pe:"-",mc:"-",th:"Banks and insurers. Yield curve and credit cycle sensitive."},
+-  {tk:"XLV",nm:"Health Care Select",cat:"Stock",ex:"NYSE",sc:66,se:"Neutral",beta:0.7,pe:"-",mc:"-",th:"Defensive healthcare sector. Drug pricing and M&A catalysts."},
+-  {tk:"XLE",nm:"Energy Select Sector",cat:"Stock",ex:"NYSE",sc:72,se:"Bullish",beta:0.9,pe:"-",mc:"-",th:"XOM, CVX weighted energy. Oil price and geopolitics driven."},
+-  {tk:"XLI",nm:"Industrial Select",cat:"Stock",ex:"NYSE",sc:64,se:"Neutral",beta:1.05,pe:"-",mc:"-",th:"CAT, RTX, UPS weighted. Tracks the PMI and capex cycle."},
+-  {tk:"XLP",nm:"Consumer Staples",cat:"Stock",ex:"NYSE",sc:62,se:"Neutral",beta:0.55,pe:"-",mc:"-",th:"PG, KO, WMT weighted defensive staples."},
+-  {tk:"XLB",nm:"Materials Select",cat:"Stock",ex:"NYSE",sc:60,se:"Neutral",beta:1.0,pe:"-",mc:"-",th:"Chemicals and mining. China and industrial demand sensitive."},
+-  {tk:"XLU",nm:"Utilities Select",cat:"Stock",ex:"NYSE",sc:58,se:"Neutral",beta:0.45,pe:"-",mc:"-",th:"Defensive sector that moves with bonds. AI data centre power demand tailwind."},
+-  {tk:"XLRE",nm:"Real Estate Select",cat:"Stock",ex:"NYSE",sc:54,se:"Neutral",beta:0.85,pe:"-",mc:"-",th:"Rate-sensitive REITs basket. Benefits from falling rates."},
++  {tk:"SPY",nm:"SPDR S&P 500 ETF",cat:"Stock",ex:"NYSE",sc:70,se:"Neutral",beta:1.0,pe:"-",mc:"-",th:"SPDR S&P 500 ETF (SPY) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"QQQ",nm:"Invesco QQQ",cat:"Stock",ex:"NASDAQ",sc:72,se:"Bullish",beta:1.15,pe:"-",mc:"-",th:"Invesco QQQ (QQQ) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"IWM",nm:"iShares Russell 2000",cat:"Stock",ex:"NYSE",sc:58,se:"Neutral",beta:1.25,pe:"-",mc:"-",th:"iShares Russell 2000 (IWM) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"RUT",nm:"Russell 2000 Index",cat:"Stock",ex:"US",sc:58,se:"Neutral",beta:1.25,pe:"-",mc:"-",th:"Russell 2000 Index (RUT) is a Stock listed on US. Source: the desk instrument table."},
++  {tk:"EEM",nm:"iShares EM ETF",cat:"Stock",ex:"NYSE",sc:55,se:"Neutral",beta:1.1,pe:"-",mc:"-",th:"iShares EM ETF (EEM) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"SOXX",nm:"iShares Semiconductor",cat:"Stock",ex:"NASDAQ",sc:76,se:"Bullish",beta:1.6,pe:"-",mc:"-",th:"iShares Semiconductor (SOXX) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"TLT",nm:"iShares 20+ Year Treasury",cat:"Stock",ex:"NASDAQ",sc:48,se:"Bearish",beta:-0.2,pe:"-",mc:"-",th:"iShares 20+ Year Treasury (TLT) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"ARKK",nm:"ARK Innovation ETF",cat:"Stock",ex:"NYSE",sc:52,se:"Volatile",beta:1.8,pe:"-",mc:"-",th:"ARK Innovation ETF (ARKK) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"TNX",nm:"US 10Y Treasury Yield",cat:"FX",ex:"US",sc:60,se:"Neutral",beta:0.1,pe:"-",mc:"-",th:"US 10Y Treasury Yield (TNX) is a FX listed on US. Source: the desk instrument table."},
++  {tk:"XLK",nm:"Tech Select Sector",cat:"Stock",ex:"NYSE",sc:74,se:"Bullish",beta:1.2,pe:"-",mc:"-",th:"Tech Select Sector (XLK) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"XLC",nm:"Communication Services",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:1.1,pe:"-",mc:"-",th:"Communication Services (XLC) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"XLY",nm:"Consumer Discretionary",cat:"Stock",ex:"NYSE",sc:65,se:"Neutral",beta:1.15,pe:"-",mc:"-",th:"Consumer Discretionary (XLY) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"XLF",nm:"Financial Select Sector",cat:"Stock",ex:"NYSE",sc:70,se:"Bullish",beta:1.1,pe:"-",mc:"-",th:"Financial Select Sector (XLF) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"XLV",nm:"Health Care Select",cat:"Stock",ex:"NYSE",sc:66,se:"Neutral",beta:0.7,pe:"-",mc:"-",th:"Health Care Select (XLV) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"XLE",nm:"Energy Select Sector",cat:"Stock",ex:"NYSE",sc:72,se:"Bullish",beta:0.9,pe:"-",mc:"-",th:"Energy Select Sector (XLE) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"XLI",nm:"Industrial Select",cat:"Stock",ex:"NYSE",sc:64,se:"Neutral",beta:1.05,pe:"-",mc:"-",th:"Industrial Select (XLI) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"XLP",nm:"Consumer Staples",cat:"Stock",ex:"NYSE",sc:62,se:"Neutral",beta:0.55,pe:"-",mc:"-",th:"Consumer Staples (XLP) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"XLB",nm:"Materials Select",cat:"Stock",ex:"NYSE",sc:60,se:"Neutral",beta:1.0,pe:"-",mc:"-",th:"Materials Select (XLB) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"XLU",nm:"Utilities Select",cat:"Stock",ex:"NYSE",sc:58,se:"Neutral",beta:0.45,pe:"-",mc:"-",th:"Utilities Select (XLU) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"XLRE",nm:"Real Estate Select",cat:"Stock",ex:"NYSE",sc:54,se:"Neutral",beta:0.85,pe:"-",mc:"-",th:"Real Estate Select (XLRE) is a Stock listed on NYSE. Source: the desk instrument table."},
+   // ─── High-beta & thematic ───
+-  {tk:"RKLB",nm:"Rocket Lab",cat:"Stock",ex:"NASDAQ",sc:62,se:"Bullish",beta:2.1,pe:"N/A",mc:"$14B",th:"Space launch and satellite infrastructure. Neutron rocket catalyst. Defense and commercial contracts growing."},
+-  {tk:"HOOD",nm:"Robinhood Markets",cat:"Stock",ex:"NASDAQ",sc:58,se:"Neutral-Bull",beta:2.4,pe:"28x",mc:"$42B",th:"Retail trading platform. Crypto and options revenue diversifying. Gold subscription growing. Rate on cash balances key driver."},
+-  {tk:"MSTR",nm:"MicroStrategy",cat:"Stock",ex:"NASDAQ",sc:55,se:"Volatile",beta:3.5,pe:"N/A",mc:"$95B",th:"Bitcoin treasury strategy. The shares move more than Bitcoin. Software business secondary. Extreme volatility."},
+-  {tk:"GME",nm:"GameStop",cat:"Stock",ex:"NYSE",sc:40,se:"Volatile",beta:2.8,pe:"N/A",mc:"$12B",th:"Meme stock with Bitcoin treasury pivot. Retail sentiment driven. Fundamentals disconnected from price action."},
+-  {tk:"SPOT",nm:"Spotify",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:1.5,pe:"45x",mc:"$95B",th:"Audio streaming leader. Margin expansion from price increases and ad tier. Podcast and audiobook growth. Operating leverage emerging."},
+-  {tk:"LMT",nm:"Lockheed Martin",cat:"Stock",ex:"NYSE",sc:72,se:"Bullish",beta:0.65,pe:"18x",mc:"$115B",th:"Defense prime beneficiary of elevated geopolitical spending. F-35 backlog. Dividend aristocrat characteristics."},
+-  {tk:"BMY",nm:"Bristol-Myers Squibb",cat:"Stock",ex:"NYSE",sc:58,se:"Neutral",beta:0.45,pe:"8x",mc:"$98B",th:"Oncology pipeline post-Revlimid cliff. KarXT schizophrenia drug potential. High dividend yield floor."},
+-  {tk:"GILD",nm:"Gilead Sciences",cat:"Stock",ex:"NASDAQ",sc:64,se:"Neutral",beta:0.42,pe:"14x",mc:"$118B",th:"HIV franchise durable. Oncology expansion via Trodelvy. Yeztugo PrEP approval. Cash generative."},
+-  {tk:"ENPH",nm:"Enphase Energy",cat:"Stock",ex:"NASDAQ",sc:55,se:"Bearish",beta:2.0,pe:"22x",mc:"$12B",th:"Solar microinverter leader. US residential solar slowdown headwind. International expansion and storage attach rate key."},
+-  {tk:"FSLR",nm:"First Solar",cat:"Stock",ex:"NASDAQ",sc:70,se:"Bullish",beta:1.4,pe:"18x",mc:"$28B",th:"US-made thin-film solar panels. IRA subsidies tailwind. Data centre and utility scale demand."},
+-  {tk:"EOG",nm:"EOG Resources",cat:"Stock",ex:"NYSE",sc:72,se:"Bullish",beta:1.1,pe:"11x",mc:"$78B",th:"Premier US shale operator. Low-cost Permian production. Disciplined capital return."},
+-  {tk:"SLB",nm:"SLB (Schlumberger)",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:1.2,pe:"14x",mc:"$62B",th:"Oilfield services leader. International offshore recovery. Digital and decarbonisation services growing."},
+-  {tk:"SO",nm:"Southern Company",cat:"Stock",ex:"NYSE",sc:62,se:"Neutral",beta:0.42,pe:"20x",mc:"$98B",th:"Regulated utility with nuclear and gas mix. Data centre power demand in Southeast US."},
+-  {tk:"PLD",nm:"Prologis",cat:"Stock",ex:"NYSE",sc:66,se:"Neutral",beta:1.0,pe:"28x",mc:"$108B",th:"Industrial logistics REIT leader. E-commerce warehouse demand. Rate sensitivity on cap rates."},
+-  {tk:"AMT",nm:"American Tower",cat:"Stock",ex:"NYSE",sc:64,se:"Neutral",beta:0.88,pe:"32x",mc:"$95B",th:"Cell tower REIT. 5G buildout and data transmission infrastructure. International exposure."},
+-  {tk:"EQIX",nm:"Equinix",cat:"Stock",ex:"NASDAQ",sc:72,se:"Bullish",beta:0.95,pe:"65x",mc:"$88B",th:"Data centre REIT. AI workload colocation demand. Interconnection revenue moat."},
+-  {tk:"SPG",nm:"Simon Property Group",cat:"Stock",ex:"NYSE",sc:60,se:"Neutral",beta:1.2,pe:"18x",mc:"$58B",th:"Premium mall REIT. Outlet and mixed-use pivot. Consumer discretionary exposure."},
+-  {tk:"O",nm:"Realty Income",cat:"Stock",ex:"NYSE",sc:65,se:"Neutral",beta:0.75,pe:"42x",mc:"$52B",th:"Monthly dividend REIT. Net lease retail and industrial. Moves with bonds, with inflation escalators."},
+-  {tk:"VRTX",nm:"Vertex Pharmaceuticals",cat:"Stock",ex:"NASDAQ",sc:76,se:"Bullish",beta:0.55,pe:"28x",mc:"$118B",th:"CF franchise dominant. Pain and kidney disease pipeline expanding. Casgevy gene therapy approved."},
+-  {tk:"BRENT",nm:"Brent Crude",cat:"Commodity",ex:"ICE",sc:70,se:"Volatile",beta:0.5,pe:"-",mc:"-",th:"Global oil benchmark. Middle East supply risk premium. OPEC+ discipline key driver."},
+-  {tk:"URA",nm:"Global X Uranium ETF",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:1.3,pe:"-",mc:"-",th:"Nuclear renaissance and AI power demand. Uranium miners and physical uranium exposure."},
++  {tk:"RKLB",nm:"Rocket Lab",cat:"Stock",ex:"NASDAQ",sc:62,se:"Bullish",beta:2.1,pe:"N/A",mc:"$14B",th:"Rocket Lab (RKLB) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"HOOD",nm:"Robinhood Markets",cat:"Stock",ex:"NASDAQ",sc:58,se:"Neutral-Bull",beta:2.4,pe:"28x",mc:"$42B",th:"Robinhood Markets (HOOD) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"MSTR",nm:"MicroStrategy",cat:"Stock",ex:"NASDAQ",sc:55,se:"Volatile",beta:3.5,pe:"N/A",mc:"$95B",th:"MicroStrategy (MSTR) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"GME",nm:"GameStop",cat:"Stock",ex:"NYSE",sc:40,se:"Volatile",beta:2.8,pe:"N/A",mc:"$12B",th:"GameStop (GME) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"SPOT",nm:"Spotify",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:1.5,pe:"45x",mc:"$95B",th:"Spotify (SPOT) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"LMT",nm:"Lockheed Martin",cat:"Stock",ex:"NYSE",sc:72,se:"Bullish",beta:0.65,pe:"18x",mc:"$115B",th:"Lockheed Martin (LMT) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"BMY",nm:"Bristol-Myers Squibb",cat:"Stock",ex:"NYSE",sc:58,se:"Neutral",beta:0.45,pe:"8x",mc:"$98B",th:"Bristol-Myers Squibb (BMY) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"GILD",nm:"Gilead Sciences",cat:"Stock",ex:"NASDAQ",sc:64,se:"Neutral",beta:0.42,pe:"14x",mc:"$118B",th:"Gilead Sciences (GILD) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"ENPH",nm:"Enphase Energy",cat:"Stock",ex:"NASDAQ",sc:55,se:"Bearish",beta:2.0,pe:"22x",mc:"$12B",th:"Enphase Energy (ENPH) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"FSLR",nm:"First Solar",cat:"Stock",ex:"NASDAQ",sc:70,se:"Bullish",beta:1.4,pe:"18x",mc:"$28B",th:"First Solar (FSLR) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"EOG",nm:"EOG Resources",cat:"Stock",ex:"NYSE",sc:72,se:"Bullish",beta:1.1,pe:"11x",mc:"$78B",th:"EOG Resources (EOG) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"SLB",nm:"SLB (Schlumberger)",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:1.2,pe:"14x",mc:"$62B",th:"SLB (Schlumberger) (SLB) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"SO",nm:"Southern Company",cat:"Stock",ex:"NYSE",sc:62,se:"Neutral",beta:0.42,pe:"20x",mc:"$98B",th:"Southern Company (SO) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"PLD",nm:"Prologis",cat:"Stock",ex:"NYSE",sc:66,se:"Neutral",beta:1.0,pe:"28x",mc:"$108B",th:"Prologis (PLD) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"AMT",nm:"American Tower",cat:"Stock",ex:"NYSE",sc:64,se:"Neutral",beta:0.88,pe:"32x",mc:"$95B",th:"American Tower (AMT) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"EQIX",nm:"Equinix",cat:"Stock",ex:"NASDAQ",sc:72,se:"Bullish",beta:0.95,pe:"65x",mc:"$88B",th:"Equinix (EQIX) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"SPG",nm:"Simon Property Group",cat:"Stock",ex:"NYSE",sc:60,se:"Neutral",beta:1.2,pe:"18x",mc:"$58B",th:"Simon Property Group (SPG) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"O",nm:"Realty Income",cat:"Stock",ex:"NYSE",sc:65,se:"Neutral",beta:0.75,pe:"42x",mc:"$52B",th:"Realty Income (O) is a Stock listed on NYSE. Source: the desk instrument table."},
++  {tk:"VRTX",nm:"Vertex Pharmaceuticals",cat:"Stock",ex:"NASDAQ",sc:76,se:"Bullish",beta:0.55,pe:"28x",mc:"$118B",th:"Vertex Pharmaceuticals (VRTX) is a Stock listed on NASDAQ. Source: the desk instrument table."},
++  {tk:"BRENT",nm:"Brent Crude",cat:"Commodity",ex:"ICE",sc:70,se:"Volatile",beta:0.5,pe:"-",mc:"-",th:"Brent Crude (BRENT) is a Commodity listed on ICE. Source: the desk instrument table."},
++  {tk:"URA",nm:"Global X Uranium ETF",cat:"Stock",ex:"NYSE",sc:68,se:"Bullish",beta:1.3,pe:"-",mc:"-",th:"Global X Uranium ETF (URA) is a Stock listed on NYSE. Source: the desk instrument table."},
+   // ─── More Crypto ───
+-  {tk:"SHIB",nm:"Shiba Inu",cat:"Crypto",ex:"GLOBAL",sc:38,se:"Volatile",beta:3.5,pe:"-",mc:"$12B",th:"Meme token with Shibarium L2. Retail-driven. Ecosystem development ongoing."},
+-  {tk:"PEPE",nm:"Pepe",cat:"Crypto",ex:"GLOBAL",sc:35,se:"Volatile",beta:4.0,pe:"-",mc:"$5B",th:"Pure meme coin. No utility thesis. Extreme volatility and sentiment-driven."},
+-  {tk:"ATOM",nm:"Cosmos",cat:"Crypto",ex:"GLOBAL",sc:52,se:"Neutral",beta:1.9,pe:"-",mc:"$3B",th:"Inter-blockchain communication hub. IBC protocol connecting chains. App-chain thesis."},
+-  {tk:"INJ",nm:"Injective",cat:"Crypto",ex:"GLOBAL",sc:58,se:"Neutral-Bull",beta:2.3,pe:"-",mc:"$2B",th:"DeFi-focused L1 with order book DEX. Institutional derivatives narrative."},
++  {tk:"SHIB",nm:"Shiba Inu",cat:"Crypto",ex:"GLOBAL",sc:38,se:"Volatile",beta:3.5,pe:"-",mc:"$12B",th:"Shiba Inu (SHIB) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
++  {tk:"PEPE",nm:"Pepe",cat:"Crypto",ex:"GLOBAL",sc:35,se:"Volatile",beta:4.0,pe:"-",mc:"$5B",th:"Pepe (PEPE) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
++  {tk:"ATOM",nm:"Cosmos",cat:"Crypto",ex:"GLOBAL",sc:52,se:"Neutral",beta:1.9,pe:"-",mc:"$3B",th:"Cosmos (ATOM) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
++  {tk:"INJ",nm:"Injective",cat:"Crypto",ex:"GLOBAL",sc:58,se:"Neutral-Bull",beta:2.3,pe:"-",mc:"$2B",th:"Injective (INJ) is a Crypto listed on GLOBAL. Source: the desk instrument table."},
+   // ─── More FX crosses ───
+-  {tk:"EURJPY",nm:"EUR/JPY",cat:"FX",ex:"FOREX",sc:58,se:"Neutral",beta:0.2,pe:"-",mc:"-",th:"Carry trade barometer. ECB vs BOJ policy divergence. Moves with risk sentiment."},
+-  {tk:"GBPJPY",nm:"GBP/JPY",cat:"FX",ex:"FOREX",sc:56,se:"Volatile",beta:0.25,pe:"-",mc:"-",th:"High-volatility cross. UK inflation and BOJ intervention risk."},
++  {tk:"EURJPY",nm:"EUR/JPY",cat:"FX",ex:"FOREX",sc:58,se:"Neutral",beta:0.2,pe:"-",mc:"-",th:"EUR/JPY (EURJPY) is a FX listed on FOREX. Source: the desk instrument table."},
++  {tk:"GBPJPY",nm:"GBP/JPY",cat:"FX",ex:"FOREX",sc:56,se:"Volatile",beta:0.25,pe:"-",mc:"-",th:"GBP/JPY (GBPJPY) is a FX listed on FOREX. Source: the desk instrument table."},
+ ];
+ 
+ const SIGS = [
+@@ -542,7 +542,7 @@
+     ? `Live price: $${pxLive}${chgLive != null ? ` (${chgLive >= 0 ? "+" : ""}${chgLive}%)` : ""} today [terminal feed]`
+     : `Live price: NO SYNC — awaiting feed (do not invent a price)`;
+   const regime = _rt37LensRegime();
+-  const powers = [pxLive != null ? "Live Price" : "Price Pending", "Regime", "Macro Signals", "Platform Thesis"];
++  const powers = [pxLive != null ? "Live Price" : "Price Pending", "Regime", "Macro Signals"].concat((typeof fe78_about === "function" && fe78_about(a)) ? ["Platform Thesis"] : []);
+   const signals = SIGS.slice().sort((x, y) => y.cf - x.cf).slice(0, 5).map(s => `${s.a} (${s.cf}% ${s.cat}): ${s.x}`).join("\n");
+   const tickerNews = NEWS.filter(n => _tagNewsHeadline(n.x).includes(tk) || n.x.toUpperCase().includes(tk)).slice(0, 5).map(n => `[${n.tg}] ${n.x}`).join("\n");
+   if (tickerNews) powers.push("News Feed");
+@@ -580,7 +580,7 @@
+ ${priceLine}
+ AI score: ${a.sc}/100 | Sentiment: ${a.se}
+ ${a.beta != null && a.beta !== "" && a.beta !== "—" ? `Beta: ${a.beta} | ` : ""}P/E: ${a.pe || "—"} | Market cap: ${a.mc || "—"}${_rt33Ctx(tk)}
+-Platform thesis: ${a.th || "None"}
++${(function(){var tx=typeof fe78_about==="function"?fe78_about(a):"";return tx?("Platform thesis: "+tx):"";})()}
+ 
+ Macro regime: ${regime.label}
+ Macro tape: ${macroBits}
+@@ -716,7 +716,7 @@
+   return { lenses: _rt32Deep(data.lenses, tk), intelligence: _rt32Deep(data.intelligence, tk), meta: data.meta };
+ }
+ function _lensFallback(tk, a) {
+-  const rows = INVEST_LENSES.map(m => ({ name: m.nm, role: m.rl, analysis: `${m.rl} view on ${tk}: Score ${a.sc}/100. ${_rt16Clip(a.th || "", 80)}`, verdict: a.sc >= 70 ? "BUY" : "HOLD" }));
++  const rows = INVEST_LENSES.map(m => ({ name: m.nm, role: m.rl, analysis: `${m.rl} view on ${tk}: Score ${a.sc}/100. ${_rt16Clip((typeof fe78_about==="function"?fe78_about(a):"") || "", 80)}`, verdict: a.sc >= 70 ? "BUY" : "HOLD" }));
+   rows.push({ name: LENS_SYNTHESIS, role: "Final Synthesis", analysis: `Lens consensus on ${tk}: ${a.sc >= 70 ? "Constructive" : "Mixed"}. Score ${a.sc}/100.`, verdict: a.sc >= 70 ? "IMPLEMENT" : "MONITOR" });
+   return rows;
+ }
+@@ -774,7 +774,7 @@
+       <div>
+         <div style="display:flex;align-items:center;gap:6px"><div style="font-size:8px;color:${re.col};font-family:var(--mn);font-weight:700;letter-spacing:0.1em">REGIME ENGINE · MODEL</div><span class="live-dot" title="Uses live inputs when synced"></span></div>
+         <div style="font-size:10px;color:var(--t3);margin-top:2px;font-family:var(--mn)">Educational score — not a forecast</div>
+-        <div style="font-size:15px;font-weight:800;color:${re.col};margin-top:4px">${re.label}</div>
++        <div style="font-size:15px;font-weight:800;color:${re.col};margin-top:4px">${re.label}</div>${re.asOfUk ? `<div style="font-size:10px;color:var(--t3);margin-top:2px;font-family:var(--mn)">${_escHtml(re.asOfUk)}</div>` : ""}
+         <div style="font-size:10px;color:var(--t2);margin-top:4px;line-height:1.5">${re.spxProxy ? "SPY" : "SPX"} ${re.spx === "—" ? "—" : "$" + re.spx}${re.spxChg === "—" ? "" : ` (${Number(re.spxChg) >= 0 ? "+" : ""}${re.spxChg}%)`}${re.spxProxy ? " · tracked via an ETF" : ""} · VIX ${re.vix} · Oil ${re.oil === "—" ? "—" : "$" + re.oil} · BTC ${re.btc === "—" ? "—" : "$" + re.btc}</div>
+         <div style="font-size:9px;color:var(--t3);margin-top:6px;font-family:var(--mn)">${re.rotation?.label || ""}</div>
+       </div>
+@@ -1429,7 +1429,7 @@
+     const synced = hasSyncedQuote(s.tk);
+     const chN = liveChg(s.tk);
+     const col = !synced || chN == null ? "var(--t3)" : chN > 0 ? "var(--gn)" : chN < 0 ? "var(--rd)" : "var(--t3)";
+-    const chg = !synced || chN == null ? "—" : `${chN >= 0 ? "+" : ""}${d.c}%`;
++    const chg = !synced || chN == null ? "—" : fe78_chgHtml(s.tk, `${chN >= 0 ? "+" : ""}${d.c}%`);
+     const fe77Lbl = s.tk === "DXY" && typeof fe77_dxyName === "function" ? fe77_dxyName() : s.lbl;
+     const title = _escAttr(`${fe77Lbl} · ${d.label || "NO SYNC"}${d.asOf ? ` · as of ${_fmtAsOf(d.asOf)}` : ""} · ${d.detail || "tap for Lab"}`);
+     return `<button type="button" class="spine-cell${synced ? "" : " spine-nosync"}" onclick="setLabTicker('${s.tk}');nav('lab')" title="${title}">
+@@ -2337,7 +2337,7 @@
+   const leadTxt = heat.leadPct != null ? `${heat.lead} ${heat.leadPct >= 0 ? "+" : ""}${heat.leadPct.toFixed(1)}%` : heat.shortSig;
+   const trailTxt = heat.trailPct != null ? `${heat.trail} ${heat.trailPct >= 0 ? "+" : ""}${heat.trailPct.toFixed(1)}%` : "—";
+   return `<div class="neural-strip">
+-    <div class="ns-cell ns-regime"><div><span class="ns-lbl">REGIME</span><span class="ns-val" style="color:${re.col}">${IS_DESKTOP() ? re.label : _mobShortRegime(re.label)} · ${re.score}</span></div></div>
++    <div class="ns-cell ns-regime" title="${fe78_regimeTitle(re)}"><div><span class="ns-lbl">REGIME</span><span class="ns-val" style="color:${re.col}">${IS_DESKTOP() ? re.label : _mobShortRegime(re.label)} · ${re.score}</span></div></div>
+     <div class="ns-cell ns-sector gc-a" role="button" tabindex="0" onclick="nav('sectors')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();nav('sectors')}" title="${heat.sig.desc || heat.sig.label}"><span class="ns-lbl">ROTATION</span><span class="ns-val" style="color:${heat.sig.col}">${heat.shortSig}</span></div>
+     <div class="ns-cell ns-sector-lead gc-a" role="button" tabindex="0" aria-label="Open leading sectors" onclick="nav('sectors')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();nav('sectors')}"><span class="ns-lbl">LEAD</span><span class="ns-val" style="color:${leadCol}">${leadTxt}</span></div>
+     <div class="ns-cell ns-sector-trail gc-a" role="button" tabindex="0" aria-label="Open lagging sectors" onclick="nav('sectors')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();nav('sectors')}"><span class="ns-lbl">LAG</span><span class="ns-val" style="color:${trailCol}">${trailTxt}</span></div>
+@@ -2597,7 +2597,7 @@
+ // ═══════════════════════════════════════════════════════════
+ function _smartFitBadge(tk) {
+   const f0 = _tickerRegimeFit(tk, _computeRegimeEngine()), a0 = A.find(x => x.tk === tk);
+-  const f = a0 && a0.sc != null ? { score: a0.sc, label: `Desk score · ${f0.label}` } : f0;
++  const f = a0 && a0.sc != null ? { score: a0.sc, label: "Desk score " + a0.sc + "/100" } : f0;
+   const c = f.score >= 68 ? "var(--gn)" : f.score >= 45 ? "var(--gd)" : "var(--rd)";
+   return `<span class="smart-fit" style="color:${c};border-color:${c}55" title="${f.label}">${f.score}</span>`;
+ }
+@@ -2774,7 +2774,7 @@
+   h += `<div class="ssec"><div class="ssec-lbl">PAGES</div>${pages.map(c =>
+     `<button type="button" class="sres sres-cmd" onclick="${c.act}"><span class="sres-nm">${c.l}</span><span class="sres-d">${c.d}</span>${bd("go", "var(--cy)")}</button>`
+   ).join("")}</div>`;
+-  h += `<div class="ssec"><div class="ssec-lbl">TOP DESK SCORE · ${re.label}</div>${top.map(a =>
++  h += `<div class="ssec"><div class="ssec-lbl">Top desk score</div>${top.map(a =>
+     `<button type="button" class="sres" onclick="openA('${a.tk}');closeSearch()"><span class="sres-nm">${a.tk} — ${a.nm}</span>${_searchPriceBadge(a.tk)}${_smartFitBadge(a.tk)}${bd(a.se, a.se.includes("Bull") ? "var(--gn)" : "var(--bl)")}</button>`
+   ).join("")}</div>`;
+   return h;
+@@ -4795,10 +4795,10 @@
+   )) return false;
+   const hasChange = typeof q.c === "number" && isFinite(q.c);
+   const hasPrevious = typeof q.prev === "number" && isFinite(q.prev) && q.prev > 0;
+-  const c = hasChange ? q.c : 0;
+-  const prev = hasPrevious ? q.prev : (hasChange ? q.p / (1 + c / 100) : q.p);
+-  P[tk] = { p: q.p, c: +c.toFixed(2) };
+-  BASE[tk] = { p: prev, c: 0 };
++  const c = hasChange && q.c !== 0 ? q.c : null;
++  const prev = hasPrevious && Math.abs(q.prev - q.p) > Math.max(1e-9, Math.abs(q.p) * 1e-8) ? q.prev : (c != null ? q.p / (1 + c / 100) : null);
++  P[tk] = { p: q.p, c: c == null ? null : +Number(c).toFixed(2) };
++  if (prev > 0) BASE[tk] = { p: prev, c: 0 };
+   if (!HIST[tk]) HIST[tk] = [];
+   HIST[tk].push(q.p);
+   if (HIST[tk].length > 120) HIST[tk].shift();
+@@ -4814,7 +4814,7 @@
+   liveQuoteMarketClosed[tk] = _isContinuousTapeTicker(tk) ? false : !!q.marketClosed;
+   liveQuoteSession[tk] = _isContinuousTapeTicker(tk) ? null : (q.session || null);
+   if (typeof liveQuoteChangeAvailable !== "undefined") {
+-    liveQuoteChangeAvailable[tk] = hasChange || hasPrevious;
++    liveQuoteChangeAvailable[tk] = c != null;
+   }
+   liveQuoteProxy[tk] = !!q.proxy
+     || liveQuoteSrc[tk].startsWith("gold-api-spot-proxy")
+@@ -5557,7 +5557,7 @@
+   const ts = liveQuoteTs[tk];
+   return !!ts && Date.now() - ts > 30 * 60_000; // last print >30 min old: that market is shut, nothing to stream
+ }
+-const RT_ROLL_RANK = Object.freeze({ stream: 3, y24: 2, cg: 1 });
++const RT_ROLL_RANK = Object.freeze({ srv24: 4, stream: 3, y24: 2, cg: 1 });
+ const RT_LIVE_MS = 30_000;     // a stream label (LIVE·YS/CB/KR) needs a tick at least this recent
+ const RT_CHG_HOLD_MS = 3000;   // a streamed coin's polled 24h % waits this long for the exchange's own basis
+ const _rt = {
+@@ -5632,16 +5632,17 @@
+   let prev = (typeof o.prev === "number" && isFinite(o.prev) && o.prev > 0) ? o.prev : null;
+   if (prev == null && !o.noBasePrev && _rt.goodPrev[tk] > 0) prev = _rt.goodPrev[tk];
+   const oldP = P[tk] && liveSymbols.has(tk) ? P[tk].p : null;
+-  P[tk] = { p, c: prev ? +(((p - prev) / prev) * 100).toFixed(2) : 0 };
+-  if (prev) BASE[tk] = { p: prev, c: 0 };
+-  if (prev && (o.src === "coinbase-ws" || o.src === "kraken-ws")) _rt.roll[tk] = { prev, at: now, kind: "stream" };
++  var fe78srv = _rt.roll[tk] && _rt.roll[tk].kind === "srv24" && now - _rt.roll[tk].at < 30 * 60_000 && _rt.roll[tk].c != null && isFinite(_rt.roll[tk].c) ? _rt.roll[tk].c : null;
++  P[tk] = { p, c: fe78srv != null ? fe78srv : (prev ? +(((p - prev) / prev) * 100).toFixed(2) : null) };
++  if (fe78srv == null && prev) BASE[tk] = { p: prev, c: 0 };
++  if (fe78srv == null && prev && (o.src === "coinbase-ws" || o.src === "kraken-ws")) _rt.roll[tk] = { prev, at: now, kind: "stream" };
+   liveSymbols.add(tk);
+   liveQuoteTs[tk] = ts;
+   liveQuoteSrc[tk] = o.src;
+   if (o.name) liveQuoteName[tk] = o.name;
+   else if (liveQuoteProxy[tk] && !o.proxy) liveQuoteName[tk] = ""; // don't keep a proxy's name on a real print
+   liveQuoteCached[tk] = false;
+-  liveQuoteChangeAvailable[tk] = prev != null;
++  liveQuoteChangeAvailable[tk] = (typeof fe78srv !== "undefined" && fe78srv != null) || prev != null;
+   liveQuoteProxy[tk] = !!o.proxy;
+   liveQuoteMarketClosed[tk] = false;
+   liveQuoteSession[tk] = null;
+@@ -5672,12 +5673,24 @@
+   //    (server basis "rolling_24h") > CoinGecko 24h. A lower-ranked source is re-based onto the best basis seen in
+   //    the last 30 min; a source with an unknown basis (old Yahoo 5-day prev close, Twelve Data/Finnhub day basis)
+   //    shows its price but no change until a 24h basis is known.
+-  if (_rtIsCrypto(tk) && !RT_SRC.has(src) && fin(q.p) && q.p > 0) {
+-    const r = _rt.roll[tk], rOk = r && r.prev > 0 && now - r.at < 30 * 60_000;
++  if (_rtIsCrypto(tk) && fin(q.p) && q.p > 0 && (!RT_SRC.has(src) || (q && q.baseline === "24h") || (_rt.roll[tk] && _rt.roll[tk].kind === "srv24"))) {
++    try { fe78_take(tk, q); } catch (e78) {}
++    const fe78b = fe78_cryptoBasis(q, _rt.roll[tk], now);
++    if (fe78b.mode === "srv") {
++      if (fe78b.c == null) { delete q.c; delete q.change; delete q.changePct; }
++      else { q.c = fe78b.c; q.changePct = fe78b.c; }
++      if (fe78b.prev) q.prev = fe78b.prev;
++      _rt.roll[tk] = { prev: fe78b.prev, at: now, kind: "srv24", c: fe78b.c };
++    } else if (fe78b.mode === "keep") {
++      if (fe78b.c == null) { delete q.c; delete q.change; delete q.changePct; }
++      else { q.c = fe78b.c; q.changePct = fe78b.c; }
++      if (fe78b.prev) q.prev = fe78b.prev;
++    }
++    const r = _rt.roll[tk], rOk = r && r.prev > 0 && now - r.at < 30 * 60_000 && r.kind !== "srv24";
+     const c = Number(q.c);
+     let kind = null, own = null;
+-    if (src === "coingecko" && isFinite(c) && c > -100) { kind = "cg"; own = q.p / (1 + c / 100); }
+-    else if (src.startsWith("yahoo") && q.basis === "rolling_24h" && fin(q.prev) && q.prev > 0) { kind = "y24"; own = q.prev; }
++    if (fe78b.mode === "client" && src === "coingecko" && isFinite(c) && c > -100) { kind = "cg"; own = q.p / (1 + c / 100); }
++    else if (fe78b.mode === "client" && src.startsWith("yahoo") && q.basis === "rolling_24h" && fin(q.prev) && q.prev > 0) { kind = "y24"; own = q.prev; }
+     if (kind && (!rOk || RT_ROLL_RANK[kind] >= (RT_ROLL_RANK[r.kind] || 0))) {
+       // A server-cached quote may still set the basis when its own timestamp is recent (short response cache);
+       // an old cached print (stale fallback) never does.
+@@ -5686,13 +5699,13 @@
+       q.prev = own; q.c = ((q.p - own) / own) * 100;
+     } else if (rOk) {
+       q.prev = r.prev; q.c = ((q.p - r.prev) / r.prev) * 100;
+-    } else if (!kind) {
++    } else if (!kind && fe78b.mode === "client") {
+       delete q.c; delete q.prev; delete q.change;
+     }
+     // While the exchange socket connects, a streamed coin shows no polled 24h % (its basis differs slightly
+     // from the exchange's own 24h open); after RT_CHG_HOLD_MS without a stream basis the polled basis is used.
+     const cur = _rt.roll[tk];
+-    if (fin(q.prev) && q.prev > 0 && RT_USE.crypto && RT_CRYPTO[tk] && _rt.booted && !_rtDisabled() && !(_rt.want.size && !_rt.want.has(tk)) && !(cur && cur.kind === "stream" && now - cur.at < 30 * 60_000)) {
++    if (fin(q.prev) && q.prev > 0 && RT_USE.crypto && RT_CRYPTO[tk] && _rt.booted && !_rtDisabled() && !(_rt.want.size && !_rt.want.has(tk)) && !(cur && (cur.kind === "stream" || cur.kind === "srv24") && now - cur.at < 30 * 60_000)) {
+       const hu = _rt.holdUntil[tk] || (_rt.holdUntil[tk] = now + RT_CHG_HOLD_MS);
+       if (now < hu) {
+         _rt.heldPrev[tk] = q.prev;
+@@ -5790,7 +5803,7 @@
+     if (!_usRegularOpen()) { try { _rt43ExtTick(tks, d); } catch (e) {} return; }
+   }
+   const prev = d.change != null ? d.price - d.change : null;
+-  tks.forEach(tk => _rtApply(tk, d.price, { src: "yahoo-stream", ts: d.time, prev: prev > 0 ? prev : null, name: tk === "DXY" ? "US Dollar Index" : undefined }));
++  tks.forEach(tk => _rtApply(tk, d.price, { src: "yahoo-stream", ts: d.time, prev: prev > 0 ? prev : null, name: tk === "DXY" ? "US Dollar Index (ICE)" : undefined }));
+ }
+ function _rtOnCb(ev) {
+   _rt.stats.msgs.cb++;
+@@ -5862,7 +5875,8 @@
+     }
+   }
+   // Rankings row: put its change on the ticker's best-known 24h basis (stream / Yahoo rolling 24h).
+-  if (rOk && r.kind !== "cg" && out.p > 0) out.c24 = ((out.p - r.prev) / r.prev) * 100;
++  if (r && r.kind === "srv24" && r.c != null && isFinite(Number(r.c))) out.c24 = Number(r.c);
++  else if (rOk && r.kind !== "cg" && out.p > 0) out.c24 = ((out.p - r.prev) / r.prev) * 100;
+   return out;
+ }
+ function _rtChgTxt(v) { return v == null || !isFinite(v) ? "—" : `${v > 0 ? "+" : ""}${Number(v).toFixed(2)}%`; }
+@@ -6277,7 +6291,7 @@
+     if (el.matches("#tape .ti")) {
+       const k = el.children; if (k.length < 3) return;
+       if (setText(k[1], d.p)) _rtFlash(el, tk);
+-      setText(k[2], ch == null ? "—" : sign + d.c + "%"); k[2].style.color = col;
++      k[2].style.color = col; var fe78tape = ch == null ? "—" : fe78_chgHtml(tk, sign + d.c + "%"); if (k[2].innerHTML !== fe78tape) { k[2].innerHTML = fe78tape; n++; }
+       var fe65sig = (d.status || "") + "|" + (d.fe64Note || "") + "|" + (d.label || "");
+       if (el.dataset.rtSt !== fe65sig) { el.dataset.rtSt = fe65sig; k[0].innerHTML = `${_escHtml(fe65_tapeName(tk))}${_rtTapeBadge(d)}`; }
+       el.title = `${fe65_tapeName(tk)} · ${d.fe64Note || d.label || "NO SYNC"}`;
+@@ -6295,7 +6309,7 @@
+       if (next && /%$/.test(next.textContent.trim()) || next && next.textContent.trim() === "—") {
+         const arrow = ch == null || ch === 0 ? "" : (ch > 0 ? "↑" : "↓");
+         const keepArrow = /^[↑↓]/.test(next.textContent.trim()) || !!meta || !!el.closest("#wl-table");
+-        setText(next, ch == null ? "—" : `${keepArrow ? arrow : ""}${sign}${d.c}%`); next.style.color = col;
++        next.style.color = col; var fe78cell = ch == null ? "—" : fe78_chgHtml(tk, `${keepArrow ? arrow : ""}${sign}${d.c}%`); if (next.innerHTML !== fe78cell) { next.innerHTML = fe78cell; n++; }
+       }
+     } else if (el.matches("[data-price-card]")) {
+       const showDollar = el.dataset.priceDollar === "1", pctOnly = el.dataset.priceChg === "pct";
+@@ -6303,7 +6317,7 @@
+       if (pe && setText(pe, (showDollar ? "$" : "") + d.p)) _rtFlash(pe, tk);
+       if (ce) {
+         ce.style.color = col;
+-        setText(ce, ch == null ? "—" : (pctOnly ? `${sign}${d.c}%` : `${sign}${d.chg} (${sign}${d.c}%)`));
++        var fe78ce = ch == null ? "—" : fe78_chgHtml(tk, pctOnly ? `${sign}${d.c}%` : `${sign}${d.chg} (${sign}${d.c}%)`); if (ce.innerHTML !== fe78ce) { ce.innerHTML = fe78ce; n++; }
+         ce.classList.remove("px-up", "px-dn", "px-flat");
+         ce.classList.add(ch == null || ch === 0 ? "px-flat" : ch > 0 ? "px-up" : "px-dn");
+       }
+@@ -6316,7 +6330,7 @@
+     } else if (el.matches(".data-card[data-tk]")) {
+       const v = el.querySelector(".value"), c = el.querySelector(".change");
+       if (v && setText(v, d.p)) _rtFlash(v, tk);
+-      if (c) { setText(c, ch == null ? "—" : `${sign}${d.chg} (${sign}${d.c}%)`); c.style.color = col; }
++      if (c) { c.style.color = col; var fe78dc = ch == null ? "—" : fe78_chgHtml(tk, `${sign}${d.chg} (${sign}${d.c}%)`); if (c.innerHTML !== fe78dc) { c.innerHTML = fe78dc; n++; } }
+     } else if (el.matches(".wl-glance-chip")) {
+       if (_rtPaintChip(el, tk)) _rtFlash(el.querySelector(".wl-g-p"), tk);
+     } else if (el.matches("[data-rt-px],[data-rt-c24]")) {
+@@ -6699,12 +6713,11 @@
+   const fx4=typeof fe77_fxPair==="function"&&!!fe77_fxPair(tk)&&fe77_fxPair(tk).indexOf("JPY")<0;
+   const p=(typeof _rtIsCrypto==="function"&&_rtIsCrypto(tk))?_rtCryptoPx(d.p):d.p>=10000?Math.round(d.p).toLocaleString():fx4?d.p.toFixed(4):d.p>=1?d.p.toFixed(2):d.p.toFixed(4);
+   const fmtChg = Math.abs(chg)>=1000?Math.round(chg).toLocaleString():chg.toFixed(2);
+-  const pct = Number(d.c);
+-  const pctN = isFinite(pct) ? pct : 0;
++  const pctN = typeof d.c === "number" && isFinite(d.c) ? d.c : null;
+   // d polarity: +1 up, -1 down, 0 flat — never treat flat as up
+-  const dir = pctN > 0 ? 1 : pctN < 0 ? -1 : 0;
++  const dir = pctN == null ? 0 : (pctN > 0 ? 1 : pctN < 0 ? -1 : 0);
+   return{
+-    p, ..._rt24XauFp(tk, d.p, { c: pctN.toFixed(2), chg: fmtChg, raw: chg, d: dir }),
++    p, ..._rt24XauFp(tk, d.p, { c: pctN == null ? "—" : pctN.toFixed(2), chg: pctN == null ? "—" : fmtChg, raw: chg, d: dir }),
+     status: meta.status, label: meta.label,
+     asOf: meta.asOf, age: meta.asOf ? _fmtAge(meta.asOf) : "—",
+     src: meta.src, detail: meta.detail, fe64Note: meta.fe64Note || ""
+@@ -6765,7 +6778,7 @@
+     if(priceEl)priceEl.textContent=hasSyncedQuote(tk)?(showDollar?"$":"")+d.p:_rt22NoSync();
+     if(chgEl){
+       chgEl.style.color=col;
+-       chgEl.textContent=chgN==null?"—":(pctOnly?`${sign}${d.c}%`:`${sign}${d.chg} (${sign}${d.c}%)`);
++       chgEl.innerHTML=chgN==null?"—":fe78_chgHtml(tk, pctOnly?`${sign}${d.c}%`:`${sign}${d.chg} (${sign}${d.c}%)`);
+       chgEl.classList.remove("px-up","px-dn","px-flat");
+       chgEl.classList.add(chgN==null||chgN===0?"px-flat":chgN>0?"px-up":"px-dn");
+     }
+@@ -9258,7 +9271,7 @@
+     const money = a.cat === 'Stock' || a.cat === 'Crypto' || a.cat === 'Commodity';
+ 
+     // Bullish/bearish factors derived from thesis
+-    const thWords = a.th.split('. ');
++    const thWords = String((typeof fe78_about==="function"?fe78_about(a):(a&&a.th)) || "").split(". ");
+     const _rt27F = x => String(x || '').replace(/[—\s.·-]+/g, '').length > 3;
+     const bullish = thWords.filter(_rt27F).filter(s => /grow|gain|strong|lead|dominan|accelerat|beat|recover|expand|surge|buy|bullish|upside/i.test(s)).slice(0, 3);
+     const bearish = thWords.filter(_rt27F).filter(s => /risk|concern|slow|headwind|declin|loss|weak|miss|challeng|uncertain|bearish|downside|eroding/i.test(s)).slice(0, 3);
+@@ -9279,9 +9292,7 @@
+           </div>
+         </div>
+         <div style="text-align:right;flex-shrink:0">
+-          <div style="font-family:var(--mn);font-size:9px;color:var(--t3);margin-bottom:4px">AI score <span title="Desk score from 0–100. This is not the regime fit." style="cursor:help;color:var(--bl)">ⓘ</span></div>
+-          <div style="font-family:var(--mn);font-size:32px;font-weight:900;color:${scoreCol};line-height:1">${a.sc}</div>
+-          <div style="font-family:var(--mn);font-size:9px;color:${scoreCol};margin-top:2px">${a.sc>=75?'HIGH DESK SCORE':a.sc>=50?'MODERATE':a.sc>=35?'CAUTIOUS':'LOW DESK SCORE'}</div>
++          <div style="font-family:var(--mn);font-size:12px;font-weight:700;color:${scoreCol};line-height:1.35">${fe78_deskScore(a.sc)}</div>
+         </div>
+       </div>
+     </div>`;
+@@ -9362,14 +9373,14 @@
+ 
+     if(aTab==="ov"){
+       try { h += `<div style="padding:10px 12px 0">${_renderSiteIntelCard("ticker", { tk: a.tk })}</div>`; } catch (e) {}
+-      h += `<div class="ap-thesis">${_rt26Sent(_rt24Th(a), 200)}</div>`;
++      h += fe78_profileHtml(a, "ov");
+       h += `<div style="padding:8px 16px;border-bottom:1px solid var(--gb);background:var(--b1)">
+         <div style="font-family:var(--mn);font-size:9px;color:var(--t3)">Data: Finnhub (US equities, may be delayed) · Yahoo Finance · CoinGecko (crypto) · Score is AI-generated for research purposes only. Not financial advice.</div>
+       </div>`;
+     }
+ 
+     if(aTab==="th"){
+-      h += `<div class="ap-thesis">${_rt24Th(a)}</div>`;
++      h += fe78_profileHtml(a, "th");
+       const hist=reason.filter(r=>r.ticker===a.tk);
+       if(hist.length){
+         h += `<div style="padding:12px 16px;border-top:1px solid var(--gb)"><div style="font-family:var(--mn);font-size:8px;color:var(--t3);letter-spacing:0.1em;margin-bottom:8px">REASONING BANK HISTORY</div>`;
+@@ -10888,12 +10899,12 @@
+   const priceEl=document.querySelector('#p2body .ap-price');
+   const chgEl=document.querySelector('#p2body .ap-chg');
+   if(priceEl){
+-    priceEl.textContent=fe66_priceLine(a.tk, d, na);
++    priceEl.innerHTML=fe66_priceLine(a.tk, d, na);
+     priceEl.style.color=na?"var(--tx)":col;
+   }
+   if(chgEl){
+     chgEl.style.color=col;
+-    chgEl.textContent=fe66_chgLine(a.tk, d, na);
++    chgEl.innerHTML=fe66_chgLine(a.tk, d, na);
+   }
+   const subEl=document.getElementById('p2sub');
+   if(subEl)subEl.textContent=`${_rt39Cat(a).toUpperCase()} · ${_rt39Ex(a)} · ${feedLbl}`;
+@@ -10961,7 +10972,7 @@
+       if (chEl) {
+         const ch = liveChg(tkAttr);
+         const sign = ch != null && ch >= 0 ? '+' : '';
+-        chEl.textContent = `${sign}${d.chg} (${sign}${d.c}%)`;
++        chEl.innerHTML = ch == null ? "—" : fe78_chgHtml(tkAttr, `${sign}${d.chg} (${sign}${d.c}%)`);
+         chEl.style.color = ch == null ? 'var(--t3)' : ch > 0 ? 'var(--gn)' : ch < 0 ? 'var(--rd)' : 'var(--t3)';
+       }
+     });
+@@ -11074,7 +11085,7 @@
+     const title=_escAttr(`${k} · ${d.label||"NO SYNC"}${d.asOf?` · as of ${_fmtAsOf(d.asOf)}`:""}`);
+     const chCol=ch==null?"var(--t3)":ch>0?"var(--gn)":ch<0?"var(--rd)":"var(--t3)";
+     const chSign=ch!=null&&ch>=0?"+":"";
+-    return `<span class="ti" data-tk="${k}" data-st="${_escAttr(d.status||"")}" data-as="${Number(d.asOf)||0}" title="${_escAttr(fe65_tapeName(k) + " · " + (d.fe64Note || d.label || ""))}"><span style="color:${catCol};font-weight:700">${fe65_tapeName(k)}${_rtTapeBadge(d)}</span><span style="color:var(--tx);font-weight:700">${d.p}</span><span style="color:${chCol};font-weight:600">${ch==null?"—":chSign+d.c+"%"}</span></span>`;
++    return `<span class="ti" data-tk="${k}" data-st="${_escAttr(d.status||"")}" data-as="${Number(d.asOf)||0}" title="${_escAttr(fe65_tapeName(k) + " · " + (d.fe64Note || d.label || ""))}"><span style="color:${catCol};font-weight:700">${fe65_tapeName(k)}${_rtTapeBadge(d)}</span><span style="color:var(--tx);font-weight:700">${d.p}</span><span style="color:${chCol};font-weight:600">${ch==null?"—":fe78_chgHtml(k, chSign+d.c+"%")}</span></span>`;
+   }).join("");
+   const tape = document.getElementById("tape");
+   if (tape) {
+@@ -11147,8 +11158,8 @@
+   const aiChip=!_userTierReady?"":_isPremium()
+     ?`<span class="htec-chip htec-chip-ai">★ PREMIUM</span>`
+     :`<span class="htec-chip htec-chip-muted">FREE</span>`;
+-  const regimeChip=re.loading&&re._hide?"":re.loading?`<span class="htec-chip htec-chip-regime htec-chip-muted" title="Waiting for VIX and S&amp;P 500 inputs">Regime: loading…</span>`:`<span class="htec-chip htec-chip-regime" title="Market regime model (educational)">${re.label} · ${re.score}/100</span>`;
+-  const regimeChipMob=re.loading&&re._hide?"":re.loading?`<span class="htec-chip htec-chip-regime htec-chip-muted" title="Waiting for VIX and S&amp;P 500 inputs">Regime: loading…</span>`:`<span class="htec-chip htec-chip-regime" title="Market regime model (educational): ${re.label} · ${re.score}/100">${re.label} · ${re.score}/100</span>`;
++  const regimeChip=re.loading&&re._hide?"":re.loading?`<span class="htec-chip htec-chip-regime htec-chip-muted" title="Waiting for VIX and S&amp;P 500 inputs">Regime: loading…</span>`:`<span class="htec-chip htec-chip-regime" title="${fe78_regimeTitle(re)}">${re.label} · ${re.score}/100</span>`;
++  const regimeChipMob=re.loading&&re._hide?"":re.loading?`<span class="htec-chip htec-chip-regime htec-chip-muted" title="Waiting for VIX and S&amp;P 500 inputs">Regime: loading…</span>`:`<span class="htec-chip htec-chip-regime" title="${fe78_regimeTitle(re)}">${re.label} · ${re.score}/100</span>`;
+   const el=document.getElementById("statusBar");
+   if(!el)return;
+   el.dataset.sig=sig;
+@@ -12857,7 +12868,7 @@
+   // ── Greeting and where the tape stands ──
+   h += `<div class="home-hero">
+     <div class="home-greet">${_homeGreeting()}</div>
+-    <div class="home-regime" style="color:${re.col}">${re.label}${re.score != null && !re.loading ? ` · <span class="home-regime-sc">${re.score}/100</span>${_rt20RegCached(re)}` : ""}</div>
++    <div class="home-regime" style="color:${re.col}">${re.label}${re.score != null && !re.loading ? ` · <span class="home-regime-sc">${re.score}/100</span>${_rt20RegCached(re)}${re.asOfUk ? ` <span class="home-regime-src">${_escHtml(re.asOfUk)}</span>` : ""}` : ""}</div>
+     <div class="home-tape">${liveN
+       ? [_rt37Hero(), (re.vix != null && re.vix !== "—" && re.vix !== "") ? `VIX${_usRegularOpen() ? "" : " US close"} ${re.vix}` : "", (re.spx != null && re.spx !== "—" && re.spx !== "") ? `${re.spxProxy ? "SPY" : "SPX"}${_usRegularOpen() ? "" : " US close"} ${re.spx}` : ""].filter(Boolean).join(" · ")
+       : _rt20TapeFallback(re)}</div>
+@@ -12874,7 +12885,7 @@
+       <div class="home-brief-stance">${_escHtml(_rt20Stance(_brief, re))}</div>
+       <div class="home-brief-h">${_escHtml(_rt16Dec(_brief.headline))}</div>
+       ${_brief.summary ? `<div class="home-brief-s">${_escHtml(_rt16Clip(_rt16Dec(_brief.summary), 220))}</div>` : ""}
+-      <div class="home-brief-t">${_escHtml(_rt16BriefWhen(_brief))}${re && re.loading ? (re._hide ? "" : " · Regime: loading…") : re && re.label ? ` · current regime ${_escHtml(re.label)} ${re.score}/100` : ""}</div>
++      <div class="home-brief-t">${_escHtml(_rt16BriefWhen(_brief))}${re && re.loading ? (re._hide ? "" : " · Regime: loading…") : re && re.label ? ` · ${_escHtml(fe78_regimeSub(re))}` : ""}</div>
+       <div class="home-brief-go">Open brief →</div>
+     </div>`;
+   } else {
+@@ -13005,7 +13016,7 @@
+     h+=`<button type="button" class="idx-card" onclick="nav('mkt')" data-price-card="${idx.tk}">
+       <div class="idx-card-top"><span class="idx-card-name">${idx.nm}</span><span class="idx-card-stat">${stat(idx.tk)}</span></div>
+       <div class="idx-card-px asset-price">${na?_rt22NoSync():d.p}</div>
+-      <div class="idx-card-chg asset-chg ${chgCls}">${na||chN==null?chgDim():`${sign}${d.chg} (${sign}${d.c}%)`}</div>
++      <div class="idx-card-chg asset-chg ${chgCls}">${na||chN==null?chgDim():fe78_chgHtml(idx.tk, `${sign}${d.chg} (${sign}${d.c}%)`)}</div>
+       <div class="idx-card-spark">${spark(idx.tk,108,16)}</div>
+       <div>${asOfTag(idx.tk)}</div>
+     </button>`;
+@@ -13022,7 +13033,7 @@
+     const chgCls=na||chN==null?"px-flat":(chN>0?"px-up":(chN<0?"px-dn":"px-flat"));
+     const sign=chN!=null&&chN>=0?"+":"";
+     h+=`<button type="button" class="conv-card" onclick="openA('${a.tk}')" data-price-card="${a.tk}" data-price-dollar="1" data-price-chg="pct">
+-      <div class="conv-card-top"><span class="conv-tk">${a.tk}</span><span class="conv-chg asset-chg ${chgCls}">${na||chN==null?chgDim():`${sign}${d.c}%`}</span></div>
++      <div class="conv-card-top"><span class="conv-tk">${a.tk}</span><span class="conv-chg asset-chg ${chgCls}">${na||chN==null?chgDim():fe78_chgHtml(a.tk, `${sign}${d.c}%`)}</span></div>
+       <div class="conv-nm">${a.nm}</div>
+       <div class="conv-px asset-price">${na?_rt22NoSync():"$"+d.p}</div>
+       <div>${asOfTag(a.tk)}</div>
+@@ -13185,7 +13196,7 @@
+         <span style="cursor:pointer;font-size:16px;color:${iw?"var(--gd)":"var(--t3)"}" onclick="togWatch('${a.tk}')" aria-label="${iw?'Remove from':'Add to'} watchlist">★</span>
+         <button onclick="event.stopPropagation();_toggleCompare('${a.tk}')" style="background:${_compareTks.includes(a.tk)?'var(--puG)':'var(--b2)'};border:1px solid var(--gb);color:var(--t2);border-radius:5px;padding:2px 8px;font-family:var(--mn);font-size:9px;cursor:pointer">⚖</button></div>
+         <div style="font-size:10px;color:var(--t2)">${a.nm}</div>
+-        <div style="display:flex;gap:3px;margin-top:3px">${bd(a.se,a.se.includes("Bull")?"var(--gn)":"var(--bl)")}${bd("AI score "+a.sc,scC(a.sc))}</div></div></div>
++        <div style="display:flex;gap:3px;margin-top:3px">${bd(a.se,a.se.includes("Bull")?"var(--gn)":"var(--bl)")}${bd(fe78_deskScore(a.sc),scC(a.sc))}</div></div></div>
+     <div style="text-align:right"><div style="font-family:var(--mn);font-weight:800;font-size:24px;letter-spacing:-0.02em;color:${primary?chCol:'var(--t3)'}">${fe66_priceLine(a.tk, d, !hasSyncedQuote(a.tk))}</div>
+       <div class="asset-chg" style="color:${chCol}">${fe66_chgLine(a.tk, d, !hasSyncedQuote(a.tk))}</div>
+        ${!primary&&hasRetainedQuote(a.tk)?`<div style="font-family:var(--mn);font-size:8px;color:var(--t3);margin-top:4px">Context only · ${_quoteSourceLabel(d.src)} · as of ${_fmtAsOf(d.asOf)}</div>`:""}</div></div>`;
+@@ -13227,9 +13238,7 @@
+       </div></div>`;
+     h+=`<div class="gr" style="grid-template-columns:1fr 1fr"><div class="gc"><div style="font-size:8px;color:var(--t3);font-family:var(--mn);letter-spacing:0.1em">METRICS</div>`;
+     [{l:"P/E",v:a.pe},{l:"Mkt Cap",v:a.mc},{l:"Beta",v:a.cat==="Stock"?fe64_betaCell(a.beta):a.beta},{l:"Sentiment",v:a.se}].forEach(m=>{h+=`<div style="border-top:1px solid var(--gb);padding:5px 0"><div style="font-size:8px;color:var(--t3)">${m.l}</div><div style="font-family:var(--mn);font-weight:700;font-size:12px;margin-top:1px">${m.v}</div></div>`;});
+-    h+=`</div><div class="gc"><div style="font-size:8px;color:var(--t3);font-family:var(--mn);letter-spacing:0.1em">AI THESIS</div>
+-      <div style="font-size:13px;font-weight:700;color:${a.se.includes("Bull")?"var(--gn)":"var(--bl)"};margin-top:6px">${a.se}</div>
+-      <div style="font-size:10.5px;color:var(--t2);line-height:1.55;margin-top:4px">${_rt26Sent(_rt24Th(a), 140)}</div></div></div>`;
++    h+=`</div>` + fe78_profileHtml(a, "card") + `</div>`;
+     const re=_computeRegimeEngine();
+     h+=_rt53FitHtml(a.tk)+`<button type="button" onclick="_setATab('cm')" style="margin-top:10px;width:100%;background:var(--blG);color:var(--bl);border:1px solid rgba(79,142,247,0.2);border-radius:8px;padding:10px;font-family:var(--sn);font-size:11px;font-weight:700;cursor:pointer">⬢ Run Lens Engine on ${a.tk}</button>`;
+     h += _renderTickerSignals(a.tk);
+@@ -13283,8 +13292,7 @@
+   }
+ 
+   if(aTab==="th"){
+-    h+=`<div class="gc" style="border-left:3px solid var(--bl)"><div style="font-size:8px;color:var(--t3);font-family:var(--mn);letter-spacing:0.1em">INVESTMENT THESIS</div>
+-      <div style="font-size:11.5px;color:var(--t2);line-height:1.6;margin-top:6px">${_rt24Th(a)}</div></div>`;
++    h+=fe78_profileHtml(a, "full");
+     const hist=reason.filter(r=>r.ticker===a.tk);
+     if(hist.length){h+=`<div class="gc"><div style="font-size:8px;color:var(--t3);font-family:var(--mn);letter-spacing:0.1em">REASONING BANK HISTORY</div>`;
+       hist.forEach((r,i)=>{h+=`<div style="border-top:${i?"1px solid var(--gb)":"none"};padding-top:${i?8:6}px;margin-top:${i?8:6}px"><div style="display:flex;gap:5px;align-items:center"><span style="font-size:8px;color:var(--t3);font-family:var(--mn)">${new Date(r.ts).toLocaleDateString()}</span>${bd(fe76_vword(r.verdict),"var(--t3)")}</div>
+@@ -16016,10 +16024,10 @@
+ 
+ | Confidence | Interpretation | Action |
+ |-----------|----------------|--------|
+-| 85%+ | Very high desk score | Full position |
+-| 70-84% | High desk score | 2/3 position |
++| 85%+ | Desk score 85+/100 | Full position |
++| 70-84% | Desk score 70–84/100 | 2/3 position |
+ | 55-69% | Moderate | 1/3 position, watch |
+-| Below 55% | Low desk score | Monitor only |
++| Below 55% | Desk score below 55/100 | Monitor only |
+ 
+ **Never act on a single signal.** Look for confluence: a macro signal, a technical signal, AND a fundamental catalyst all pointing the same direction. That's where the highest probability setups are found.
+ 
+@@ -17057,7 +17065,7 @@
+             ${_renderRegimeRing(re)}
+             <div>
+               <div class="lab-regime-lbl">${re.label}</div>
+-              <div class="lab-regime-score">Score ${re.score}/100</div>
++              <div class="lab-regime-score" title="${fe78_regimeTitle(re)}">Score ${re.score}/100</div>${re.asOfUk ? `<div class="fe78-acad">${_escHtml(re.asOfUk)}</div>` : ""}
+               <div class="lab-regime-hint"><strong>Favour:</strong> ${(re.overweight||[]).slice(0,3).join(" · ")||"—"}</div>
+               <div class="lab-regime-hint"><strong>Lower weight:</strong> ${(re.underweight||[]).slice(0,2).join(" · ")||"—"}</div>
+             </div>
+@@ -19685,7 +19693,7 @@
+     }
+     _rt43Spot.DXY = { at: Date.now() };
+     if (liveQuoteSrc.DXY !== "dxy-computed") liveQuoteTs.DXY = 0;
+-    _rtApply("DXY", +v.toFixed(3), { src: "dxy-computed", ts: tsMin, prev: pv, proxy: true, name: "US Dollar Index (computed from live FX)", repaint: true });
++    _rtApply("DXY", +v.toFixed(3), { src: "dxy-computed", ts: tsMin, prev: pv, proxy: true, name: "US Dollar Index (ICE)", repaint: true });
+   } catch (e) {}
+ }
+ {
+@@ -20413,8 +20421,8 @@
+             <div class="data-card hover-lift" role="button" tabindex="0" aria-label="Open ${a.nm} analysis" data-tk="${a.tk}" onclick="openA('${a.tk}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openA('${a.tk}')}">
+               <div class="label">${a.nm}</div>
+               <div class="value">${na?_rt22NoSync():d.p}</div>
+-              <div class="change ${chgCol}">${na||chN==null?"—":`${sign}${d.chg} (${sign}${d.c}%)`}</div>
+-              <div style="margin-top:10px; font-size:11px; color:var(--text-tertiary);">${a.se} · ${a.sc}/100</div>
++              <div class="change ${chgCol}">${na||chN==null?"—":fe78_chgHtml(a.tk, `${sign}${d.chg} (${sign}${d.c}%)`)}</div>
++              <div style="margin-top:10px; font-size:11px; color:var(--text-tertiary);">${fe78_deskScore(a.sc)}</div>
+             </div>
+           `;
+         }).join('')}
+@@ -20701,7 +20709,7 @@
+       : "NO SYNC (do not invent a price)";
+     if (a) {
+       parts.push(`Active ticker: ${a.tk} ${a.nm} · Score ${a.sc}/100 · ${a.se} · ${pxBit} · Beta ${a.beta || "—"} · ${a.pe || "—"}`);
+-      if (a.th) parts.push(`Platform thesis: ${a.th}`);
++      var fe78th = typeof fe78_about==="function" ? fe78_about(a) : ""; if (fe78th) parts.push("Platform thesis: " + fe78th);
+     } else {
+       parts.push(`Active ticker: ${selTk} · ${pxBit}`);
+     }
+@@ -21228,7 +21236,7 @@
+ function _rt43bStatus(tk) { const d = fp(tk); return { status: d.status, label: d.label }; }
+ const _rt43bSig = {};
+ // 3: DXY gets a markets-table row (computed from live FX in the browser; never the ECB fix)
+-try { if (!A.some(a => a.tk === "DXY")) A.push({ tk: "DXY", nm: "US Dollar Index", cat: "FX", ex: "ICE (computed)", sc: 55, se: "Neutral", beta: null, pe: "-", mc: "-",
++try { if (!A.some(a => a.tk === "DXY")) A.push({ tk: "DXY", nm: "US Dollar Index (ICE)", cat: "FX", ex: "ICE", sc: 55, se: "Neutral", beta: null, pe: "-", mc: "-",
+   th: "US dollar against six major currencies (EUR, JPY, GBP, CAD, SEK, CHF) with the ICE weights, computed in your browser from live FX quotes. A weaker dollar is usually a tailwind for gold and commodities." }); } catch (e) {}
+ // 4: home-listing stocks use their own venue's last close (the shared stock cache keyed on the US session)
+ {
+@@ -24334,7 +24342,7 @@
+     <div class="rt48-msg ${M.flash && M.flash.ok ? 'ok' : ''}" role="status" aria-live="polite">${M.flash ? _rt48E(M.flash.t) : M.sel != null ? `Selected: ${_rt48E(M.pairs[M.sel].l)}. Now pick its partner.` : ''}</div>`; }
+ 
+ // ── Price is right: guess where key markets trade now, scored by closeness ──
+-const RT48_PR = { XAU: ['Gold', 'US dollars per troy ounce', 0.03], DXY: ['US Dollar Index (DXY)', 'index points', 0.02], TNX: ['US 10-year Treasury yield', 'percent', 0.08], BTC: ['Bitcoin', 'US dollars', 0.08],
++const RT48_PR = { XAU: ['Gold', 'US dollars per troy ounce', 0.03], DXY: ['US Dollar Index (ICE)', 'index points', 0.02], TNX: ['US 10-year Treasury yield', 'percent', 0.08], BTC: ['Bitcoin', 'US dollars', 0.08],
+   SPX: ['S&P 500', 'index points', 0.03], BRENT: ['Brent crude oil', 'US dollars per barrel', 0.05], EURUSD: ['EUR/USD', 'US dollars per euro', 0.015], ETH: ['Ether', 'US dollars', 0.10], WTI: ['WTI crude oil', 'US dollars per barrel', 0.05] };
+ const RT48_PR_BONUS = ['SPX', 'BRENT', 'EURUSD', 'ETH', 'WTI'];
+ let _rt48Pr = null;
+@@ -24780,8 +24788,8 @@
+ _rt48AiFetch = function () { const A = _rt48Ai || {}; if ((_rt48AutoBusy & 4) || (A.items && A.items.length) || (A.tryAt && Date.now() - A.tryAt < 15 * 6e4) || (A.n || 0) >= 8) return;
+   _rt48AutoBusy |= 4; const n = (A.n || 0) + 1, day = _rt46Day(); _rt48Ai = { at: 0, items: [], n, tryAt: Date.now() }; let opts = { cache: 'no-store', credentials: 'same-origin' }; try { opts.signal = AbortSignal.timeout(9000); } catch (e) {}
+   fetch('/api/academy-daily', opts).then(r => r && r.ok && /json/.test(r.headers.get('content-type') || '') ? r.json() : null).then(j => {
+-    if (_rt46Day() !== day) return; const items = j && j.date === day && Array.isArray(j.items) ? j.items.map(_rt48AiOk).filter(Boolean).slice(0, 3) : [];
+-    if (items.length) _rt48Ai = { at: Date.parse(j.generatedAt) || Date.now(), items, kind: j.kind === 'ai' ? 'ai' : 'template', n, tryAt: Date.now() }; })
++    if (_rt46Day() !== day) return; const items = j && fe78_academyKeep(j) ? j.items.map(_rt48AiOk).filter(Boolean).slice(0, 3) : [];
++    if (items.length) _rt48Ai = fe78_academyStore({ at: Date.parse(j.generatedAt) || Date.now(), items, kind: j.kind === 'ai' ? 'ai' : 'template', n, tryAt: Date.now() }, j, day); })
+     .catch(() => {}).finally(() => { _rt48AutoBusy &= ~4; _rt48AutoDone(); }); };
+ { const _ak = _rt48AutoKick; _rt48AutoKick = function () { const r = _ak.apply(this, arguments); try { if (_rt48AutoDay === _rt46Day() && !(_rt48Ai.items && _rt48Ai.items.length)) _rt48AiFetch(); } catch (e) {} return r; }; }
+ // when explainers arrive while "In the news" is open on its intro, rebuild that session so they appear
+@@ -24802,11 +24810,11 @@
+   _rt48AutoBusy |= 4; const n = (A.n || 0) + 1, day = _rt46Day(); _rt48Ai = Object.assign({}, A, { n, tryAt: Date.now() });
+   let opts = { cache: 'no-store', credentials: 'same-origin' }; try { opts.signal = AbortSignal.timeout(9000); } catch (e) {}
+   fetch('/api/academy-daily', opts).then(r => r && r.ok && /json/.test(r.headers.get('content-type') || '') ? r.json() : null).then(j => {
+-    if (_rt46Day() !== day || !j || j.date !== day || !Array.isArray(j.items)) return; const items = j.items.map(_rt48AiOk).filter(Boolean).slice(0, RT48D_MAX);
++    if (_rt46Day() !== day || !fe78_academyKeep(j)) return; const items = j.items.map(_rt48AiOk).filter(Boolean).slice(0, RT48D_MAX);
+     // never swap a fuller or AI result for a poorer one
+     const score = l => l.length + (l.some(x => x.kind === 'ai') ? 10 : 0);
+-    if (items.length && score(items) >= score(prev)) _rt48Ai = { at: Date.parse(j.generatedAt) || Date.now(), items, kind: items.some(x => x.kind === 'ai') ? 'ai' : 'template', n, tryAt: Date.now(), got: Date.now(), v: Number(j.v) || 0 };
+-    else if (items.length) _rt48Ai = Object.assign({}, _rt48Ai, { got: Date.now(), v: Number(j.v) || 0 }); })
++    if (items.length && score(items) >= score(prev)) _rt48Ai = fe78_academyStore({ at: Date.parse(j.generatedAt) || Date.now(), items, kind: items.some(x => x.kind === 'ai') ? 'ai' : 'template', n, tryAt: Date.now(), got: Date.now(), v: Number(j.v) || 0 }, j, day);
++    else if (items.length) _rt48Ai = fe78_academyStore(Object.assign({}, _rt48Ai, { got: Date.now(), v: Number(j.v) || 0 }), j, day); })
+     .catch(() => {}).finally(() => { _rt48AutoBusy &= ~4; _rt48AutoDone(); }); };
+ { const _ak = _rt48AutoKick; _rt48AutoKick = function () { const r = _ak.apply(this, arguments); try { if (_rt48AutoDay === _rt46Day()) _rt48AiFetch(); } catch (e) {} return r; }; }
+ { const _ns = _rt48NewsSteps; _rt48NewsSteps = function () { try { _rt48AutoKick(); } catch (e) {} return _ns.apply(this, arguments); }; }
+@@ -24860,7 +24868,7 @@
+     else { if (!hasSyncedQuote(tk) || !_rt18MarketOpen(tk) || _rt43Stale[tk]) return; p = P[tk].p; prev = BASE[tk] && BASE[tk].p > 0 ? BASE[tk].p : null; ts = _rt43Ms(liveQuoteTs[tk]); if (!(Date.now() - ts < 10 * 60_000)) return; }
+     if (!(p > 0)) return; v *= p ** e; pv = pv && prev > 0 ? pv * prev ** e : null; if (ts) tsMin = Math.min(tsMin, ts); }
+   _rt51SekOld = sekTs; _rt43Spot.DXY = { at: Date.now() }; if (liveQuoteSrc.DXY !== 'dxy-computed') liveQuoteTs.DXY = 0;
+-  _rtApply('DXY', +v.toFixed(3), { src: 'dxy-computed', ts: tsMin, prev: pv, proxy: true, name: 'US Dollar Index (computed from live FX)', repaint: true });
++  _rtApply('DXY', +v.toFixed(3), { src: 'dxy-computed', ts: tsMin, prev: pv, proxy: true, name: 'US Dollar Index (ICE)', repaint: true });
+ } catch (e) {} }
+ setInterval(_rt51Dxy, 2000);
+ { const _qm = _quoteMeta; _quoteMeta = function (tk) { const m = _qm.apply(this, arguments); try { if (tk === 'DXY' && liveQuoteSrc.DXY === 'dxy-computed' && _rt51SekOld && m && m.status === 'live')
+@@ -25146,7 +25154,7 @@
+   return { rows, fit: _tickerRegimeFit(tk, re) }; }
+ RT52_B.fit = tk => { const g = _rt52Fit(tk); return { k: 'REGIME FIT', t: `${tk} · ${g.fit.score}/100 · ${g.fit.label}`, v: `<table class="rt52-tbl">${g.rows.map(([l, p]) => `<tr><td>${_rt52E(l)}</td><td><b class="${p > 0 && l !== 'Starting point' ? 'rt52-up' : p < 0 ? 'rt52-dn' : ''}">${l === 'Starting point' ? p : (p > 0 ? '+' : '−') + Math.abs(p)}</b></td></tr>`).join('')}<tr class="rt52-sum"><td>Fit (kept between 0 and 100)</td><td><b>${g.fit.score}</b></td></tr></table>`,
+   what: 'How well this name suits the current market regime, from 0 to 100. 68+ is regime-aligned, 45–67 a neutral fit, under 45 a headwind.', how: ['Starts at 50; fixed rules add or take points using the regime score, the desk’s view on the name, its asset class, beta and today’s move.'], src: `Regime model plus ${_rt52E(_rt52Src(tk))} for the price`, at: _rt52At(Date.now()), why: 'A quick check before you dig in: a headwind means the name is fighting the current backdrop.' }; };
+-RT52_B.conv = tk => { const a = A.find(x => x.tk === tk) || {}; return { k: 'DESK SCORE', t: `${tk} · ${a.sc != null ? a.sc + '/100' : '—'}`, what: `The desk’s overall score for ${_rt52E(a.nm || tk)} (${_rt52E(a.se || 'no view')}), from 0 to 100.`, how: ['Set by the desk from the investment case (thesis, valuation, momentum). It does not change with each price tick.'], src: 'The Dispatch desk', at: 'Desk score', why: _rt52E(a.th || '') }; };
++RT52_B.conv = tk => { const a = A.find(x => x.tk === tk) || {}; return { k: 'DESK SCORE', t: `${tk} · ${a.sc != null ? a.sc + '/100' : '—'}`, what: `The desk’s overall score for ${_rt52E(a.nm || tk)} (${_rt52E(a.se || 'no view')}), from 0 to 100.`, how: ['Set by the desk from the investment case (thesis, valuation, momentum). It does not change with each price tick.'], src: 'The Dispatch desk', at: 'Desk score', why: _rt52E((typeof fe78_about==='function' ? fe78_about(a) : '') || '') }; };
+ try { const _rl = renderLab; renderLab = function () { const h = _rl.apply(this, arguments); try { if (localStorage.getItem('td_lab_guide_v1') == null) localStorage.setItem('td_lab_guide_v1', '1'); } catch (e) {}
+   try { return h.replace('<div class="lab-hud-l">DESK SCORE · MODEL</div>', `<div class="lab-hud-l">DESK SCORE ${_rt52I('conv', _labTk, 'desk score')}</div>`)
+     .replace(/<div class="lab-hud-l">REGIME FIT · MODEL<\/div>(<div class="lab-hud-v"[^>]*>)(\d+)%/, (m, a, n) => `<div class="lab-hud-l">REGIME FIT ${_rt52I('fit', _labTk, 'regime fit')}</div>${a}${n}<small style="opacity:.6">/100</small>`)
+@@ -25223,7 +25231,7 @@
+     else { if (!hasSyncedQuote(tk) || !_rt18MarketOpen(tk) || _rt43Stale[tk]) return; p = P[tk].p; prev = BASE[tk] && BASE[tk].p > 0 ? BASE[tk].p : null; ts = _rt43Ms(liveQuoteTs[tk]); if (!(Date.now() - ts < 30 * 60_000)) return; }
+     if (!(p > 0)) return; v *= p ** e; pv = pv && prev > 0 ? pv * prev ** e : null; if (ts) tsMin = Math.min(tsMin, ts); }
+   _rt51SekOld = Date.now() - sekTs > 10 * 60_000 ? sekTs : 0; _rt43Spot.DXY = { at: Date.now() }; if (liveQuoteSrc.DXY !== 'dxy-computed') liveQuoteTs.DXY = 0;
+-  _rtApply('DXY', +v.toFixed(3), { src: 'dxy-computed', ts: Math.max(tsMin, Date.now() - 19 * 60_000), prev: pv, proxy: true, name: 'US Dollar Index (computed from live FX)', repaint: true });
++  _rtApply('DXY', +v.toFixed(3), { src: 'dxy-computed', ts: Math.max(tsMin, Date.now() - 19 * 60_000), prev: pv, proxy: true, name: 'US Dollar Index (ICE)', repaint: true });
+ } catch (e) {} }
+ setInterval(_rt52Dxy, 2500);
+ // 9) decorate shared chrome: regime score and quote labels open their basis; raw dates and timestamps read as words
+@@ -32144,7 +32152,7 @@
+ }
+ function fe77_dxyTitle(ice, fallback, label) {
+   if (fallback) return "Dispatch FX basket";
+-  if (ice) return label || "US Dollar Index (ICE, Yahoo DX-Y.NYB)";
++  if (ice) return label || "US Dollar Index (ICE)";
+   return "Dispatch FX basket";
+ }
+ function fe77_fxPair(raw) {
+@@ -32268,7 +32276,7 @@
+   fe77_dxyIceQ = fe77_dxyIce ? ice : null;
+   if (fe77_dxyIce) {
+     var named = String((ice && (ice.label || ice.name)) || (d && (d.label || d.name)) || "");
+-    fe77_dxyLabel = /DX-Y\.NYB|Yahoo/i.test(named) ? named : "US Dollar Index (ICE, Yahoo DX-Y.NYB)";
++    fe77_dxyLabel = /DX-Y\.NYB|Yahoo/i.test(named) ? named : "US Dollar Index (ICE)";
+   }
+ }
+ function fe77_prepXau(q) {
+@@ -33053,3 +33061,831 @@
+     return fe77_send1.apply(this, arguments);
+   };
+ } catch (e) {}
++
++// ── rt61d ──
++// FE78_PURE_START
++var fe78_meta = fe78_meta || Object.create(null);
++function fe78_bag(tk) {
++  if (!fe78_meta) fe78_meta = Object.create(null);
++  return fe78_meta[tk] || null;
++}
++function fe78_esc(s) {
++  return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
++}
++function fe78_opinion(s) {
++  return /\b(justified|catalyst|bullish|bearish|upside|downside|accelerat|headwind|overweight|underweight|valuation|narrative|intact|weighing|beneficiary|dominant|buy|sell|avoid|moat)\b/i.test(String(s || ""));
++}
++function fe78_about(a) {
++  if (!a || typeof a !== "object") return "";
++  var th = String(a.th == null ? "" : a.th).trim();
++  if (!th || th === "undefined" || th === "None" || th === "null") return "";
++  if (fe78_opinion(th)) return "";
++  return th;
++}
++function fe78_isCrypto(tk) {
++  var b = fe78_bag(tk);
++  if (b && b.baseline === "24h") return true;
++  var s = String(tk || "").toUpperCase().replace(/=X$/, "").replace(/-USD$/, "");
++  if (/^(BTC|ETH|SOL|XRP|DOGE|ADA|AVAX|LINK|DOT|LTC|UNI|POL|NEAR|ALGO|HBAR|TON|BCH|XLM|FIL|APT|SUI|SHIB|PEPE|ATOM|INJ|BNB|TRX|MATIC)$/.test(s)) return true;
++  try { if (typeof TICKER_CATS !== "undefined" && TICKER_CATS[s] === "cry") return true; } catch (e) {}
++  try { if (typeof _rtIsCrypto === "function" && _rtIsCrypto(s)) return true; } catch (e2) {}
++  return false;
++}
++function fe78_cryptoBasis(q, roll, now) {
++  var fin = function (v) { return typeof v === "number" && isFinite(v); };
++  var fresh = !!(roll && (now - roll.at) < 30 * 60 * 1000);
++  var raw = q && (q.changePct != null ? q.changePct : q.c);
++  var c = Number(raw);
++  var hasC = raw != null && raw !== "" && isFinite(c);
++  if (q && q.baseline === "24h") {
++    return { mode: "srv", kind: "srv24", c: hasC ? c : null, prev: fin(q.prev) && q.prev > 0 ? q.prev : null };
++  }
++  if (fresh && roll.kind === "srv24") {
++    return {
++      mode: "keep",
++      c: roll.c != null && isFinite(Number(roll.c)) ? Number(roll.c) : null,
++      prev: fin(roll.prev) && roll.prev > 0 ? roll.prev : null
++    };
++  }
++  return { mode: "client" };
++}
++function fe78_take(tk, q) {
++  if (!tk || !q || typeof q !== "object") return null;
++  var b = fe78_meta[tk] || (fe78_meta[tk] = {});
++  if (Object.prototype.hasOwnProperty.call(q, "baseline")) b.baseline = q.baseline ? String(q.baseline) : "";
++  var feed = q.feed && typeof q.feed === "object" ? q.feed : null;
++  if (q.changeDay || (feed && feed.changeDay)) b.changeDay = String(q.changeDay || feed.changeDay);
++  if (q.changeDayLabel || (feed && feed.changeDayLabel)) b.changeDayLabel = String(q.changeDayLabel || feed.changeDayLabel);
++  if (Object.prototype.hasOwnProperty.call(q, "prevNote")) b.prevNote = q.prevNote ? String(q.prevNote) : "";
++  var fl = q.feedLabel || (feed && (feed.feedLabel || feed.label)) || "";
++  if (q.feedLabel || (feed && (feed.feedLabel || feed.label))) b.feedLabel = String(fl);
++  if (q.baseline === "24h") {
++    var raw = q.changePct != null ? q.changePct : q.c;
++    var c = Number(raw);
++    b.srvC = raw != null && isFinite(c) ? c : null;
++  }
++  if (q.nextOpen != null && q.nextOpen !== "") b.nextOpen = q.nextOpen;
++  else if (q.feed && q.feed.nextOpen) b.nextOpen = q.feed.nextOpen;
++  if (q.status) b.status = String(q.status);
++  if (q.marketOpen === false || q.marketOpen === true) b.marketOpen = q.marketOpen;
++  if (q.note) b.note = String(q.note);
++  return b;
++}
++function fe78_dayTag(tk) {
++  var b = fe78_bag(tk);
++  if (!b) return "";
++  if (b.changeDay) return String(b.changeDay).trim();
++  var d = String(b.changeDayLabel || "").trim();
++  var m = d.match(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/i);
++  return m ? m[1] : "";
++}
++function fe78_isZero(s) {
++  var t = String(s || "");
++  if (!/%/.test(t)) return false;
++  var parts = t.split("%");
++  var i;
++  for (i = 0; i < parts.length - 1; i++) {
++    var bit = parts[i].replace(/[()↑↓▲▼•\s]/g, "");
++    var m = bit.match(/[+\-]?(\d+(?:\.\d+)?)$/);
++    if (m && Number(m[1]) === 0) return true;
++  }
++  return false;
++}
++function fe78_chgText(tk, s) {
++  s = String(s == null ? "" : s);
++  if (!s || s === "—" || s === "-" || /undefined|null/.test(s)) return "—";
++  if (fe78_isZero(s)) return "—";
++  s = s.replace(/\s*[·•]\s*[^·•]*\bmarket closed\b[^·•]*/ig, " ");
++  s = s.replace(/\s{2,}/g, " ").trim();
++  var tail = "";
++  if (fe78_isCrypto(tk)) {
++    if (!/\b24h\b/.test(s)) tail += " 24h";
++  } else {
++    var day = fe78_dayTag(tk);
++    s = s.replace(/\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)(?:\s+\d{1,2}\s+[A-Za-z]{3})?(?:\s+\d{4})?(?=\s*(?:[·•]|$))/gi, "");
++    s = s.replace(/\s*[·•]\s*$/g, "").trim();
++    if (day && s.indexOf(day) < 0) tail += " " + day;
++  }
++  var note = fe78_bag(tk) && fe78_bag(tk).prevNote;
++  if (note && s.indexOf(String(note)) < 0) tail += " · " + note;
++  return s + tail;
++}
++function fe78_chgHtml(tk, s) {
++  var plain = fe78_chgText(tk, s);
++  if (plain === "—") return "—";
++  var note = fe78_bag(tk) && fe78_bag(tk).prevNote;
++  if (!note) return fe78_esc(plain);
++  var i = plain.lastIndexOf(String(note));
++  if (i < 0) return fe78_esc(plain);
++  return fe78_esc(plain.slice(0, i)) + '<span class="fe78-note">' + fe78_esc(note) + "</span>" + fe78_esc(plain.slice(i + String(note).length));
++}
++function fe78_quoteLabel(q, displayName) {
++  q = q || {};
++  var sym = String(q.symbol || q.ticker || q.tk || "").toUpperCase().replace(/=X$/, "").replace(/-USD$/, "");
++  var gold = sym === "XAU" || sym === "GC=F" || sym === "GOLD";
++  var label = q.label != null ? String(q.label).trim() : "";
++  if (label && !(/^gold spot$/i.test(label) && !gold)) return label;
++  var name = String(displayName || "").trim();
++  if (!name && q.name && !(/^gold spot$/i.test(String(q.name)) && !gold)) name = String(q.name).trim();
++  if (name && !(/^gold spot$/i.test(name) && !gold)) return name;
++  if (gold) return label || "Gold spot";
++  return sym || "";
++}
++function fe78_quotePx(q, n) {
++  var label = String((q && q.label) || "");
++  var sym = String((q && (q.symbol || q.ticker)) || "").toUpperCase().replace(/=X$/, "");
++  var fx = label.indexOf("/") >= 0 || /^(EUR|GBP|USD|JPY|AUD|CAD|CHF|NZD|CNH|CNY)[A-Z]{3}$/.test(sym);
++  var px = n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
++  return fx ? px : "$" + px;
++}
++function fe78_quoteLine(meta, displayName) {
++  var q = null;
++  if (meta && typeof meta === "object" && meta.quote && typeof meta.quote === "object") q = meta.quote;
++  else if (meta && typeof meta === "object" && (meta.quoteLine || meta.price != null || meta.label || meta.symbol)) q = meta;
++  if (!q) return "";
++  var verbatim = q.quoteLine != null ? String(q.quoteLine).trim() : "";
++  if (verbatim) return verbatim;
++  var label = fe78_quoteLabel(q, displayName);
++  if (!label) return "";
++  var n = Number(q.price != null ? q.price : (q.px != null ? q.px : q.last));
++  var px = isFinite(n) ? fe78_quotePx(q, n) : "";
++  var tail = "";
++  var cash = q.change != null && q.change !== "" ? Number(q.change) : NaN;
++  var raw = q.changePct != null ? q.changePct : q.c;
++  var pct = raw != null && raw !== "" && isFinite(Number(raw)) ? Number(raw) : NaN;
++  var crypto = q.baseline === "24h" || fe78_isCrypto(q.symbol || q.ticker || "");
++  if (isFinite(cash) && cash !== 0) {
++    tail += " " + (cash > 0 ? "+" : "") + cash.toFixed(2);
++    if (isFinite(pct) && pct !== 0) tail += " (" + (pct > 0 ? "+" : "") + pct.toFixed(2) + "%)";
++    if (crypto) tail += " 24h";
++  } else if (isFinite(pct) && pct !== 0) {
++    tail += " " + (pct > 0 ? "+" : "") + pct.toFixed(2) + "%";
++    if (crypto) tail += " 24h";
++    else if (q.changeDay) tail += " " + q.changeDay;
++  }
++  if (!(isFinite(cash) && cash !== 0) && q.prevNote) tail += " · " + q.prevNote;
++  var asOf = q.asOfUk ? (" · " + q.asOfUk) : "";
++  if (!px && !tail && !asOf) return "";
++  return label + (px ? " " + px : "") + tail + asOf;
++}
++function fe78_academyKeep(j) {
++  return !!(j && typeof j === "object" && Array.isArray(j.items));
++}
++function fe78_academyNote(j, today) {
++  if (!j || typeof j !== "object") return null;
++  var edition = j.edition != null ? String(j.edition).trim().toLowerCase() : "";
++  var label = j.label != null ? String(j.label).trim() : "";
++  var dateLabel = j.dateLabel != null ? String(j.dateLabel).trim() : "";
++  var nextRaw = j.nextRunUk != null ? String(j.nextRunUk).trim() : "";
++  var has = !!(edition || label || dateLabel || j.stale != null || nextRaw);
++  if (has) {
++    var nextLine = "";
++    if (nextRaw) {
++      var m = nextRaw.match(/\d{1,2}:\d{2}/);
++      var hm = m ? m[0] : nextRaw.replace(/\s*UK\s*$/i, "").trim();
++      if (/^\d:\d{2}$/.test(hm)) hm = "0" + hm;
++      nextLine = "Next set due " + hm + (/\bUK\b/.test(hm) ? "" : " UK");
++    }
++    var parts = [];
++    if (label) parts.push(label);
++    if (dateLabel && parts.join(" ").indexOf(dateLabel) < 0) parts.push(dateLabel);
++    if (nextLine) parts.push(nextLine);
++    if (!parts.length) {
++      parts.push(edition === "yesterday" ? "Yesterday's set" : edition === "older" ? "An earlier set" : "Today's set");
++    }
++    return { text: parts.join(" · "), amber: j.stale === true };
++  }
++  var date = j.date != null ? String(j.date).trim() : "";
++  if (!date || (today && date === String(today))) return null;
++  return { text: "From " + date, amber: false };
++}
++function fe78_academyStore(box, j, today) {
++  var out = box && typeof box === "object" ? box : {};
++  var note = fe78_academyNote(j, today);
++  if (note) out.note = note;
++  else delete out.note;
++  return out;
++}
++function fe78_regimeCol(score) {
++  var n = Number(score);
++  if (!(n >= 72)) {
++    if (n >= 55) return "var(--gd)";
++    if (n >= 40) return "var(--bl)";
++    if (isFinite(n)) return "var(--rd)";
++    return "var(--gd)";
++  }
++  return "var(--gn)";
++}
++function fe78_regimeFrom(raw, local) {
++  var srv = null;
++  if (raw && typeof raw === "object" && raw.localEstimate !== true) {
++    var label = String(raw.regime || raw.label || "").trim();
++    var score = raw.score != null && raw.score !== "" ? Number(raw.score) : NaN;
++    if (label || isFinite(score)) {
++      var asOfUk = raw.asOfUk ? String(raw.asOfUk).trim() : "";
++      if (!asOfUk && raw.asOf) asOfUk = fe78_ukStamp(raw.asOf);
++      if (!label) {
++        if (score >= 72) label = "Risk-On (Strong)";
++        else if (score >= 55) label = "Risk-On (Fragile)";
++        else if (score >= 40) label = "Transition";
++        else label = "Risk-Off";
++      }
++      srv = { label: label, score: isFinite(score) ? score : (local && local.score), asOf: raw.asOf || "", asOfUk: asOfUk };
++    }
++  }
++  if (srv) {
++    var out = {};
++    var base = local && typeof local === "object" ? local : {};
++    for (var k in base) out[k] = base[k];
++    out.label = srv.label;
++    out.score = srv.score;
++    out.asOf = srv.asOf;
++    out.asOfUk = srv.asOfUk;
++    out.localEstimate = false;
++    out.loading = false;
++    out._hide = false;
++    out.col = fe78_regimeCol(srv.score);
++    return out;
++  }
++  if (!local || typeof local !== "object") return local || null;
++  if (local.loading) return local;
++  var copy = {};
++  for (var k2 in local) copy[k2] = local[k2];
++  var lab = String(copy.label || "");
++  if (lab && lab.indexOf("Dispatch local estimate") < 0) copy.label = lab + " · Dispatch local estimate";
++  copy.localEstimate = true;
++  return copy;
++}
++function fe78_regimeTitle(re) {
++  re = re || {};
++  var bits = [];
++  if (re.label) bits.push(String(re.label));
++  if (re.score != null && re.score !== "" && !re.loading) bits.push(re.score + "/100");
++  var title = bits.join(" · ") || "Market regime";
++  if (re.localEstimate && title.indexOf("Dispatch local estimate") < 0) title += " · Dispatch local estimate";
++  if (!re.localEstimate && re.asOfUk) title += " · " + re.asOfUk;
++  return title;
++}
++function fe78_regimeSub(re) {
++  re = re || {};
++  if (re.loading) return re._hide ? "" : "Regime: loading…";
++  var core = (re.label || "regime") + (re.score != null && !re.loading ? " " + re.score + "/100" : "");
++  if (re.localEstimate) return core;
++  if (re.asOfUk) return "current regime " + core + " · " + re.asOfUk;
++  return "current regime " + core;
++}
++function fe78_briefBits(b) {
++  var empty = { label: "", dayLabel: "", name: "", text: "" };
++  if (!b || typeof b !== "object") return empty;
++  var ed = b.edition && typeof b.edition === "object" ? b.edition : null;
++  var label = String((ed && ed.label) || b.label || b.editionLabel || "").trim();
++  var day = String((ed && ed.dayLabel) || b.dayLabel || b.dateLabel || "").trim();
++  var name = String((ed && ed.name) || b.name || "").trim();
++  var text = label || (day && name ? (day + " · " + name) : (name || day || ""));
++  return { label: label, dayLabel: day, name: name, text: text };
++}
++function fe78_sourceTitle(s) {
++  if (s == null || s === "") return "";
++  if (typeof s === "string") return s;
++  if (typeof s === "object") return String(s.title || s.label || s.name || "");
++  return "";
++}
++function fe78_badgeText(feedLabel, feed) {
++  if (feedLabel != null && String(feedLabel).trim()) {
++    var s = String(feedLabel).trim();
++    try {
++      if (typeof fe65_scrub === "function") {
++        var cleaned = fe65_scrub(s);
++        if (cleaned) s = String(cleaned);
++      }
++    } catch (e) {}
++    return s;
++  }
++  if (feed && typeof feed === "object") {
++    if (feed.label) return String(feed.label);
++    try {
++      if (typeof fe76_feedLabel === "function") {
++        var t = fe76_feedLabel(feed);
++        if (t) return String(t);
++      }
++    } catch (e2) {}
++  }
++  return "";
++}
++function fe78_venueName(tk) {
++  var t = String(tk || "").toUpperCase();
++  if (/\.HK$/.test(t) || t === "HSI" || t === "^HSI" || t === "9988.HK") return "Hong Kong";
++  if (/\.T$/.test(t) || t === "N225" || t === "^N225") return "Tokyo";
++  if (/\.(SS|SZ)$/.test(t) || t === "SSEC" || t === "000001.SS") return "Shanghai";
++  if (/\.KS$/.test(t) || t === "KOSPI" || t === "^KS11") return "Seoul";
++  if (/\.NS$/.test(t) || t === "NSEI" || t === "^NSEI") return "India";
++  if (/\.L$/.test(t) || t === "FTSE" || t === "^FTSE") return "London";
++  if (/\.AX$/.test(t) || t === "ASX200") return "Sydney";
++  if (/\.DE$/.test(t) || t === "DAX") return "Frankfurt";
++  if (/\.PA$/.test(t) || t === "CAC") return "Paris";
++  if (/\.TO$/.test(t)) return "Toronto";
++  if (/\.TW$/.test(t)) return "Taipei";
++  return "";
++}
++function fe78_ukStamp(v) {
++  var ms = typeof v === "number" ? v : Date.parse(v || "");
++  if (typeof v === "string" && /^\d{11,}$/.test(v)) ms = Number(v);
++  if (!isFinite(ms) || ms <= 0) return "";
++  if (ms < 1e11) ms *= 1000;
++  try {
++    var d = new Date(ms);
++    var wd = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short" }).format(d);
++    var day = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", day: "numeric", month: "short" }).format(d);
++    var parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(d);
++    var h = "", mi = "";
++    parts.forEach(function (p) { if (p.type === "hour") h = p.value; if (p.type === "minute") mi = p.value; });
++    if (h.length === 1) h = "0" + h;
++    if (!wd || !day || !h || !mi) return "";
++    return wd + " " + day + ", " + h + ":" + mi + " UK";
++  } catch (e) { return ""; }
++}
++function fe78_closedLine(tk, nextOpen) {
++  var venue = fe78_venueName(tk);
++  if (!venue) return "";
++  var stamp = fe78_ukStamp(nextOpen);
++  return venue + " market closed" + (stamp ? " · opens " + stamp : "");
++}
++function fe78_tidyStatus(s, tk, nextOpen) {
++  var closed = tk ? fe78_closedLine(tk, nextOpen) : "";
++  if (closed) return closed;
++  var text = String(s || "");
++  return text.replace(/(\d{1,2}:\d{2}\s*UK)\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)(?:\s+\d{1,2}\s+[A-Za-z]{3})?(?:\s+\d{4})?/gi, "$1");
++}
++function fe78_cryptoLine(tk, px) {
++  var b = fe78_bag(tk);
++  if (!b || b.baseline !== "24h" || b.srvC == null || !isFinite(Number(b.srvC)) || Number(b.srvC) === 0) return "";
++  var c = Number(b.srvC);
++  var pct = (c > 0 ? "+" : "") + c.toFixed(2) + "%";
++  var n = Number(px);
++  if (!(n > 0)) return (c > 0 ? "\u2191 " : "\u2193 ") + pct + " 24h";
++  var diff = n - n / (1 + c / 100);
++  var abs = Math.abs(diff);
++  var num = abs >= 1000 ? Math.round(abs).toLocaleString("en-US") : abs.toFixed(2);
++  var sign = diff < 0 ? "-" : "+";
++  var arrow = diff < 0 ? "\u2193 " : "\u2191 ";
++  return arrow + sign + "$" + num + " (" + pct + ") 24h";
++}
++function fe78_askPrefill(subject) {
++  var raw = String(subject == null ? "" : subject).replace(/\s+/g, " ").trim();
++  raw = raw.replace(/\s+[—–-]\s+.*$/, "");
++  raw = raw.replace(/\b(neutral(?:[-\s]?bull|-bear|\s+fit)?|bullish|bearish|headwind|regime-aligned|cautious)\b/ig, "");
++  raw = raw.replace(/\s+/g, " ").replace(/^[\s—–\-]+|[\s—–\-]+$/g, "").trim();
++  if (!raw || /^markets?(?:\s+right\s+now)?$/i.test(raw)) return "What matters most in markets right now?";
++  return "What matters most for " + raw + " right now?";
++}
++function fe78_dxyLabel(serverLabel, ice, fallback) {
++  if (fallback || !ice) return "Dispatch FX basket";
++  var s = String(serverLabel || "").trim();
++  if (s === "US Dollar Index (ICE)") return s;
++  return "US Dollar Index (ICE)";
++}
++function fe78_deskScore(n) {
++  if (n == null || n === "" || !isFinite(Number(n))) return "";
++  return "Desk score " + Number(n) + "/100";
++}
++function fe78_zeroish(s) {
++  var t = String(s || "");
++  if (/\$0\.00\b/.test(t)) return true;
++  if (/(?:^|[^\d.])\+?0\.00%/.test(t)) return true;
++  if (/\+0\.00\b/.test(t)) return true;
++  if (/\(\s*\+?0\.00\s*%?\s*\)/.test(t)) return true;
++  return false;
++}
++function fe78_skel() {
++  return '<span class="fe78-skel" aria-hidden="true"></span>';
++}
++// FE78_PURE_END
++
++function fe78_displayName(sym, q) {
++  var tk = String(sym || "").toUpperCase().replace(/=X$/, "").replace(/-USD$/, "");
++  try {
++    if (typeof A !== "undefined" && A && A.find) {
++      var row = A.find(function (x) { return x && (x.tk === tk || x.tk === String(sym || "")); });
++      if (row && row.nm) return row.nm;
++    }
++  } catch (e) {}
++  try { if (typeof liveQuoteName !== "undefined" && liveQuoteName[tk]) return liveQuoteName[tk]; } catch (e2) {}
++  if (q && q.name && !/^gold spot$/i.test(String(q.name))) return String(q.name);
++  return tk;
++}
++function fe78_profileHtml(a, mode) {
++  var tx = "";
++  try { tx = typeof _rt24Th === "function" ? _rt24Th(a) : fe78_about(a); } catch (e) { tx = fe78_about(a); }
++  tx = String(tx || "").trim();
++  if (!tx || tx === "undefined" || tx === "None") return "";
++  if (mode !== "full" && mode !== "th" && typeof _rt26Sent === "function") {
++    try { tx = _rt26Sent(tx, mode === "ov" ? 200 : 140); } catch (e2) {}
++  }
++  tx = String(tx || "").trim();
++  if (!tx || tx === "undefined") return "";
++  var body = fe78_esc(tx);
++  if (mode === "ov" || mode === "th") return '<div class="ap-thesis">' + body + "</div>";
++  if (mode === "full") {
++    return '<div class="gc" style="border-left:3px solid var(--bl)"><div style="font-size:8px;color:var(--t3);font-family:var(--mn);letter-spacing:0.1em">PROFILE</div><div style="font-size:11.5px;color:var(--t2);line-height:1.6;margin-top:6px">' + body + "</div></div>";
++  }
++  return '<div class="gc"><div style="font-size:8px;color:var(--t3);font-family:var(--mn);letter-spacing:0.1em">PROFILE</div><div style="font-size:10.5px;color:var(--t2);line-height:1.55;margin-top:4px">' + body + "</div></div>";
++}
++function fe78_css() {
++  try {
++    if (typeof document === "undefined" || document.getElementById("fe78-css")) return;
++    var st = document.createElement("style");
++    st.id = "fe78-css";
++    st.textContent = ".fe78-note{font-size:10px;color:var(--t3,#8b909a);font-weight:500;margin-left:4px}.fe78-acad{display:block;margin:8px 0 10px;padding:8px 10px;border-radius:8px;font-size:13px;line-height:1.45;color:var(--t2,#c8cdd6);background:rgba(255,255,255,.04);border:1px solid var(--b4,rgba(255,255,255,.08));white-space:normal;overflow-wrap:anywhere;max-width:100%;box-sizing:border-box}.fe78-acad-stale{color:#e0b15a;border-color:rgba(224,177,90,.45);background:rgba(224,177,90,.1)}.fe78-skel{display:inline-block;height:0.85em;min-width:4.8em;border-radius:4px;background:linear-gradient(90deg,rgba(255,255,255,.05),rgba(255,255,255,.16),rgba(255,255,255,.05));background-size:200% 100%;animation:fe78sh 1.1s ease-in-out infinite;vertical-align:-0.1em}@keyframes fe78sh{0%{background-position:100% 0}100%{background-position:-100% 0}}";
++    document.head.appendChild(st);
++  } catch (e) {}
++}
++try { fe78_css(); } catch (eCss) {}
++
++try {
++  var fe78_th0 = _rt24Th;
++  _rt24Th = function (a) {
++    var t = fe78_about(a);
++    return t || "";
++  };
++  void fe78_th0;
++} catch (eTh) {}
++try {
++  var fe78_live0 = _applyLiveQuote;
++  _applyLiveQuote = function (tk, q, source) {
++    try { fe78_take(tk, q); } catch (eT) {}
++    var ok = fe78_live0.apply(this, arguments);
++    try {
++      if (typeof P !== "undefined" && P[tk]) {
++        if (!(P[tk].p > 0)) { P[tk].p = null; P[tk].c = null; }
++        else if (Number(P[tk].c) === 0) {
++          P[tk].c = null;
++          if (typeof liveQuoteChangeAvailable !== "undefined") liveQuoteChangeAvailable[tk] = false;
++        }
++      }
++    } catch (eZ) {}
++    return ok;
++  };
++} catch (eLive) {}
++function fe78_priceReady(tk) {
++  try {
++    var p = (typeof P !== "undefined" && P[tk]) ? P[tk].p : null;
++    if (!(typeof p === "number" && isFinite(p) && p > 0)) return false;
++    if (typeof fe76_looksZero === "function" && fe76_looksZero(tk, p)) return false;
++    return true;
++  } catch (e) { return false; }
++}
++function fe78_changeReady(tk) {
++  try {
++    if (typeof liveQuoteChangeAvailable !== "undefined" && liveQuoteChangeAvailable[tk] === false) return false;
++    var c = null;
++    try { c = typeof liveChg === "function" ? liveChg(tk) : null; } catch (e1) { c = null; }
++    if (c == null && typeof P !== "undefined" && P[tk] && typeof P[tk].c === "number") c = P[tk].c;
++    return typeof c === "number" && isFinite(c) && c !== 0;
++  } catch (e) { return false; }
++}
++function fe78_nextOpen(tk) {
++  var b = fe78_bag(tk);
++  if (b && b.nextOpen) return b.nextOpen;
++  try {
++    if (typeof fe70_bag === "function") {
++      var bag = fe70_bag(tk);
++      if (bag && bag.nextOpen) return bag.nextOpen;
++    }
++  } catch (e) {}
++  try {
++    if (typeof fe70_isHk === "function" && fe70_isHk(tk) && typeof fe70_hkBag === "function") {
++      var hk = fe70_hkBag();
++      if (hk && hk.nextOpen) return hk.nextOpen;
++    }
++  } catch (e2) {}
++  try {
++    var y = typeof fe64_yqBag === "function" ? fe64_yqBag(tk) : null;
++    if (y && y.nextOpen) return y.nextOpen;
++  } catch (e3) {}
++  return "";
++}
++function fe78_isClosed(tk) {
++  var b = fe78_bag(tk);
++  if (b && (b.status === "closed" || b.marketOpen === false || /market closed/i.test(String(b.note || "")))) return true;
++  try { if (typeof fe66_closedQuote === "function" && fe66_closedQuote(tk)) return true; } catch (e) {}
++  try {
++    var bag = typeof fe70_bag === "function" ? fe70_bag(tk) : null;
++    if (bag && (bag.status === "closed" || bag.marketOpen === false || /market closed/i.test(String(bag.note || "")))) return true;
++  } catch (e2) {}
++  return false;
++}
++function fe78_status(tk, s) {
++  if (!fe78_venueName(tk) || !fe78_isClosed(tk)) return fe78_tidyStatus(s, "", "");
++  return fe78_tidyStatus(s || "", tk, fe78_nextOpen(tk));
++}
++try {
++  var fe78_chg0 = fe66_chgLine;
++  fe66_chgLine = function (tk) {
++    try {
++      var px = (typeof P !== "undefined" && P[tk]) ? P[tk].p : null;
++      var forced = fe78_cryptoLine(tk, px);
++      if (forced) return forced;
++    } catch (eF) {}
++    var out = "";
++    try { out = fe78_chg0.apply(this, arguments); } catch (e) { out = ""; }
++    var s = String(out == null ? "" : out);
++    if (fe78_zeroish(s) || ((!s || s === "—" || /awaiting|no sync|syncing/i.test(s)) && !fe78_changeReady(tk))) return fe78_skel();
++    s = fe78_chgText(tk, s);
++    if (fe78_zeroish(s)) return fe78_skel();
++    return s;
++  };
++  if (typeof fe73_chgLine === "function") fe73_chgLine = fe66_chgLine;
++} catch (eChg) {}
++try {
++  var fe78_px0 = fe66_priceLine;
++  fe66_priceLine = function (tk) {
++    if (!fe78_priceReady(tk)) return fe78_skel();
++    var out = "";
++    try { out = fe78_px0.apply(this, arguments); } catch (e) { out = ""; }
++    if (!out || out === "—" || fe78_zeroish(out) || /sync|NO LIVE/i.test(String(out))) return fe78_skel();
++    return out;
++  };
++} catch (ePx) {}
++try {
++  fe76_quoteBlock = function (meta) {
++    var q = meta && meta.quote;
++    if (!q || typeof q !== "object" || Array.isArray(q)) return "";
++    var sym = String(q.symbol || q.ticker || q.tk || "");
++    var line = fe78_quoteLine({ quote: q }, fe78_displayName(sym, q));
++    if (!line || /undefined/.test(line)) return "";
++    if (q.quoteLine && String(q.quoteLine).trim()) return '<div class="fe76-qlines"><div class="fe76-qline">' + fe78_esc(line) + "</div></div>";
++    var note = q.prevNote ? String(q.prevNote) : "";
++    var html = fe78_esc(line);
++    if (note && line.indexOf(note) >= 0) {
++      var i = line.lastIndexOf(note);
++      html = fe78_esc(line.slice(0, i)) + '<span class="fe78-note">' + fe78_esc(note) + "</span>" + fe78_esc(line.slice(i + note.length));
++    }
++    return '<div class="fe76-qlines"><div class="fe76-qline">' + html + "</div></div>";
++  };
++} catch (eQb) {}
++try {
++  fe77_quotePreview = function (meta) {
++    var q = meta && meta.quote;
++    if (!q) return "";
++    return fe78_quoteLine(meta, fe78_displayName(q.symbol || q.ticker || "", q));
++  };
++} catch (eQp) {}
++try {
++  var fe78_title0 = fe77_briefTitle;
++  fe77_briefTitle = function (edition, hour) {
++    var bits = fe78_briefBits(edition);
++    if (bits && bits.text) return bits.text;
++    return fe78_title0.apply(this, arguments);
++  };
++} catch (eBt) {}
++try {
++  var fe78_st0 = _rt20Stance;
++  _rt20Stance = function (b) {
++    var bits = fe78_briefBits(b);
++    if (bits && bits.text) return typeof fe77_kicker === "function" ? fe77_kicker(bits.text) : bits.text;
++    return fe78_st0.apply(this, arguments);
++  };
++} catch (eSt) {}
++try {
++  var fe78_src0 = fe77_themeSource;
++  fe77_themeSource = function (row) {
++    var t = fe78_sourceTitle(row && row.source);
++    if (t) return t;
++    return fe78_src0.apply(this, arguments);
++  };
++} catch (eSrc) {}
++try {
++  var fe78_lbl0 = fe65_feedLbl;
++  fe65_feedLbl = function (d, tk) {
++    var b = fe78_bag(tk);
++    var custom = b && b.feedLabel ? fe78_badgeText(b.feedLabel, null) : "";
++    if (custom) return custom;
++    return fe78_lbl0.apply(this, arguments);
++  };
++} catch (eLbl) {}
++try {
++  var fe78_fr0 = fe77_applyFresh;
++  fe77_applyFresh = function (tk, o) {
++    var out = fe78_fr0.apply(this, arguments);
++    var b = fe78_bag(tk);
++    var custom = b && b.feedLabel ? fe78_badgeText(b.feedLabel, null) : "";
++    if (out && custom) { out.label = custom; out.fe64Note = custom; }
++    return out;
++  };
++} catch (eFr) {}
++try {
++  var fe78_feed0 = fe66_feedLbl;
++  fe66_feedLbl = function (d, tk) {
++    var out = "";
++    try { out = fe78_feed0.apply(this, arguments); } catch (e) { out = ""; }
++    var line = fe78_status(tk, out);
++    return line || out;
++  };
++} catch (eFeed) {}
++try {
++  var fe78_line0 = fe70_line;
++  fe70_line = function (tk) {
++    var out = "";
++    try { out = fe78_line0.apply(this, arguments); } catch (e) { out = ""; }
++    var line = fe78_status(tk, out);
++    return line || out;
++  };
++} catch (eLine) {}
++try {
++  var fe78_sess0 = fe70_sess;
++  fe70_sess = function (tk) {
++    var row = { st: "", c: "" };
++    try { row = fe78_sess0.apply(this, arguments) || row; } catch (e) {}
++    if (row && fe78_isClosed(tk) && fe78_venueName(tk)) row.st = fe78_status(tk, row.st);
++    return row;
++  };
++} catch (eSess) {}
++try {
++  var fe78_head0 = fe76_head;
++  fe76_head = function (tk) {
++    var out = "";
++    try { out = fe78_head0.apply(this, arguments); } catch (e) { out = ""; }
++    if (fe78_isClosed(tk) && fe78_venueName(tk)) return fe78_status(tk, out);
++    return fe78_tidyStatus(out, "", "");
++  };
++} catch (eHead) {}
++try {
++  var fe78_sub0 = _patchP2LiveHeader;
++  _patchP2LiveHeader = function () {
++    var r = fe78_sub0.apply(this, arguments);
++    try {
++      var priceEl = document.querySelector("#p2body .ap-price");
++      var chgEl = document.querySelector("#p2body .ap-chg");
++      if (priceEl && priceEl.querySelector && !priceEl.querySelector(".fe78-skel") && fe78_zeroish(priceEl.textContent)) priceEl.innerHTML = fe78_skel();
++      if (chgEl && chgEl.querySelector && !chgEl.querySelector(".fe78-skel") && fe78_zeroish(chgEl.textContent)) chgEl.innerHTML = fe78_skel();
++      var sub = document.getElementById("p2sub");
++      var tk = typeof termSelTk !== "undefined" ? termSelTk : "";
++      if (sub && tk) sub.textContent = fe78_status(tk, sub.textContent);
++    } catch (e) {}
++    return r;
++  };
++} catch (eSub) {}
++try {
++  var fe78_ask0 = fe69_askCard;
++  function fe78_fillAsk(btn) {
++    var inp = document.getElementById("chatInp");
++    if (!inp) return;
++    var tk = "";
++    try { tk = fe69_intelTk(); } catch (e1) { tk = ""; }
++    var who = tk;
++    try {
++      if (typeof A !== "undefined" && A && A.find) {
++        var row = A.find(function (x) { return x && x.tk === tk; });
++        if (row && row.nm) who = row.nm;
++      }
++    } catch (e2) {}
++    if (!who) {
++      try { who = fe69_askHead(btn); } catch (e3) { who = ""; }
++    }
++    var cur = String(inp.value || "");
++    var next = fe78_askPrefill(who || cur.replace(/^What matters most about\s+/i, "").replace(/\?$/, ""));
++    if (!cur || /what matters most about/i.test(cur) || cur === next) inp.value = next;
++  }
++  fe69_askCard = function (btn) {
++    var r = fe78_ask0.apply(this, arguments);
++    try { fe78_fillAsk(btn); } catch (e) {}
++    [40, 180, 400].forEach(function (ms) {
++      setTimeout(function () { try { fe78_fillAsk(btn); } catch (e2) {} }, ms);
++    });
++    return r;
++  };
++} catch (eAsk) {}
++try {
++  var fe78_openAsk0 = _openResearchAssistant;
++  _openResearchAssistant = function (question) {
++    var q = String(question || "");
++    if (/what matters most about/i.test(q)) q = fe78_askPrefill(q.replace(/^what matters most about\s+/i, "").replace(/\?$/, ""));
++    return fe78_openAsk0.call(this, q);
++  };
++} catch (eOpen) {}
++try {
++  fe77_dxyTitle = function (ice, fallback, label) {
++    return fe78_dxyLabel(label, ice, fallback);
++  };
++} catch (eDxy) {}
++try {
++  var fe78_pct0 = fe73_pctText;
++  fe73_pctText = function (n) {
++    if (!isFinite(Number(n)) || Number(n) === 0) return "";
++    return fe78_pct0.apply(this, arguments);
++  };
++} catch (ePct) {}
++try {
++  var fe78_fpct0 = fe66_pct;
++  fe66_pct = function (ch) {
++    if (!isFinite(Number(ch)) || Number(ch) === 0) return "";
++    return fe78_fpct0.apply(this, arguments);
++  };
++} catch (eFpct) {}
++try {
++  var fe78_abs0 = fe73_absText;
++  fe73_absText = function (ccy, n) {
++    if (!isFinite(Number(n)) || Math.abs(Number(n)) < 0.005) return "";
++    var out = fe78_abs0.apply(this, arguments);
++    return fe78_zeroish(out) ? "" : out;
++  };
++} catch (eAbs) {}
++function fe78_scrubZeros(root) {
++  if (!root || !root.querySelectorAll) return;
++  root.querySelectorAll(".ap-price,.ap-chg,.asset-price,.asset-chg,.change,.idx-card-px,.idx-card-chg,.conv-px,.conv-chg,.value").forEach(function (el) {
++    if (el.querySelector && el.querySelector(".fe78-skel")) return;
++    if (fe78_zeroish(el.textContent || "")) el.innerHTML = fe78_skel();
++  });
++}
++try {
++  var fe78_rm0 = renderMain;
++  renderMain = function () {
++    var r = fe78_rm0.apply(this, arguments);
++    try { fe78_scrubZeros(document.getElementById("main")); } catch (e) {}
++    return r;
++  };
++} catch (eRm) {}
++try {
++  var fe78_rp0 = renderP2;
++  renderP2 = function () {
++    var r = fe78_rp0.apply(this, arguments);
++    try { fe78_scrubZeros(document.getElementById("p2body")); } catch (e) {}
++    return r;
++  };
++} catch (eRp) {}
++try {
++  setInterval(function () {
++    try { fe78_scrubZeros(document.body); } catch (e) {}
++  }, 80);
++} catch (eIv) {}
++
++var fe78_srvRegime = null;
++function fe78_stampRegime(raw) {
++  var view = fe78_regimeFrom(raw, null);
++  if (!view || view.localEstimate) return;
++  if (fe78_srvRegime && fe78_srvRegime.asOf && view.asOf) {
++    var a = Date.parse(fe78_srvRegime.asOf);
++    var b = Date.parse(view.asOf);
++    if (isFinite(a) && isFinite(b) && b + 1000 < a) return;
++  }
++  fe78_srvRegime = view;
++}
++function fe78_academyHtml(note) {
++  if (!note || !note.text) return "";
++  var cls = note.amber ? "fe78-acad fe78-acad-stale" : "fe78-acad";
++  return '<p class="' + cls + '">' + fe78_esc(note.text) + "</p>";
++}
++try {
++  var fe78_eng0 = _computeRegimeEngine;
++  _computeRegimeEngine = function () {
++    var local = null;
++    try { local = fe78_eng0.apply(this, arguments); } catch (e) { local = null; }
++    return fe78_regimeFrom(fe78_srvRegime, local);
++  };
++} catch (eReg) {}
++try {
++  var fe78_ref0 = fe77_takeRef;
++  fe77_takeRef = function (data) {
++    var r = fe78_ref0.apply(this, arguments);
++    try { if (data && data.regime) fe78_stampRegime(data.regime); } catch (e) {}
++    return r;
++  };
++} catch (eRef) {}
++try {
++  var fe78_sm0 = fe77_streamMeta;
++  fe77_streamMeta = function () {
++    var meta = fe78_sm0.apply(this, arguments);
++    try { if (meta && meta.regime) fe78_stampRegime(meta.regime); } catch (e) {}
++    return meta;
++  };
++} catch (eSm) {}
++try {
++  var fe78_json0 = _bb2CommitJson;
++  _bb2CommitJson = function (data) {
++    try { if (data && data.meta && data.meta.regime) fe78_stampRegime(data.meta.regime); } catch (e) {}
++    return fe78_json0.apply(this, arguments);
++  };
++} catch (eJs) {}
++try {
++  if (typeof _chatMsgs !== "undefined" && _chatMsgs && _chatMsgs.forEach) {
++    _chatMsgs.forEach(function (m) { if (m && m.meta && m.meta.regime) fe78_stampRegime(m.meta.regime); });
++  }
++} catch (eBoot) {}
++try {
++  var fe78_step0 = _rt47StepHtml;
++  _rt47StepHtml = function (s) {
++    var html = fe78_step0.apply(this, arguments);
++    try {
++      var note = (typeof _rt48Ai !== "undefined" && _rt48Ai && _rt48Ai.note) ? _rt48Ai.note : null;
++      var banner = fe78_academyHtml(note);
++      if (banner && s && (s.ai || (s.t === "info" && typeof _rt47L !== "undefined" && _rt47L.id === "news"))) {
++        if (String(html).indexOf("fe78-acad") < 0) html = banner + html;
++      }
++    } catch (e) {}
++    return html;
++  };
++} catch (eStep) {}
++try {
++  var rawAc = JSON.parse(localStorage.getItem("td_academy_auto_v1") || "{}");
++  if (rawAc && rawAc.ai && rawAc.ai.note && typeof _rt48Ai === "object" && _rt48Ai) _rt48Ai.note = rawAc.ai.note;
++} catch (eAc) {}
+diff --git a/index.html b/index.html
+--- a/index.html
++++ b/index.html
+@@ -343,7 +343,7 @@
+ 
+ <!-- Context menu -->
+ <div class="ctx-menu" id="ctxMenu"></div>
+-<script defer src="/app.js?v=chat77"></script>
++<script defer src="/app.js?v=chat78"></script>
+ <script src="https://i.replit.com/script.js" async="" data-website-id="41c83e31-7da9-45c5-a194-58f8bc4f6608"></script></body>
+ </html>
+ 
