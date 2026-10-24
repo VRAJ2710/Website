@@ -1,0 +1,678 @@
+--- app.js
++++ app.js
+@@ -875,7 +875,7 @@
+       ...heads.slice(0, 2).map(h => `News: ${h}`)
+     ].filter(Boolean).slice(0, 5),
+     risks: [
+-      re.loading ? "Regime inputs were still loading when this brief was built" : re.score < 50 ? `Risk-off at brief time (${re.score}/100) — size down high-beta first` : "Risk-on can reverse fast if VIX spikes",
++      fe82_riskLine(re),
+       "Free brief uses free market data — no LLM synthesis",
+       heads[1] || "Macro print / policy surprise can flip the score",
+       btcC != null && Math.abs(btcC) > 3 ? `Crypto vol elevated (BTC ${btcC.toFixed(2)}%)` : null
+@@ -6304,7 +6304,7 @@
+     if (el.matches("#tape .ti")) {
+       const k = el.children; if (k.length < 3) return;
+       if (setText(k[1], d.p)) _rtFlash(el, tk);
+-      k[2].style.color = col; var fe78tape = ch == null ? "—" : fe78_chgHtml(tk, sign + d.c + "%"); if (k[2].innerHTML !== fe78tape) { k[2].innerHTML = fe78tape; n++; }
++      k[2].style.color = col; var fe78tape = fe82_tapeCell(tk, ch, d); if (k[2].innerHTML !== fe78tape) { k[2].innerHTML = fe78tape; n++; }
+       var fe65sig = (d.status || "") + "|" + (d.fe64Note || "") + "|" + (d.label || "");
+       if (el.dataset.rtSt !== fe65sig) { el.dataset.rtSt = fe65sig; k[0].innerHTML = `${_escHtml(fe65_tapeName(tk))}${_rtTapeBadge(d)}`; }
+       el.title = `${fe65_tapeName(tk)} · ${d.fe64Note || d.label || "NO SYNC"}`;
+@@ -11099,7 +11099,7 @@
+     const title=_escAttr(`${k} · ${d.label||"NO SYNC"}${d.asOf?` · as of ${_fmtAsOf(d.asOf)}`:""}`);
+     const chCol=ch==null?"var(--t3)":ch>0?"var(--gn)":ch<0?"var(--rd)":"var(--t3)";
+     const chSign=ch!=null&&ch>=0?"+":"";
+-    return `<span class="ti" data-tk="${k}" data-st="${_escAttr(d.status||"")}" data-as="${Number(d.asOf)||0}" title="${_escAttr(fe65_tapeName(k) + " · " + (d.fe64Note || d.label || ""))}"><span style="color:${catCol};font-weight:700">${fe65_tapeName(k)}${_rtTapeBadge(d)}</span><span style="color:var(--tx);font-weight:700">${d.p}</span><span style="color:${chCol};font-weight:600">${ch==null?"—":fe78_chgHtml(k, chSign+d.c+"%")}</span></span>`;
++    return `<span class="ti" data-tk="${k}" data-st="${_escAttr(d.status||"")}" data-as="${Number(d.asOf)||0}" title="${_escAttr(fe65_tapeName(k) + " · " + (d.fe64Note || d.label || ""))}"><span style="color:${catCol};font-weight:700">${fe65_tapeName(k)}${_rtTapeBadge(d)}</span><span style="color:var(--tx);font-weight:700">${d.p}</span><span style="color:${chCol};font-weight:600">${fe82_tapeCell(k, ch, d)}</span></span>`;
+   }).join("");
+   const tape = document.getElementById("tape");
+   if (tape) {
+@@ -24207,7 +24207,7 @@
+ } catch (e) {} return ''; }
+ function _rt48HubHtml() { const w = _rt48WeekSync(), ts = _rt48WeekTasks(), all = ts.every(t => (w.c[t[0]] || 0) >= t[2]);
+   try { _rt48AutoKick(); } catch (e) {}
+-  const fresh = Math.max(_rt48Wk.at || 0, _rt48Nw.at || 0);
++  const fresh = (typeof fe82_hubLine==="function"?fe82_hubLine():_rt48Fresh(Math.max(_rt48Wk.at || 0, _rt48Nw.at || 0)));
+   return `<section class="rt48-hub" aria-labelledby="rt48hubh"><div class="rt48-hubh"><h2 class="rt47-h2" id="rt48hubh">Activities</h2>${fresh ? `<span class="rt48-fresh" data-rt48fresh>${_rt48E(_rt48Fresh(fresh))}</span>` : '<span class="rt48-fresh" data-rt48fresh></span>'}</div>
+     <div class="rt48-week${all ? ' done' : ''}"><div class="rt47-ck">${_rt47Ic('flame')} WEEKLY CHALLENGE · ${_rt48E(w.id.replace('-W', ' · WEEK '))}</div>
+       <p>${all ? 'Done this week. A new set starts on Monday.' : 'Finish all four this week for +60 XP and the Weekly Winner badge.'}</p>
+@@ -24218,7 +24218,7 @@
+     <div class="rt48-bdw"><div class="rt47-ck">${_rt47Ic('shield')} ACTIVITY BADGES</div><div class="rt47-bds">${RT48_BADGES.map(b => `<span class="rt47-bd${_rt48S.bd[b[0]] ? ' on' : ''}" title="${_rt48E(b[3])}"><span aria-hidden="true">${b[2]}</span><span>${_rt48E(b[1])}</span></span>`).join('')}</div></div></section>`; }
+ // live refresh of hub status lines without rebuilding the page
+ function _rt48HubTick() { document.querySelectorAll('[data-rt48st]').forEach(e => { const t = _rt48Status(e.dataset.rt48st); if (e.textContent !== t) e.textContent = t; });
+-  const f = document.querySelector('[data-rt48fresh]'); if (f) { const t = Math.max(_rt48Wk.at || 0, _rt48Nw.at || 0), s = t ? _rt48Fresh(t) : ''; if (f.textContent !== s) f.textContent = s; } }
++  const f = document.querySelector('[data-rt48fresh]'); if (f) { const t = Math.max(_rt48Wk.at || 0, _rt48Nw.at || 0), s = (typeof fe82_hubLine==="function"?fe82_hubLine():(t ? _rt48Fresh(t) : '')); if (f.textContent !== s) f.textContent = s; } }
+ setInterval(() => { try { if (document.getElementById('rt47home')) _rt48HubTick(); } catch (e) {} }, 3000);
+ 
+ // ── Speed round: 60 seconds, quiz bank + glossary, combo multiplier ──
+@@ -36032,3 +36032,619 @@
+     } catch (e) {}
+   }, 400);
+ } catch (eIv) {}
++
++// ── rt62d ──
++// FE82_PURE_START
++function fe82_ms(v) {
++  if (v == null || v === "") return 0;
++  if (typeof v === "number" && isFinite(v)) return v < 1e11 ? v * 1000 : v;
++  var n = Date.parse(String(v));
++  return isFinite(n) ? n : 0;
++}
++function fe82_loadHit(s) {
++  return /regime inputs were still loading/i.test(String(s || ""));
++}
++function fe82_stripLoad(s) {
++  return String(s == null ? "" : s)
++    .replace(/regime inputs were still loading(?: when this brief was built)?\.?/ig, "")
++    .replace(/[ \t]{2,}/g, " ")
++    .replace(/\s+([,.;])/g, "$1")
++    .replace(/^\s+|\s+$/g, "");
++}
++function fe82_regimeReady(re) {
++  if (!re || typeof re !== "object" || Array.isArray(re)) return false;
++  if (re.available === false || re.skeleton === true || re.loading) return false;
++  if (re.score == null || re.score === "" || !isFinite(Number(re.score))) return false;
++  return true;
++}
++function fe82_riskLine(re) {
++  re = re || {};
++  if (!fe82_regimeReady(re) && (re.loading || re.available === false || re.score == null || re.score === "")) {
++    return "Regime inputs were still loading when this brief was built";
++  }
++  if (Number(re.score) < 50) return "Risk-off at brief time (" + re.score + "/100) — size down high-beta first";
++  return "Risk-on can reverse fast if VIX spikes";
++}
++function fe82_tapePct(row, px) {
++  row = row || {};
++  var base = Number(row.baselinePrice);
++  var p = Number(px != null ? px : (row.px != null ? row.px : (row.p != null ? row.p : row.price)));
++  if (base > 0 && p > 0) {
++    var pct = ((p / base) - 1) * 100;
++    if (isFinite(pct)) return +pct.toFixed(2);
++  }
++  var srv = row.c != null ? row.c : (row.changePct != null ? row.changePct : row.change);
++  if (srv != null && srv !== "" && isFinite(Number(srv))) return +Number(srv).toFixed(2);
++  return null;
++}
++function fe82_goldPts(price, prev, extra) {
++  extra = extra || {};
++  var raw = extra.points != null ? extra.points : (extra.pointChange != null ? extra.pointChange : extra.changePoints);
++  var pts = Number(raw);
++  if (!isFinite(pts) || Number(pts.toFixed(2)) === 0) {
++    var p = Number(price), q = Number(prev);
++    if (p > 0 && q > 0) pts = p - q;
++  }
++  if (!isFinite(pts) || Number(pts.toFixed(2)) === 0) return "";
++  var n = Number(pts);
++  var abs = Math.abs(n);
++  var body = abs >= 1000
++    ? abs.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
++    : abs.toFixed(2);
++  return (n > 0 ? "+" : "-") + body;
++}
++function fe82_pxText(n, fx) {
++  var v = Number(n);
++  if (!isFinite(v)) return "";
++  var dp = fx ? 4 : 2;
++  return v.toLocaleString("en-GB", { minimumFractionDigits: dp, maximumFractionDigits: dp });
++}
++function fe82_ukToday(ms) {
++  try {
++    return new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/London" }).format(new Date(ms || Date.now()));
++  } catch (e) { return ""; }
++}
++function fe82_sameUk(a, b) {
++  return String(a || "").replace(/\s+/g, " ").trim().toLowerCase() === String(b || "").replace(/\s+/g, " ").trim().toLowerCase();
++}
++function fe82_setLabel(set, today) {
++  set = set || {};
++  var dateUk = set.generatedDateUk != null ? String(set.generatedDateUk).trim() : "";
++  var timeUk = set.generatedAtUk != null ? String(set.generatedAtUk).replace(/\s*UK\s*$/i, "").trim() : "";
++  var label = set.updatedLabel != null ? String(set.updatedLabel).trim() : "";
++  var todayLabel = today || fe82_ukToday();
++  var isToday = !!(dateUk && todayLabel && fe82_sameUk(dateUk, todayLabel));
++  var ed = String(set.edition || "").toLowerCase();
++  var staleEd = ed === "yesterday" || ed === "sample" || ed === "legacy" || ed === "older";
++  if (label) {
++    if (dateUk && !isToday) label = label.replace(/\btoday\b/ig, dateUk);
++    else if (staleEd) label = label.replace(/\bUpdated today\b/i, "Updated").replace(/\btoday\b/ig, "").replace(/\s{2,}/g, " ").trim();
++    return label;
++  }
++  if (timeUk && dateUk) return "Updated " + (isToday && !staleEd ? "today" : dateUk) + " · " + timeUk + " UK";
++  return "";
++}
++function fe82_itemStamp(it) {
++  it = it || {};
++  return fe82_ms(it.generatedAt || it.updatedAt || it.updated || it.asOf || it.generated_at || it.updated_at);
++}
++function fe82_editionMs(j, items) {
++  items = items || (j && j.items) || [];
++  var i;
++  for (i = 0; i < items.length; i++) {
++    var m = fe82_itemStamp(items[i]);
++    if (m) return m;
++  }
++  if (j) return fe82_ms(j.generatedAt || j.updatedAt || j.asOf || j.generated_at || j.updated_at);
++  return 0;
++}
++function fe82_keepLead(text) {
++  var bits = [];
++  var shielded = String(text || "").replace(/\([^)\n]*24 hours earlier[^)\n]*\)/g, function (m) {
++    bits.push(m);
++    return "\u0001" + (bits.length - 1) + "\u0001";
++  });
++  return { text: shielded, bits: bits };
++}
++function fe82_restoreLead(text, bits) {
++  var t = String(text || "");
++  (bits || []).forEach(function (m, i) { t = t.split("\u0001" + i + "\u0001").join(m); });
++  return t;
++}
++function fe82_sigMode(st) {
++  st = st || {};
++  if (st.have) return "cards";
++  var open = !!st.open;
++  var err = !!st.err;
++  var age = Number(st.age) || 0;
++  if (err && !open) return "unavailable";
++  if (!open && st.settled && !st.have) return "unavailable";
++  if (age >= 20000) return "unavailable";
++  return "skeleton";
++}
++// FE82_PURE_END
++var fe82_acadAt = 0;
++var fe82_acadLabel = "";
++var fe82_goldDc = null;
++var fe82_quoteWait = [];
++var fe82_qGen = 1;
++var fe82_sigT0 = 0;
++var fe82_sigArmed = false;
++var fe82_sigTimer = 0;
++var FE82_SYM = { "BTC-USD": "BTC", "ETH-USD": "ETH", "SOL-USD": "SOL", "GC=F": "XAU", "CL=F": "WTI", "^VIX": "VIX", "^GSPC": "SPX", "DX-Y.NYB": "DXY" };
++function fe82_isQuoteUrl(url) {
++  return /yahoo-quote|desk-quotes|twelve|coingecko|market-reference|crypto-snapshot|ext-hours|gold-api/i.test(String(url || ""));
++}
++function fe82_sigState() {
++  var have = false;
++  try {
++    have = (typeof SIGS !== "undefined" ? SIGS : []).some(function (s) {
++      return s && typeof hasSyncedQuote === "function" && hasSyncedQuote(s.tk);
++    });
++  } catch (e) { have = false; }
++  var open = false, err = false, settled = fe82_quoteWait.length > 0;
++  for (var i = 0; i < fe82_quoteWait.length; i++) {
++    var s = fe82_quoteWait[i];
++    if (!s.done) { open = true; settled = false; }
++    if (s.err) err = true;
++  }
++  if (!fe82_sigT0) fe82_sigT0 = Date.now();
++  return fe82_sigMode({ have: have, open: open, err: err, settled: settled, age: Date.now() - fe82_sigT0 });
++}
++function fe82_sigSkel() {
++  var n = 4;
++  try { if (typeof SIGS !== "undefined" && SIGS.length) n = Math.min(SIGS.length, 4); } catch (e) {}
++  var h = "";
++  for (var i = 0; i < n; i++) {
++    h += '<div class="gc gc-a rt52-sig fe82-sig-skel" data-fe82="sig-skel" style="padding:12px;margin-bottom:8px"><div style="height:12px;width:42%;background:var(--b3);border-radius:4px;margin-bottom:8px"></div><div style="height:10px;width:78%;background:var(--b3);border-radius:4px;margin-bottom:6px"></div><div style="height:10px;width:54%;background:var(--b3);border-radius:4px"></div></div>';
++  }
++  return h;
++}
++function fe82_sigPage() {
++  var h = "";
++  try { if (typeof _renderPgHdr === "function") h = _renderPgHdr("Signals", "Checking the live prices"); } catch (e) {}
++  return h + fe82_sigSkel();
++}
++function fe82_onSig() {
++  try {
++    if (typeof pg === "string" && pg === "sig") return true;
++    if (typeof IS_DESKTOP === "function" && IS_DESKTOP() && document.getElementById("p3body")) return true;
++  } catch (e) {}
++  return false;
++}
++function fe82_sigTick() {
++  if (!fe82_onSig()) return;
++  var mode = fe82_sigState();
++  var desk = false;
++  try { desk = typeof IS_DESKTOP === "function" && IS_DESKTOP(); } catch (e) {}
++  var root = desk ? document.getElementById("p3body") : document.getElementById("main");
++  if (!root) return;
++  var skel = !!root.querySelector("[data-fe82=sig-skel]");
++  var bad = /UNAVAILABLE|No price yet|On hold/i.test(root.textContent || "");
++  if (mode === "skeleton") {
++    if (!skel || bad) {
++      if (desk) root.innerHTML = '<div style="padding:8px 16px;font-family:var(--mn);font-size:9px;color:var(--t3);letter-spacing:0.12em">DESK SIGNALS</div>' + fe82_sigSkel();
++      else root.innerHTML = fe82_sigPage();
++    }
++    return;
++  }
++  if (skel) {
++    try {
++      if (desk && typeof fe82_p30 === "function") fe82_p30();
++      else if (!desk && typeof renderMain === "function") renderMain();
++    } catch (e2) {}
++  }
++}
++function fe82_armSig() {
++  if (!fe82_sigArmed) { fe82_sigArmed = true; fe82_sigT0 = Date.now(); }
++  if (fe82_sigTimer) return;
++  fe82_sigTimer = setInterval(fe82_sigTick, 250);
++}
++function fe82_takeQuotes(data) {
++  if (!data || typeof data !== "object" || Array.isArray(data)) return;
++  Object.keys(data).forEach(function (k) {
++    var q = data[k];
++    if (!q || typeof q !== "object" || Array.isArray(q)) return;
++    var px = Number(q.p != null ? q.p : q.price);
++    if (!(px > 0)) return;
++    var tk = FE82_SYM[k] || k;
++    try { if (typeof resolveInternalTicker === "function") tk = resolveInternalTicker(tk) || tk; } catch (e) {}
++    var c = q.c != null ? Number(q.c) : (q.changePct != null ? Number(q.changePct) : (q.change != null ? Number(q.change) : null));
++    try {
++      if (typeof _applyLiveQuote === "function") _applyLiveQuote(tk, { p: px, c: c, prev: q.prev, ts: q.ts || Date.now(), source: q.source || "yahoo" }, q.source || "yahoo");
++    } catch (e2) {}
++    try {
++      if ((q.baselinePrice || q.changeBasis || q.displayChange) && typeof fe79_ingest === "function") fe79_ingest(tk, q);
++    } catch (e3) {}
++  });
++}
++function fe82_tapeCell(tk, ch, d) {
++  var pct = (ch != null && isFinite(Number(ch))) ? Number(ch) : null;
++  if (pct == null) {
++    try { pct = fe79_liveCryptoPct(tk); } catch (e) { pct = null; }
++  }
++  if ((pct == null || !isFinite(Number(pct))) && d && d.c != null && d.c !== "" && d.c !== "—" && d.c !== "–" && d.c !== "-") {
++    var n = Number(String(d.c).replace(/[%+,]/g, ""));
++    if (isFinite(n)) pct = n;
++  }
++  if (pct == null || !isFinite(Number(pct))) return "—";
++  var body = (Number(pct) >= 0 ? "+" : "") + Number(pct).toFixed(2) + "%";
++  try { return fe78_chgHtml(tk, body); } catch (e2) { return body; }
++}
++function fe82_hubFresh() {
++  if (fe82_acadAt) return fe82_acadAt;
++  try { return Math.max((typeof _rt48Wk !== "undefined" && _rt48Wk.at) || 0, (typeof _rt48Nw !== "undefined" && _rt48Nw.at) || 0); } catch (e) { return 0; }
++}
++function fe82_hubLine() {
++  if (fe82_acadLabel) return fe82_acadLabel;
++  var t = fe82_hubFresh();
++  if (!t) return "";
++  try { return _rt48Fresh(t); } catch (e) { return ""; }
++}
++function fe82_takeEdition(data) {
++  if (!data || typeof data !== "object") return;
++  var items = data.items || (data.ai && data.ai.items) || [];
++  var today = "";
++  try { today = fe82_ukToday(); } catch (e0) { today = ""; }
++  fe82_acadLabel = fe82_setLabel(data, today);
++  var ms = fe82_editionMs(data, items);
++  fe82_acadAt = ms || (fe82_acadLabel ? 1 : 0);
++  if (!fe82_acadAt && !fe82_acadLabel) return;
++  try { if (typeof _rt48Ai !== "undefined" && _rt48Ai) _rt48Ai.at = fe82_acadAt; } catch (e) {}
++}
++function fe82_scrubBriefObj() {
++  var ready = false;
++  try { ready = fe82_regimeReady(typeof _computeRegimeEngine === "function" ? _computeRegimeEngine() : null); } catch (e) { return; }
++  if (!ready || typeof _brief === "undefined" || !_brief) return;
++  ["summary", "headline", "houseView"].forEach(function (k) {
++    if (typeof _brief[k] === "string" && fe82_loadHit(_brief[k])) _brief[k] = fe82_stripLoad(_brief[k]);
++  });
++  if (Array.isArray(_brief.risks)) {
++    _brief.risks = _brief.risks.map(function (r) { return fe82_loadHit(r) ? fe82_stripLoad(r) : r; }).filter(function (r) { return r; });
++  }
++}
++function fe82_scrubLoad() {
++  var ready = false;
++  try { ready = fe82_regimeReady(typeof _computeRegimeEngine === "function" ? _computeRegimeEngine() : null); } catch (e) { return; }
++  if (!ready || typeof document === "undefined") return;
++  fe82_scrubBriefObj();
++  var roots = document.querySelectorAll("#main, #siteIntelCard, #siteIntelBar, .si-insight");
++  for (var i = 0; i < roots.length; i++) {
++    var walker = document.createTreeWalker(roots[i], NodeFilter.SHOW_TEXT);
++    var n;
++    while ((n = walker.nextNode())) {
++      if (fe82_loadHit(n.nodeValue)) n.nodeValue = fe82_stripLoad(n.nodeValue);
++    }
++  }
++}
++function fe82_fixChip(el, tk) {
++  if (!el) return;
++  var pe = el.querySelector(".wl-g-p");
++  var fx = false;
++  try { fx = typeof fe76_isFx === "function" && fe76_isFx(tk); } catch (e) {}
++  if (pe) {
++    var raw = String(pe.textContent || "").replace(/,/g, "").replace(/^\$/, "").trim();
++    if (/^[+-]?\d+(\.\d+)?$/.test(raw)) {
++      var pretty = (String(pe.textContent).trim().charAt(0) === "$" ? "$" : "") + fe82_pxText(Number(raw), fx);
++      if (pe.textContent !== pretty) pe.textContent = pretty;
++    }
++  }
++  if (tk !== "XAU" && tk !== "GC=F") return;
++  var g = null;
++  try { g = (typeof fe81_goldHeld === "function" && fe81_goldHeld()) || (typeof fe79_goldNow === "function" && fe79_goldNow()); } catch (e2) { g = null; }
++  if (!g || g.pct == null || !isFinite(Number(g.pct))) return;
++  var pct = Number(g.pct);
++  var arrow = pct > 0 ? "▲" : pct < 0 ? "▼" : "•";
++  var sign = pct > 0 ? "+" : "";
++  var px = 0, prev = 0;
++  try { px = Number(P[tk] && P[tk].p) || Number(P.XAU && P.XAU.p) || Number(P["GC=F"] && P["GC=F"].p); } catch (e3) {}
++  try { prev = Number(BASE[tk] && BASE[tk].p) || Number(BASE["GC=F"] && BASE["GC=F"].p) || Number(BASE.XAU && BASE.XAU.p); } catch (e4) {}
++  var pts = fe82_goldPts(px, prev, fe82_goldDc || {});
++  var ce = el.querySelector(".wl-g-c");
++  if (ce) ce.textContent = "Gold futures (GC=F) " + arrow + " " + sign + pct.toFixed(2) + "%" + (pts ? " · " + pts : "");
++  try {
++    var src = (typeof fp === "function" && fp(tk) && fp(tk).src) || "";
++    if (pe && /gold-api|spot/i.test(String(src))) pe.title = "Spot gold";
++  } catch (e5) {}
++  var se = el.querySelector(':scope > span[style*="display:block"]');
++  if (se) se.textContent = "Gold futures (GC=F)";
++}
++function fe82_fixGlance() {
++  var chips = document.querySelectorAll(".wl-glance-chip");
++  for (var i = 0; i < chips.length; i++) {
++    var oc = chips[i].getAttribute("onclick") || "";
++    var m = oc.match(/openA\('([^']+)'\)/);
++    fe82_fixChip(chips[i], m ? m[1] : "");
++  }
++}
++function fe82_fixAsk(text) {
++  var held = fe82_keepLead(text);
++  var t = held.text;
++  ["BTC", "ETH", "SOL"].forEach(function (tk) {
++    var pct = null;
++    try { pct = fe79_liveCryptoPct(tk); } catch (e) { pct = null; }
++    if (pct == null || !isFinite(Number(pct))) return;
++    var shown = (Number(pct) > 0 ? "+" : "") + Number(pct).toFixed(2);
++    var re = new RegExp("\\b" + tk + "\\b([^%\\n]{0,16}?)[-+\\u2212]?\\d+\\.\\d+\\s*%", "g");
++    t = t.replace(re, function (_m, mid) { return tk + mid + shown + "%"; });
++  });
++  var g = null;
++  try { g = typeof fe79_goldNow === "function" ? fe79_goldNow() : null; } catch (e2) { g = null; }
++  if (g && g.text && g.text !== "—") {
++    t = t.replace(/\bGold\b([^%\n]{0,16}?)[-+\u2212]?\d+\.\d+\s*%/g, function (_m, mid) { return "Gold" + mid + String(g.text).replace(/^Gold\s+/i, ""); });
++    if (t.indexOf("Gold display:") < 0) t += "\nGold display: " + g.text;
++  }
++  var bits = ["BTC", "ETH", "SOL"].map(function (tk) {
++    var pct = null;
++    try { pct = fe79_liveCryptoPct(tk); } catch (e3) { pct = null; }
++    if (pct == null || !isFinite(Number(pct))) return tk + " —";
++    return tk + " " + (Number(pct) > 0 ? "+" : "") + Number(pct).toFixed(2) + "%";
++  });
++  if (t.indexOf("Crypto 24h:") < 0) t += "\nCrypto 24h: " + bits.join(" · ");
++  if (fe82_regimeReady(typeof _computeRegimeEngine === "function" ? _computeRegimeEngine() : null)) t = fe82_stripLoad(t);
++  return fe82_restoreLead(t, held.bits);
++}
++try {
++  var fe82_lc0 = fe79_liveCryptoPct;
++  fe79_liveCryptoPct = function (tk, px) {
++    var n = px;
++    if (!(Number(n) > 0)) { try { n = (typeof P !== "undefined" && P[tk]) ? P[tk].p : null; } catch (e) { n = null; } }
++    var stored = (typeof fe79_srv !== "undefined" && fe79_srv && fe79_srv[tk]) || {};
++    var pct = fe82_tapePct(stored, n);
++    if (pct == null) {
++      try {
++        var row = typeof fe81_snapRow === "function" ? fe81_snapRow(tk) : null;
++        if (row) pct = fe82_tapePct({ baselinePrice: row.baselinePrice, c: row.change != null ? row.change : row.c, changePct: row.changePct, change: row.change, price: row.price }, n || row.price);
++      } catch (e2) {}
++    }
++    if (pct == null) {
++      try {
++        var c = (typeof P !== "undefined" && P[tk]) ? P[tk].c : null;
++        if (c != null && isFinite(Number(c))) pct = +Number(c).toFixed(2);
++      } catch (e3) {}
++    }
++    if (pct != null) return pct;
++    try { return fe82_lc0.apply(this, arguments); } catch (e4) { return null; }
++  };
++} catch (eLc) {}
++try {
++  var fe82_fp0 = fp;
++  fp = function (tk) {
++    var d = fe82_fp0.apply(this, arguments);
++    try {
++      var id = (typeof resolveInternalTicker === "function" && resolveInternalTicker(tk)) || tk;
++      if (d && typeof fe79_isCryptoTk === "function" && fe79_isCryptoTk(id)) {
++        var pct = fe79_liveCryptoPct(id);
++        if (pct != null && (d.c == null || d.c === "" || d.c === "—" || d.c === "–" || d.c === "-")) d.c = Number(pct).toFixed(2);
++      }
++    } catch (e) {}
++    return d;
++  };
++} catch (eFp) {}
++try {
++  var fe82_ing0 = fe79_ingest;
++  fe79_ingest = function (tk, q) {
++    try {
++      if (q && (tk === "XAU" || tk === "GC=F") && q.displayChange && typeof q.displayChange === "object") fe82_goldDc = q.displayChange;
++    } catch (e) {}
++    var r = fe82_ing0.apply(this, arguments);
++    try {
++      if (/^(BTC|ETH|SOL)$/.test(String(tk || "")) && typeof _rt !== "undefined" && _rt && _rt.dirty) _rt.dirty.add(tk);
++      if (/^(BTC|ETH|SOL)$/.test(String(tk || "")) && typeof renderTape === "function") renderTape();
++    } catch (e2) {}
++    return r;
++  };
++} catch (eIng) {}
++try {
++  var fe82_brief0 = _renderDispatchBrief;
++  _renderDispatchBrief = function () {
++    try { fe82_scrubBriefObj(); } catch (e) {}
++    var h = fe82_brief0.apply(this, arguments);
++    try {
++      if (fe82_regimeReady(_computeRegimeEngine())) h = fe82_stripLoad(h);
++    } catch (e2) {}
++    return h;
++  };
++} catch (eBr) {}
++try {
++  var fe82_ctx0 = _buildChatContext;
++  _buildChatContext = function () {
++    var t = "";
++    try { t = fe82_ctx0.apply(this, arguments); } catch (e) { t = "Regime: loading"; }
++    try { t = fe82_fixAsk(t); } catch (e2) {}
++    return t;
++  };
++} catch (eCtx) {}
++try {
++  var fe82_bit0 = _liveTapeBit;
++  _liveTapeBit = function (label) {
++    var tks = Array.prototype.slice.call(arguments, 1);
++    if (tks.indexOf("XAU") >= 0 || tks.indexOf("GC=F") >= 0) {
++      var g = null;
++      try { g = fe79_goldNow(); } catch (e) { g = null; }
++      if (g && g.text && g.text !== "—") {
++        var px = "";
++        try { var d = fp("XAU"); if (d && d.p && d.p !== "—") px = " " + d.p; } catch (e2) {}
++        return String(label) + px + " " + g.text;
++      }
++    }
++    return fe82_bit0.apply(this, arguments);
++  };
++} catch (eBit) {}
++try {
++  var fe82_ask0 = fe79_askChip;
++  fe79_askChip = function (meta) {
++    var q = (meta && meta.quote) || meta || {};
++    var quoteLine = q.quoteLine != null ? String(q.quoteLine).trim() : "";
++    var basis = q.basisLabel != null ? String(q.basisLabel).trim() : "";
++    if (quoteLine) {
++      if (basis && quoteLine.indexOf(basis) >= 0) basis = "";
++      return { label: String(q.label || ""), price: q.price != null ? String(q.price) : "", time: String(q.time || q.asOfUk || ""), source: "server", line: quoteLine, basis: basis };
++    }
++    var chip = fe82_ask0.apply(this, arguments);
++    try {
++      if (basis) chip.basis = basis;
++      if (chip && chip.price != null && chip.price !== "") {
++        var n = Number(String(chip.price).replace(/,/g, "").replace(/^\$/, ""));
++        if (isFinite(n)) {
++          var lab = String(chip.label || "");
++          var fx = lab.indexOf("/") >= 0 || /^(EUR|GBP|USD|JPY|AUD|CAD|CHF|NZD)[A-Z]{3}$/i.test(lab.replace(/\s/g, ""));
++          chip.price = fe82_pxText(n, fx);
++          chip.line = [chip.label, chip.price, chip.time].filter(function (x) { return x; }).join(" · ");
++        }
++      }
++    } catch (e) {}
++    return chip;
++  };
++} catch (eAsk) {}
++try {
++  var fe82_qb0 = fe76_quoteBlock;
++  fe76_quoteBlock = function (meta) {
++    var q = meta && meta.quote;
++    if (q && (q.quoteLine || q.basisLabel)) {
++      var chip = null;
++      try { chip = fe79_askChip(meta); } catch (e1) { chip = null; }
++      var line = chip && chip.line ? String(chip.line) : (q.quoteLine ? String(q.quoteLine).trim() : "");
++      var basis = chip && chip.basis ? String(chip.basis) : "";
++      var esc = function (s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); };
++      var html = '<div class="fe76-qlines"><div class="fe76-qline">' + esc(line) + "</div>";
++      if (basis) html += '<div class="fe76-qbasis">' + esc(basis) + "</div>";
++      return html + "</div>";
++    }
++    return fe82_qb0.apply(this, arguments);
++  };
++} catch (eQb) {}
++try {
++  var fe82_px0 = fe78_quotePx;
++  fe78_quotePx = function (q, n) {
++    var label = String((q && q.label) || "");
++    var sym = String((q && (q.symbol || q.ticker)) || "").toUpperCase();
++    var fx = label.indexOf("/") >= 0 || /^(EUR|GBP|USD|JPY|AUD|CAD|CHF|NZD)[A-Z]{3}$/.test(sym.replace(/=X$/, ""));
++    var num = Number(n);
++    if (!isFinite(num)) return fe82_px0.apply(this, arguments);
++    var body = fe82_pxText(num, fx);
++    return fx ? body : "$" + body;
++  };
++} catch (ePx) {}
++try {
++  var fe82_chip0 = _rtPaintChip;
++  _rtPaintChip = function (el, tk) {
++    var moved = false;
++    try { moved = fe82_chip0.apply(this, arguments); } catch (e) { moved = false; }
++    try { fe82_fixChip(el, tk); } catch (e2) {}
++    return moved;
++  };
++} catch (eChip) {}
++try {
++  var fe82_wl0 = _paintWlGlance;
++  _paintWlGlance = function () {
++    var r = fe82_wl0.apply(this, arguments);
++    try { fe82_fixGlance(); } catch (e) {}
++    return r;
++  };
++} catch (eWl) {}
++try {
++  var fe82_ed0 = fe81_noteEdition;
++  fe81_noteEdition = function (data) {
++    try { fe82_ed0.apply(this, arguments); } catch (e) {}
++    try { fe82_takeEdition(data); } catch (e2) {}
++  };
++} catch (eEd) {}
++try {
++  var fe82_store0 = fe78_academyStore;
++  fe78_academyStore = function (box, j) {
++    var out = fe82_store0.apply(this, arguments);
++    try {
++      var ms = fe82_editionMs(j, (j && j.items) || (out && out.items) || []);
++      if (ms) {
++        fe82_acadAt = ms;
++        if (out) out.at = ms;
++        if (typeof _rt48Ai !== "undefined" && _rt48Ai) _rt48Ai.at = ms;
++      }
++    } catch (e) {}
++    return out;
++  };
++} catch (eSt) {}
++try {
++  var fe82_fr0 = _rt48Fresh;
++  _rt48Fresh = function (t) {
++    if (typeof t === "string" && /Updated\b/.test(t)) return t;
++    try {
++      var newsAt = typeof _rt48Nw !== "undefined" && _rt48Nw ? _rt48Nw.at : 0;
++      var aiAt = typeof _rt48Ai !== "undefined" && _rt48Ai ? _rt48Ai.at : 0;
++      if (fe82_acadLabel && t && (t === fe82_acadAt || t === newsAt || t === aiAt)) return fe82_acadLabel;
++    } catch (e0) {}
++    var use = t;
++    try {
++      if (!fe82_acadLabel && fe82_acadAt && typeof _rt48Nw !== "undefined" && _rt48Nw && t && t === _rt48Nw.at && t !== fe82_acadAt) use = fe82_acadAt;
++    } catch (e) {}
++    return fe82_fr0.call(this, use);
++  };
++} catch (eFr) {}
++try {
++  var fe82_ns0 = _rt48NewsSteps;
++  _rt48NewsSteps = function () {
++    var st = fe82_ns0.apply(this, arguments);
++    try {
++      if (st && st[0]) {
++        if (fe82_acadLabel) st[0].fresh = fe82_acadLabel;
++        else if (fe82_acadAt && st[0].fresh) st[0].fresh = fe82_acadAt;
++      }
++    } catch (e) {}
++    return st;
++  };
++} catch (eNs) {}
++try {
++  var fe82_sig0 = renderSig;
++  renderSig = function () {
++    fe82_armSig();
++    if (fe82_sigState() === "skeleton") return fe82_sigPage();
++    return fe82_sig0.apply(this, arguments);
++  };
++} catch (eSig) {}
++try {
++  fe82_p30 = renderP3;
++  renderP3 = function () {
++    fe82_armSig();
++    if (fe82_sigState() === "skeleton") {
++      var el = document.getElementById("p3body");
++      if (el) el.innerHTML = '<div style="padding:8px 16px;font-family:var(--mn);font-size:9px;color:var(--t3);letter-spacing:0.12em">DESK SIGNALS</div>' + fe82_sigSkel();
++      return;
++    }
++    return fe82_p30.apply(this, arguments);
++  };
++} catch (eP3) {}
++try {
++  var fe82_fetch0 = window.fetch.bind(window);
++  window.fetch = function (input) {
++    var url = "";
++    try { url = typeof input === "string" ? input : (input && input.url) || ""; } catch (e0) { url = ""; }
++    var p;
++    try { p = fe82_fetch0.apply(window, arguments); } catch (e) { return Promise.reject(e); }
++    if (!fe82_isQuoteUrl(url)) return p;
++    var slot = { done: false, err: false, gen: fe82_qGen };
++    fe82_quoteWait.push(slot);
++    if (fe82_quoteWait.length > 40) fe82_quoteWait.shift();
++    return Promise.resolve(p).then(function (r) {
++      slot.done = true;
++      if (r && r.ok === false) slot.err = true;
++      try {
++        r.clone().json().then(function (data) {
++          if (slot.gen !== fe82_qGen) return;
++          fe82_takeQuotes(data);
++        }).catch(function () {});
++      } catch (e2) {}
++      return r;
++    }, function (err) {
++      slot.done = true;
++      slot.err = true;
++      throw err;
++    });
++  };
++} catch (eFetch) {}
++try {
++  setInterval(function () {
++    try { fe82_scrubLoad(); } catch (e) {}
++    try { if (fe82_onSig()) fe82_sigTick(); } catch (e2) {}
++  }, 400);
++} catch (eIv) {}
+--- index.html
++++ index.html
+@@ -343,7 +343,7 @@
+ 
+ <!-- Context menu -->
+ <div class="ctx-menu" id="ctxMenu"></div>
+-<script defer src="/app.js?v=chat81"></script>
++<script defer src="/app.js?v=chat82"></script>
+ <script src="https://i.replit.com/script.js" async="" data-website-id="41c83e31-7da9-45c5-a194-58f8bc4f6608"></script></body>
+ </html>
+ 
