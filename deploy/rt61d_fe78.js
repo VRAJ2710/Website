@@ -89,7 +89,7 @@ function fe78_isZero(s) {
 }
 function fe78_chgText(tk, s) {
   s = String(s == null ? "" : s);
-  if (!s || s === "—" || s === "-" || /undefined|null/.test(s)) return "—";
+  if (!s || s === "—" || s === "-" || /^[—–\-.\s]+%?$/.test(s) || /undefined|null/.test(s)) return "—";
   if (fe78_isZero(s)) return "—";
   s = s.replace(/\s*[·•]\s*[^·•]*\bmarket closed\b[^·•]*/ig, " ");
   s = s.replace(/\s{2,}/g, " ").trim();

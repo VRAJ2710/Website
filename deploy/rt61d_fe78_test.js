@@ -37,6 +37,7 @@ ctx.fe78_meta.BTC = { baseline: "24h" };
 eq(ctx.fe78_chgText("BTC", "+1.21%"), "+1.21% 24h", "btc 24h");
 eq(ctx.fe78_chgText("ETH", "+0.50%"), "+0.50% 24h", "eth 24h without bag");
 eq(ctx.fe78_chgText("BTC", "+0.00%"), "—", "no zero");
+eq(ctx.fe78_chgText("BTC", "—%"), "—", "dash percent is not a 24h change");
 eq(ctx.fe78_chgText("BTC", "+1.21% 24h"), "+1.21% 24h", "no double 24h");
 delete ctx.fe78_meta.AAPL;
 eq(ctx.fe78_chgText("AAPL", "+0.40%"), "+0.40%", "stock without fields");
