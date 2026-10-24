@@ -1,0 +1,141 @@
+--- app.js
++++ app.js
+@@ -36676,7 +36676,7 @@
+ }
+ function fe83f_fixSigns(s) {
+   var t = String(s == null ? "" : s);
+-  var prev;
++  var prev, n = 0;
+   do {
+     prev = t;
+     t = t.replace(/\+\s*\(\s*\+\s*-(\d[\d,]*(?:\.\d+)?%?)\)/g, "-$1");
+@@ -36685,6 +36685,7 @@
+     t = t.replace(/\(\s*\+\s*-(\d)/g, "(-$1");
+     t = t.replace(/\+\s*-(\d)/g, "-$1");
+     t = t.replace(/--(\d)/g, "-$1");
++    if (++n > 8) break;
+   } while (t !== prev);
+   return t;
+ }
+@@ -36838,8 +36839,17 @@
+   return fe83f_wd(b && b.changeDay) || fe83f_wd(b && b.changeDayLabel) || fe83f_wd(feedDay);
+ }
+ function fe83f_marketClosed(tk) {
+-  try { if (typeof fe78_isClosed === "function" && fe78_isClosed(tk)) return true; } catch (e) {}
+-  try { if (typeof _rt18MarketOpen === "function") return !_rt18MarketOpen(tk); } catch (e2) {}
++  // fe78_isClosed calls fe66_closedQuote, which calls hasSyncedQuote, which calls _quoteMeta.
++  // _quoteMeta calls fe83f_pickDay, which calls this. Read the bag and the session clock only.
++  try {
++    var b = typeof fe78_bag === "function" ? fe78_bag(tk) : null;
++    if (b && (b.status === "closed" || b.marketOpen === false)) return true;
++  } catch (e) {}
++  try {
++    var y = typeof fe64_yqBag === "function" ? fe64_yqBag(tk) : null;
++    if (y && (y.status === "closed" || y.marketOpen === false)) return true;
++  } catch (e2) {}
++  try { if (typeof _rt18MarketOpen === "function") return !_rt18MarketOpen(tk); } catch (e3) {}
+   return false;
+ }
+ function fe83f_pickDay(tk) {
+@@ -36979,8 +36989,8 @@
+     fe83f_afterPaint();
+   };
+   try {
+-    if (typeof queueMicrotask === "function") queueMicrotask(run);
+-    else setTimeout(run, 0);
++    // A microtask storm here starves the load event and the header clock. A timer yields.
++    setTimeout(run, 0);
+   } catch (e) { fe83f_paintQueued = false; }
+ }
+ function fe83f_arm(fn) {
+@@ -37046,13 +37056,20 @@
+ } catch (eDay) {}
+ try {
+   var fe83f_qm0 = _quoteMeta;
++  var fe83f_qmBusy = false;
+   _quoteMeta = function (tk) {
+-    var m = fe83f_qm0.apply(this, arguments);
++    if (fe83f_qmBusy) return fe83f_qm0.apply(this, arguments);
++    fe83f_qmBusy = true;
+     try {
+-      var day = fe83f_pickDay(tk);
+-      if (day && m && m.detail) m.detail = String(m.detail).replace(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/, day);
+-    } catch (e) {}
+-    return m;
++      var m = fe83f_qm0.apply(this, arguments);
++      try {
++        var day = fe83f_pickDay(tk);
++        if (day && m && m.detail) m.detail = String(m.detail).replace(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/, day);
++      } catch (eDay) {}
++      return m;
++    } finally {
++      fe83f_qmBusy = false;
++    }
+   };
+ } catch (eQm) {}
+ try {
+@@ -37237,6 +37254,28 @@
+ function fe83f_rssResponse(saved) {
+   return new Response(saved.body, { status: saved.status, headers: { "Content-Type": saved.type || "application/xml" } });
+ }
++function fe84_rssSettle(key, net) {
++  var timer = 0;
++  var timed = new Promise(function (_ok, reject) {
++    timer = setTimeout(function () { reject(new Error("rss-feed timeout")); }, 15000);
++  });
++  return Promise.race([
++    Promise.resolve(net).then(function (r) {
++      return r.text().then(function (t) {
++        return { status: r.status, body: t, type: (r.headers && r.headers.get && r.headers.get("content-type")) || "application/xml" };
++      });
++    }),
++    timed
++  ]).then(function (saved) {
++    if (timer) clearTimeout(timer);
++    if (!saved || !(saved.status >= 200 && saved.status < 400)) delete fe83f_rssFetch.map[key];
++    return saved;
++  }, function (err) {
++    if (timer) clearTimeout(timer);
++    delete fe83f_rssFetch.map[key];
++    throw err;
++  });
++}
+ function fe83f_rssFetch(input, init) {
+   var url = "";
+   try { url = typeof input === "string" ? input : (input && input.url) || ""; } catch (e0) { url = ""; }
+@@ -37249,15 +37288,7 @@
+   var hit = fe83f_rssFetch.map[key];
+   if (hit) return hit.then(fe83f_rssResponse);
+   if (!fe83f_rssFetch.orig) fe83f_rssFetch.orig = window.fetch.bind(window);
+-  var net = fe83f_rssFetch.orig(input, init);
+-  var savedP = Promise.resolve(net).then(function (r) {
+-    return r.text().then(function (t) {
+-      return { status: r.status, body: t, type: (r.headers && r.headers.get && r.headers.get("content-type")) || "application/xml" };
+-    });
+-  }, function (err) {
+-    delete fe83f_rssFetch.map[key];
+-    throw err;
+-  });
++  var savedP = fe84_rssSettle(key, fe83f_rssFetch.orig(input, init));
+   fe83f_rssFetch.map[key] = savedP;
+   return savedP.then(fe83f_rssResponse, function (err) {
+     delete fe83f_rssFetch.map[key];
+@@ -37334,3 +37365,7 @@
+   }
+ } catch (eNav) {}
+ try { fe83f_schedulePaint(); } catch (eBoot) {}
++
++// ── rt62g ──
++// fe84: closed-session day lookup must not re-enter _quoteMeta.
++// The rss-feed cache settles (15s) and a failed entry is dropped.
+--- index.html
++++ index.html
+@@ -343,7 +343,7 @@
+ 
+ <!-- Context menu -->
+ <div class="ctx-menu" id="ctxMenu"></div>
+-<script defer src="/app.js?v=chat83b"></script>
++<script defer src="/app.js?v=chat84"></script>
+ <script src="https://i.replit.com/script.js" async="" data-website-id="41c83e31-7da9-45c5-a194-58f8bc4f6608"></script></body>
+ </html>
+ 
