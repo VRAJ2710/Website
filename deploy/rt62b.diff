@@ -1,0 +1,786 @@
+--- /tmp/rt62-apply/app.js	2026-10-24 14:52:17.311211253 +0000
++++ /tmp/rt62b-in/app.js	2026-10-24 16:09:38.068108177 +0000
+@@ -769,6 +769,7 @@
+ 
+ function _renderRegimeEngine(re) {
+   re = re || _computeRegimeEngine();
++  if (fe80_hideScore(re)) return '<div class="gc gc-regime fe80-skel" data-fe80="regime" style="padding:12px;border-left:3px solid var(--b4)"><div style="font-size:8px;color:var(--t3);font-family:var(--mn);letter-spacing:0.1em">REGIME</div><div style="font-size:15px;font-weight:800;margin-top:4px">Regime</div></div>';
+   return `<div class="gc gc-regime" role="button" tabindex="0" aria-label="Open sector rotation details" style="border-left:3px solid ${re.col};cursor:pointer" onclick="nav('sectors')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();nav('sectors')}">
+     <div style="display:flex;justify-content:space-between;align-items:flex-start">
+       <div>
+@@ -784,8 +785,8 @@
+       </div>
+     </div>
+     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--gb)">
+-      <div><div style="font-family:var(--mn);font-size:7px;color:var(--gn);letter-spacing:0.12em;margin-bottom:4px">LEADING THEMES · REGIME ENGINE · LIVE</div>${re.overweight.map(x => `<div style="font-size:10px;color:var(--t2);padding:1px 0">+ ${x}</div>`).join("")}</div>
+-      <div><div style="font-family:var(--mn);font-size:7px;color:var(--rd);letter-spacing:0.12em;margin-bottom:4px">UNDERWEIGHT</div>${re.underweight.map(x => `<div style="font-size:10px;color:var(--t2);padding:1px 0">− ${x}</div>`).join("")}</div>
++      <div><div style="font-family:var(--mn);font-size:7px;color:var(--gn);letter-spacing:0.12em;margin-bottom:4px">LEADING THEMES · REGIME ENGINE · LIVE</div>${fe80_regArr(re,"overweight").map(x => `<div style="font-size:10px;color:var(--t2);padding:1px 0">+ ${x}</div>`).join("")}</div>
++      <div><div style="font-family:var(--mn);font-size:7px;color:var(--rd);letter-spacing:0.12em;margin-bottom:4px">UNDERWEIGHT</div>${fe80_regArr(re,"underweight").map(x => `<div style="font-size:10px;color:var(--t2);padding:1px 0">− ${x}</div>`).join("")}</div>
+     </div>
+   </div>`;
+ }
+@@ -816,7 +817,7 @@
+         return px != null ? `${tk} $${px.toFixed(px >= 100 ? 2 : 4)}${c != null ? ` (${c >= 0 ? "+" : ""}${c.toFixed(2)}%)` : ""}` : `${tk} no-sync`;
+       }).join(" · ")
+     : "empty";
+-  return `Regime: ${re.label} (score ${re.score}/100)\n${re.narrative}\nLeading themes: ${re.overweight.join(", ")}\nUnderweight: ${re.underweight.join(", ")}\nFear/Greed: ${fg.label} (${fg.score != null ? fg.score : "—"})\nLive tape: ${tape}\nBook: ${bookLine}\nTop desk score: ${top}\n\nMacro signals:\n${sigs}\n\nBreaking news:\n${news}`;
++  return `Regime: ${fe80_regText(re, true)}\n${re.narrative}\nLeading themes: ${fe80_regArr(re,"overweight").join(", ")}\nUnderweight: ${fe80_regArr(re,"underweight").join(", ")}\nNeutral: ${fe80_regArr(re,"neutral").join(", ")}\nFear/Greed: ${fg.label} (${fg.score != null ? fg.score : "—"})\nLive tape: ${tape}\nBook: ${bookLine}\nTop desk score: ${top}\n\nMacro signals:\n${sigs}\n\nBreaking news:\n${news}`;
+ }
+ 
+ /**
+@@ -866,8 +867,8 @@
+     houseView: house,
+     confidence: Math.max(35, Math.min(88, re.score)),
+     summary: summaryParts.join(" "),
+-    overweight: re.overweight || [],
+-    underweight: re.underweight || [],
++    overweight: fe80_regArr(re,"overweight") || [],
++    underweight: fe80_regArr(re,"underweight") || [],
+     focusTickers: top.map(a => `${a.tk}: ${a.sc}/100`),
+     catalysts: [
+       ...topSig.map(s => `${s.a} (${s.cf}%): ${s.x}`),
+@@ -1069,7 +1070,7 @@
+     b.summary || "",
+     "",
+     (fe77_themesPlain(b) ? "### " + fe77_themesPlain(b) : ""),
+-    b.underweight?.length ? `### Underweight\n${b.underweight.map(x => `- ${x}`).join("\n")}` : "",
++    fe80_regArr(b,"underweight")?.length ? `### Underweight\n${fe80_regArr(b,"underweight").map(x => `- ${x}`).join("\n")}` : "",
+     b.focusTickers?.length ? `### Focus Tickers\n${b.focusTickers.map(t => `- ${t}`).join("\n")}` : "",
+     b.catalysts?.length ? `### Catalysts\n${b.catalysts.map(c => `- ${c}`).join("\n")}` : "",
+     b.risks?.length ? `### Risks\n${b.risks.map(r => `- ${r}`).join("\n")}` : "",
+@@ -1102,7 +1103,7 @@
+     b.summary || "",
+     "",
+     (fe77_themesPlain(b) || ""),
+-    b.underweight?.length ? "UNDERWEIGHT: " + b.underweight.join(", ") : "",
++    fe80_regArr(b,"underweight")?.length ? "UNDERWEIGHT: " + fe80_regArr(b,"underweight").join(", ") : "",
+     b.focusTickers?.length ? "\nFOCUS: " + b.focusTickers.join("; ") : "",
+     b.catalysts?.length ? "\nCATALYSTS:\n" + b.catalysts.map(c => "• " + c).join("\n") : "",
+     b.risks?.length ? "\nRISKS:\n" + b.risks.map(r => "• " + r).join("\n") : "",
+@@ -1463,6 +1464,7 @@
+ }
+ function _deskLetterTitle(re, brief) {
+   if (brief?.headline) return brief.headline;
++  if (fe80_hideScore(re)) return "Regime";
+   const s = re?.score ?? 50;
+   if (s >= 72) return "Risk appetite still runs the tape";
+   if (s >= 55) return "Fragile risk-on — leadership is selective";
+@@ -1471,9 +1473,10 @@
+ }
+ function _deskLetterDeck(re, brief) {
+   if (brief?.summary) return _rt20Clip(brief.summary, 220);
+-  return `${re.label} (score ${re.score}/100). ${re.narrative || ""} Favour: ${(re.overweight || []).slice(0, 3).join(", ") || "—"}. Underweight: ${(re.underweight || []).slice(0, 2).join(", ") || "—"}.`;
++  return `${fe80_regText(re)}. ${re.narrative || ""} Favour: ${(fe80_regArr(re,"overweight") || []).slice(0, 3).join(", ") || "—"}. Underweight: ${(fe80_regArr(re,"underweight") || []).slice(0, 2).join(", ") || "—"}.`;
+ }
+ function _suggestMacroPack(re) {
++  if (fe80_isSkel(re)) return "balanced";
+   const s = re?.score ?? 50;
+   if (s >= 68) return "soft_landing";
+   if (s >= 55) return "balanced";
+@@ -1509,8 +1512,8 @@
+     ? weak.map(x => `<button type="button" class="letter-chip weak" onclick="setLabTicker('${_escAttr(x.tk)}');nav('lab')">${_escHtml(x.tk)} <b>${Number(x.score) || 0}%</b></button>`).join("")
+     : "";
+ 
+-  const ow = (brief?.overweight || re.overweight || []).slice(0, 3).map(_plainItem).map(_escHtml);
+-  const uw = (brief?.underweight || re.underweight || []).slice(0, 3).map(_plainItem).map(_escHtml);
++  const ow = (function(){var _a=brief&&brief.overweight;return Array.isArray(_a)?_a:fe80_regArr(re,"overweight");})().slice(0, 3).map(_plainItem).map(_escHtml);
++  const uw = (function(){var _a=brief&&brief.underweight;return Array.isArray(_a)?_a:fe80_regArr(re,"underweight");})().slice(0, 3).map(_plainItem).map(_escHtml);
+   const focus = (brief?.focusTickers || []).slice(0, 3);
+   const reLabel = _escHtml(re.label || "—");
+   const house = brief?.houseView ? _escHtml(brief.houseView) : "";
+@@ -1783,17 +1786,18 @@
+ const _INTEL_PAGE_MAP = { dash: "dash", brief: "brief", gold: "brief", playbook: "brief", mkt: "mkt", anlz: "ticker", sig: "signals", watch: "watchlist", port: "portfolio", news: "news", lab: "dash" };
+ 
+ function _tickerRegimeFit(tk, re) {
++  re = fe80_reg(re);
+   const a = A.find(x => x.tk === tk);
+   const chg = liveChg(tk);
+   let score = 50;
+   if (a?.se?.includes("Bull") && re.score >= 55) score += 18;
+   if (a?.se?.includes("Bear") && re.score < 45) score += 12;
+-  if (a?.cat === "Commodity" && re.overweight.some(x => /Energy|Gold|commodit/i.test(x))) score += 15;
++  if (a?.cat === "Commodity" && fe80_regArr(re,"overweight").some(x => /Energy|Gold|commodit/i.test(x))) score += 15;
+   if (a?.cat === "Crypto" && re.score >= 58) score += 12;
+   if (a?.cat === "Crypto" && re.score < 42) score -= 15;
+   if (chg != null && chg > 1.5 && re.score >= 55) score += 8;
+   if (chg != null && chg < -2) score -= 10;
+-  if (re.underweight.some(x => /growth|crypto|beta/i.test(x)) && (a?.beta || 0) > 1.5) score -= 12;
++  if (fe80_regArr(re,"underweight").some(x => /growth|crypto|beta/i.test(x)) && (a?.beta || 0) > 1.5) score -= 12;
+   score = Math.max(0, Math.min(100, score));
+   const label = score >= 68 ? "Regime-aligned" : score >= 45 ? "Neutral fit" : "Headwind";
+   const chgLbl = chg == null ? "no sync" : `${chg >= 0 ? "+" : ""}${chg.toFixed(2)}% ${_rt26Day(tk)}`;
+@@ -1834,7 +1838,7 @@
+   highNews.forEach(n => anomalies.push({ t: "news", m: String(n.x || "").trim() }));
+ 
+   if (surface === "pulse" || surface === "dash") {
+-    headline = `${re.label} · ${re.score}/100`;
++    headline = fe80_regText(re);
+     insight = `${re.narrative} Fear/Greed ${fg.label} (${fg.score != null ? fg.score : "—"}). Lead signal: ${topSig?.a} (${topSig?.cf}% desk score).`;
+     if (re.score >= 58) actions.push({ label: "Sector rotation", type: "page", value: "sectors" });
+     actions.push({ label: "Dispatch Brief", type: "page", value: "brief" });
+@@ -1865,7 +1869,7 @@
+     wl.forEach(tk => fit.push(_tickerRegimeFit(tk, re)));
+     fit.sort((a, b) => b.score - a.score);
+     const best = fit[0], worst = fit[fit.length - 1];
+-    insight = `${wl.length} names tracked. Regime favours ${re.overweight.slice(0, 2).join(", ")}. Top fit: ${best?.tk} (${best?.score}). Weakest: ${worst?.tk} (${worst?.score}).`;
++    insight = `${wl.length} names tracked. Regime favours ${fe80_regArr(re,"overweight").slice(0, 2).join(", ")}. Top fit: ${best?.tk} (${best?.score}). Weakest: ${worst?.tk} (${worst?.score}).`;
+     actions.push({ label: "Run scan", type: "scan", value: "" });
+     actions.push({ label: "Compare", type: "action", value: "compare" });
+   } else if (surface === "portfolio") {
+@@ -1910,7 +1914,7 @@
+       .sort((x, y) => y.c - x.c)
+       .slice(0, 3)
+       .map(x => `${x.a.tk} ${x.c >= 0 ? "+" : ""}${x.c.toFixed(2)}%`);
+-    insight = `${leaders.length ? "Leaders: " + leaders.join(", ") + ". " : "Awaiting prices. "}Leading themes: ${re.overweight.slice(0, 3).join(", ")}.`;
++    insight = `${leaders.length ? "Leaders: " + leaders.join(", ") + ". " : "Awaiting prices. "}Leading themes: ${fe80_regArr(re,"overweight").slice(0, 3).join(", ")}.`;
+     actions.push({ label: "Heatmap", type: "page", value: "heat" });
+   } else if (surface === "sectors") {
+     const sig = _sectorRotationSignal();
+@@ -1942,7 +1946,7 @@
+     headline = _brief?.headline || `Dispatch Brief · ${re.label}`;
+     insight = _brief?.summary || "Generate today's house view — regime, leading themes, and the research agenda.";
+     if (_brief?.houseView) insight = `House view: ${_brief.houseView}. ${_rt20Clip(_brief.summary, 160)}`;
+-    if (_brief?.overweight?.length) insight += ` Leading themes: ${_brief.overweight.slice(0, 3).join(", ")}.`;
++    if (fe80_regArr(_brief,"overweight")?.length) insight += ` Leading themes: ${fe80_regArr(_brief,"overweight").slice(0, 3).join(", ")}.`;
+     actions.push({ label: "Refresh brief", type: "page", value: "brief" });
+     actions.push({ label: "Sector rotation", type: "page", value: "sectors" });
+     actions.push({ label: "Run lens", type: "lens", value: getActiveWl().tickers[0] || "NVDA" });
+@@ -2292,6 +2296,7 @@
+ }
+ 
+ function _renderRegimeRing(re) {
++  if (fe80_hideScore(re)) return '<svg class="lab-regime-ring fe80-skel" data-fe80="regime" width="88" height="88" viewBox="0 0 96 96"><text x="48" y="52" text-anchor="middle" font-family="JetBrains Mono" font-size="11" fill="var(--t3)">Regime</text></svg>';
+   const circ = 2 * Math.PI * 42;
+   const off = circ * (1 - Math.min(100, Math.max(0, re.score)) / 100);
+   return `<svg class="lab-regime-ring" width="88" height="88" viewBox="0 0 96 96"><circle cx="48" cy="48" r="42" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="6"/><circle cx="48" cy="48" r="42" fill="none" stroke="${re.col}" stroke-width="6" stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" stroke-linecap="round" transform="rotate(-90 48 48)"/><text x="48" y="52" text-anchor="middle" font-family="JetBrains Mono" font-size="15" font-weight="900" fill="${re.col}">${re.score}</text></svg>`;
+@@ -2423,7 +2428,7 @@
+     `House view: ${b.houseView || "Neutral"}.`,
+     b.summary || "",
+     (fe77_themesPlain(b) ? fe77_themesPlain(b) + "." : ""),
+-    b.underweight?.length ? `Underweight: ${b.underweight.join(", ")}.` : "",
++    fe80_regArr(b,"underweight")?.length ? `Underweight: ${fe80_regArr(b,"underweight").join(", ")}.` : "",
+     b.catalysts?.length ? `Catalysts: ${b.catalysts.join(". ")}.` : "",
+     b.risks?.length ? `Risks: ${b.risks.join(". ")}.` : "",
+     b.actionItems?.length ? `Research agenda: ${b.actionItems.join(". ")}.` : "",
+@@ -2856,7 +2861,7 @@
+   const wlEm = getActiveWl().tickers.filter(tk => tk.endsWith(".NS") || tk.endsWith(".BO"));
+   const tks = [...new Set([...wlEm, ...EM_SPOTLIGHT_TKS])].slice(0, 8);
+   const re = _computeRegimeEngine();
+-  const emFriendly = re.score >= 55 && re.overweight.some(x => x.toLowerCase().includes("cyclical") || x.toLowerCase().includes("tech"));
++  const emFriendly = re.score >= 55 && fe80_regArr(re,"overweight").some(x => x.toLowerCase().includes("cyclical") || x.toLowerCase().includes("tech"));
+   let h = `<div class="gc" style="padding:14px;border-left:3px solid var(--cy);margin-bottom:10px">
+     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+       <div style="font-family:var(--mn);font-size:8px;color:var(--cy);letter-spacing:0.18em">⬢ EM & INDIA SPOTLIGHT</div>
+@@ -9257,7 +9262,7 @@
+     } else {
+       h+=`<div style="padding:12px 8px;font-family:var(--mn);font-size:9px;color:var(--t3)">No recent news found for ${_dynTk}</div>`;
+     }
+-    h+=(typeof _rt53FitHtml==="function"?_rt53FitHtml(_dynTk):"");
++    h+=fe80_section("regime-fit", function () { return (typeof _rt53FitHtml==="function"?_rt53FitHtml(_dynTk):""); }, "");
+     h+=`<div class="tabs"><button type="button" class="${aTab==="ins"?"on":""}" onclick="_setATab('ins')">Insiders</button></div>`;
+     if(aTab==="ins"){h+=`<div id="term-ins-root" class="fe68-ins"><div style="padding:16px;font-family:var(--mn);font-size:10px;color:var(--t3)">Loading insider filings…</div></div>`;setTimeout(function(){try{fe68_loadInsiders(_dynTk,"term-ins-root");}catch(e){}},40);}
+     h+=`<div style="padding:6px 8px;border-top:1px solid var(--b4)"><button onclick="_dynClear()" style="background:var(--b2);color:var(--t2);border:1px solid var(--gb);border-radius:3px;padding:4px 12px;font-family:var(--mn);font-size:8.5px;cursor:pointer;letter-spacing:0.1em">← BACK</button></div>`;
+@@ -9610,7 +9615,7 @@
+   };
+   h += `<div style="font-family:var(--mn);font-size:7.5px;color:var(--t3);letter-spacing:0.2em;padding:4px 8px;background:#000;border-top:1px solid var(--b4);border-bottom:1px solid var(--b4);margin-top:4px">— REGIME · MODEL</div>
+   <div style="padding:6px 8px;border-bottom:1px solid var(--b4)">
+-    <div style="font-family:var(--mn);font-size:11px;font-weight:800;color:${reP4.col}">${reP4.label} · ${reP4.score}/100</div>
++    <div style="font-family:var(--mn);font-size:11px;font-weight:800;color:${reP4.col}">${fe80_regText(reP4)}</div>
+     <div style="font-family:var(--mn);font-size:8.5px;color:var(--t2);margin-top:3px">SPX ${pxLbl("SPX","")} · OIL ${pxLbl("WTI","$")} · GOLD ${pxLbl("XAU","$")} · BTC ${pxLbl("BTC","$")}</div>
+   </div>`;
+ 
+@@ -11168,8 +11173,8 @@
+   const aiChip=!_userTierReady?"":_isPremium()
+     ?`<span class="htec-chip htec-chip-ai">★ PREMIUM</span>`
+     :`<span class="htec-chip htec-chip-muted">FREE</span>`;
+-  const regimeChip=re.loading&&re._hide?"":re.loading?`<span class="htec-chip htec-chip-regime htec-chip-muted" title="Waiting for VIX and S&amp;P 500 inputs">Regime: loading…</span>`:`<span class="htec-chip htec-chip-regime" title="${fe78_regimeTitle(re)}">${re.label} · ${re.score}/100</span>`;
+-  const regimeChipMob=re.loading&&re._hide?"":re.loading?`<span class="htec-chip htec-chip-regime htec-chip-muted" title="Waiting for VIX and S&amp;P 500 inputs">Regime: loading…</span>`:`<span class="htec-chip htec-chip-regime" title="${fe78_regimeTitle(re)}">${re.label} · ${re.score}/100</span>`;
++  const regimeChip=fe80_regimeChip(re);
++  const regimeChipMob=fe80_regimeChip(re);
+   const el=document.getElementById("statusBar");
+   if(!el)return;
+   el.dataset.sig=sig;
+@@ -11617,7 +11622,7 @@
+   if (!route || location.pathname === route) return;
+   history[mode === "replace" ? "replaceState" : "pushState"]({ dispatchPage: page }, "", route);
+ }
+-function _setATab(t){aTab=t;if(IS_DESKTOP())renderP2();else renderMain();_rt22TabIntoView();}
++function _setATab(t){aTab=t;try{if(IS_DESKTOP())renderP2();else renderMain();}catch(e){try{console.error("fe80","tab",e);}catch(e2){}}try{_rt22TabIntoView();}catch(e3){}}
+ function _rt22TabIntoView(){requestAnimationFrame(()=>document.querySelectorAll(".tabs > button.on").forEach(b=>{const s=b.parentElement;if(s&&s.scrollWidth>s.clientWidth)s.scrollLeft=Math.max(0,b.offsetLeft-s.offsetLeft-(s.clientWidth-b.offsetWidth)/2);}));}
+ function nav(p, options = {}){
+   if(pg==='mkt'&&p!=='mkt'){_mktView='curated';_mktSearch='';_mktFilter='all';_mktSort='default';}
+@@ -12878,7 +12883,7 @@
+   // ── Greeting and where the tape stands ──
+   h += `<div class="home-hero">
+     <div class="home-greet">${_homeGreeting()}</div>
+-    <div class="home-regime" style="color:${re.col}">${re.label}${re.score != null && !re.loading ? ` · <span class="home-regime-sc">${re.score}/100</span>${_rt20RegCached(re)}${re.asOfUk ? ` <span class="home-regime-src">${_escHtml(re.asOfUk)}</span>` : ""}` : ""}</div>
++    <div class="home-regime" style="color:${re.col}">${fe80_hideScore(re)?"Regime":re.label}${!fe80_hideScore(re) && re.score != null && !re.loading ? ` · <span class="home-regime-sc">${re.score}/100</span>${_rt20RegCached(re)}${re.asOfUk ? ` <span class="home-regime-src">${_escHtml(re.asOfUk)}</span>` : ""}` : ""}</div>
+     <div class="home-tape">${liveN
+       ? [_rt37Hero(), (re.vix != null && re.vix !== "—" && re.vix !== "") ? `VIX${_usRegularOpen() ? "" : " US close"} ${re.vix}` : "", (re.spx != null && re.spx !== "—" && re.spx !== "") ? `${re.spxProxy ? "SPY" : "SPX"}${_usRegularOpen() ? "" : " US close"} ${re.spx}` : ""].filter(Boolean).join(" · ")
+       : _rt20TapeFallback(re)}</div>
+@@ -12895,7 +12900,7 @@
+       <div class="home-brief-stance">${_escHtml(_rt20Stance(_brief, re))}</div>
+       <div class="home-brief-h">${_escHtml(_rt16Dec(_brief.headline))}</div>
+       ${_brief.summary ? `<div class="home-brief-s">${_escHtml(_rt16Clip(_rt16Dec(_brief.summary), 220))}</div>` : ""}
+-      <div class="home-brief-t">${_escHtml(_rt16BriefWhen(_brief))}${re && re.loading ? (re._hide ? "" : " · Regime: loading…") : re && re.label ? ` · ${_escHtml(fe78_regimeSub(re))}` : ""}</div>
++      <div class="home-brief-t">${_escHtml(_rt16BriefWhen(_brief))}${re && fe80_isSkel(re) ? "" : re && re.loading ? (re._hide ? "" : " · Regime: loading…") : re && re.label ? ` · ${_escHtml(fe78_regimeSub(re))}` : ""}</div>
+       <div class="home-brief-go">Open brief →</div>
+     </div>`;
+   } else {
+@@ -13180,7 +13185,7 @@
+   if(hd.length>=5){const mn=Math.min(...hd),mx=Math.max(...hd),rng=mx-mn||1;const pts=hd.map((v,i)=>`${(i/(hd.length-1))*300},${50-((v-mn)/rng)*44}`).join(' ');h+=`<div style="font-family:var(--mn);font-size:9px;color:var(--t3);letter-spacing:0.08em;margin-bottom:4px">${fe66_dynHead(_dynTk)}</div><svg viewBox="0 0 300 60" style="width:100%;height:60px;display:block"><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.5"/></svg><div style="font-family:var(--mn);font-size:10px;color:var(--t3);margin:4px 0 10px">High ${fe66_money(_dynTk, mx)} · Low ${fe66_money(_dynTk, mn)}</div>`;}
+   else if(d.fe69Chart==="loading"||d.fe69Chart==="fail"){h+=`<div class="fe69-ph">${d.fe69Chart==="loading"?"Loading chart…":"Chart unavailable"}</div>`;}
+   if(d.news&&d.news.length){h+=`<div style="font-family:var(--mn);font-size:9px;color:var(--t3);letter-spacing:0.1em;margin-bottom:6px">RECENT NEWS</div>`;d.news.forEach(n=>{h+=`<div style="padding:8px 0;border-bottom:1px solid var(--gb);font-size:12px;color:var(--t2);line-height:1.4">${_escHtml(n.x||"")}</div>`;});}
+-  h+=(typeof _rt53FitHtml==="function"?_rt53FitHtml(_dynTk):"");
++  h+=fe80_section("regime-fit", function () { return (typeof _rt53FitHtml==="function"?_rt53FitHtml(_dynTk):""); }, "");
+   h+=`<div class="tabs"><button type="button" class="${aTab==="ins"?"on":""}" onclick="_setATab('ins')">Insiders</button></div>`;
+   if(aTab==="ins"){h+=`<div id="anlz-ins-root" class="fe68-ins"><div style="padding:16px;font-family:var(--mn);font-size:10px;color:var(--t3)">Loading insider filings…</div></div>`;setTimeout(function(){try{fe68_loadInsiders(_dynTk,"anlz-ins-root");}catch(e){}},40);}
+   h+=`<button onclick="_dynClear()" style="margin-top:12px;background:var(--b2);color:var(--t2);border:1px solid var(--gb);border-radius:8px;padding:8px 16px;font-family:var(--sn);font-size:12px;cursor:pointer">← Back</button></div>`;
+@@ -13200,18 +13205,20 @@
+   const chCol=!primary||chAn==null?"var(--t3)":chAn>0?"var(--gn)":chAn<0?"var(--rd)":"var(--t3)";
+   const chSign=chAn!=null&&chAn>=0?"+":"";
+ 
+-  let h=`<button type="button" class="rt26-back" onclick="_rt26Back()" aria-label="Back">← Back</button><div class="rt23-stock" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px">
++  let h=fe80_section("header",function(){return `<button type="button" class="rt26-back" onclick="_rt26Back()" aria-label="Back">← Back</button><div class="rt23-stock" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+     <div style="display:flex;gap:10px;align-items:center">${ring(a.sc,52)}
+-      <div><div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span style="font-size:18px;font-weight:800;font-family:var(--mn)">${a.tk}</span>${bd(_rt39Cat(a),catBd(a.cat))}${stat(a.tk)}
++      <div><div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap"><span style="font-size:18px;font-weight:800;font-family:var(--mn)">${a.tk}</span>${bd(_rt39Cat(a),catBd(a.cat))}${fe80_section("chip",function(){return stat(a.tk);},fe80_empty("chip"))}
+         <span style="cursor:pointer;font-size:16px;color:${iw?"var(--gd)":"var(--t3)"}" onclick="togWatch('${a.tk}')" aria-label="${iw?'Remove from':'Add to'} watchlist">★</span>
+         <button onclick="event.stopPropagation();_toggleCompare('${a.tk}')" style="background:${_compareTks.includes(a.tk)?'var(--puG)':'var(--b2)'};border:1px solid var(--gb);color:var(--t2);border-radius:5px;padding:2px 8px;font-family:var(--mn);font-size:9px;cursor:pointer">⚖</button></div>
+         <div style="font-size:10px;color:var(--t2)">${a.nm}</div>
+         <div style="display:flex;gap:3px;margin-top:3px">${bd(a.se,a.se.includes("Bull")?"var(--gn)":"var(--bl)")}${bd(fe78_deskScore(a.sc),scC(a.sc))}</div></div></div>
+     <div style="text-align:right"><div style="font-family:var(--mn);font-weight:800;font-size:24px;letter-spacing:-0.02em;color:${primary?chCol:'var(--t3)'}">${fe66_priceLine(a.tk, d, !hasSyncedQuote(a.tk))}</div>
+       <div class="asset-chg" style="color:${chCol}">${fe66_chgLine(a.tk, d, !hasSyncedQuote(a.tk))}</div>
+-       ${!primary&&hasRetainedQuote(a.tk)?`<div style="font-family:var(--mn);font-size:8px;color:var(--t3);margin-top:4px">Context only · ${_quoteSourceLabel(d.src)} · as of ${_fmtAsOf(d.asOf)}</div>`:""}</div></div>`;
++       ${!primary&&hasRetainedQuote(a.tk)?`<div style="font-family:var(--mn);font-size:8px;color:var(--t3);margin-top:4px">Context only · ${_quoteSourceLabel(d.src)} · as of ${_fmtAsOf(d.asOf)}</div>`:""}</div></div>`},fe80_empty("header"));
+ 
+-  h+=`<div class="gc"><div style="font-size:8px;color:var(--t3);font-family:var(--mn);letter-spacing:0.1em;margin-bottom:4px">${_rt23ChartLbl(a.tk, (HIST[a.tk]||[]).filter(v=>typeof v==="number"&&isFinite(v)&&v>0).length>=5)}</div>
++  h += fe80_section("chart", function () {
++    var h = "";
++    h+=`<div class="gc"><div style="font-size:8px;color:var(--t3);font-family:var(--mn);letter-spacing:0.1em;margin-bottom:4px">${_rt23ChartLbl(a.tk, (HIST[a.tk]||[]).filter(v=>typeof v==="number"&&isFinite(v)&&v>0).length>=5)}</div>
+     <svg viewBox="0 0 300 60" style="width:100%;height:60px;display:block" role="img" aria-label="${a.tk} intraday chart">`;
+   const hdRaw=HIST[a.tk]||[];let hd=hdRaw.filter(v=>typeof v==="number"&&isFinite(v)&&v>0);
+   if(hd.length<5){const fb=_rt23Ch[a.tk];if(fb&&fb.pts&&fb.pts.length>=5)hd=fb.pts;else _rt23ChartFetch(a.tk);}
+@@ -13226,12 +13233,15 @@
+     h+=`<text x="150" y="34" text-anchor="middle" font-family="JetBrains Mono" font-size="10" fill="var(--t3)" letter-spacing="0.08em">${_rt23Ch[a.tk]&&_rt23Ch[a.tk].failed?"CHART DATA UNAVAILABLE RIGHT NOW":"LOADING CHART…"}</text>`;
+   }
+   h+=`</svg></div>`;
++    return h;
++  }, fe80_empty("chart"));
+   try { h += fe68_hlHtml(a.tk); } catch (e) {}
+ 
+-  h += _renderSiteIntelCard("ticker", { tk: a.tk });
++  h += fe80_section("intel", function () { return _renderSiteIntelCard("ticker", { tk: a.tk }); }, "");
+ 
+   h+=`<div class="tabs"><button class="${aTab==="ov"?"on":""}" onclick="_setATab('ov')">Overview</button><button class="${aTab==="nw"?"on":""}" onclick="_setATab('nw')">News</button><button class="${aTab==="fi"?"on":""}"${_rt22Fund()?"":" hidden"} onclick="_setATab('fi')">Financials</button><button class="${aTab==="val"?"on":""}"${_rt22Fund()?"":" hidden"} onclick="_setATab('val')">Valuation</button><button class="${aTab==="earn"?"on":""}"${_rt22Fund()?"":" hidden"} onclick="_setATab('earn')">Earnings</button><button class="${aTab==="th"?"on":""}" onclick="_setATab('th')">Thesis</button><button class="${aTab==="al"?"on":""}" onclick="_setATab('al')">Alerts</button><button class="${aTab==="cm"?"on":""}" onclick="_setATab('cm')">Lenses</button>${typeof fe68_usStock==="function"&&fe68_usStock(a)?`<button class="${aTab==="ins"?"on":""}" onclick="_setATab('ins')">Insiders</button>`:""}<button class="${aTab==="inst"?"on":""}"${_rt22Fund()?"":" hidden"} onclick="_setATab('inst')">Institutions${!_isPremium()?'★':''}</button></div>`;
+ 
++  try {
+   if(aTab==="nw"){
+     h+=`<div id="anlz-nw-root">${_renderTickerNewsPanel(a.tk)}</div>`;
+     setTimeout(()=>_ensureTickerCompanyNews(a.tk),40);
+@@ -13250,8 +13260,8 @@
+     [{l:"P/E",v:a.pe},{l:"Mkt Cap",v:fe79_capFor(a)||a.mc},{l:"Beta",v:a.cat==="Stock"?fe64_betaCell(a.beta):a.beta},{l:"Sentiment",v:a.se}].forEach(m=>{if(m.l==="Beta"&&!fe79_showBeta(a.tk))return;if(m.l==="Mkt Cap"){var fe79cap=fe79_capFor(a);if(!fe79cap)return;m={l:m.l,v:fe79cap};}if(!fe79_metricOk(m.l,m.v)&&m.l!=="Sentiment")return;h+=`<div style="border-top:1px solid var(--gb);padding:5px 0"><div style="font-size:8px;color:var(--t3)">${m.l}</div><div style="font-family:var(--mn);font-weight:700;font-size:12px;margin-top:1px">${m.v}</div></div>`;});
+     h+=`</div>` + fe78_profileHtml(a, "card") + `</div>`;
+     const re=_computeRegimeEngine();
+-    h+=_rt53FitHtml(a.tk)+`<button type="button" onclick="_setATab('cm')" style="margin-top:10px;width:100%;background:var(--blG);color:var(--bl);border:1px solid rgba(79,142,247,0.2);border-radius:8px;padding:10px;font-family:var(--sn);font-size:11px;font-weight:700;cursor:pointer">⬢ Run Lens Engine on ${a.tk}</button>`;
+-    h += _renderTickerSignals(a.tk);
++    h+=fe80_section("regime-fit", function () { return _rt53FitHtml(a.tk); }, "")+`<button type="button" onclick="_setATab('cm')" style="margin-top:10px;width:100%;background:var(--blG);color:var(--bl);border:1px solid rgba(79,142,247,0.2);border-radius:8px;padding:10px;font-family:var(--sn);font-size:11px;font-weight:700;cursor:pointer">⬢ Run Lens Engine on ${a.tk}</button>`;
++    h += fe80_section("signals", function () { return _renderTickerSignals(a.tk); }, fe80_empty("signals"));
+   }
+ 
+   if(aTab==="al"){
+@@ -13469,6 +13479,7 @@
+       h+=`<button onclick="runCommittee('${a.tk}')" style="width:100%;background:var(--b2);color:var(--t2);border:1px solid var(--gb);border-radius:9px;padding:11px;cursor:pointer;font-size:12px;font-weight:600;font-family:var(--sn);margin-top:8px">⬢ Re-run Lens Engine</button>`;
+     }
+   }
++  } catch (e) { try { console.error("fe80", "tab", e); } catch (e2) {} h += fe80_empty("tab"); }
+   return h;
+ }
+ 
+@@ -13482,7 +13493,7 @@
+   h += `<div class="gc" style="padding:12px;border-left:3px solid ${re.col};margin-bottom:10px">
+     <div style="font-family:var(--mn);font-size:8px;color:${re.col};letter-spacing:0.15em;margin-bottom:6px">REGIME PLAYBOOK · ${re.label}</div>
+     <div style="font-size:11px;color:var(--t2);line-height:1.55;margin-bottom:8px">${re.narrative}</div>
+-    <div style="display:flex;gap:6px;flex-wrap:wrap">${re.overweight.slice(0,3).map(x => `<span style="font-family:var(--mn);font-size:9px;padding:3px 8px;border-radius:6px;background:var(--gnG);color:var(--gn);border:1px solid rgba(16,185,129,0.2)">+ ${x}</span>`).join("")}${re.underweight.slice(0,2).map(x => `<span style="font-family:var(--mn);font-size:9px;padding:3px 8px;border-radius:6px;background:var(--rdG);color:var(--rd);border:1px solid rgba(239,68,68,0.2)">− ${x}</span>`).join("")}</div>
++    <div style="display:flex;gap:6px;flex-wrap:wrap">${fe80_regArr(re,"overweight").slice(0,3).map(x => `<span style="font-family:var(--mn);font-size:9px;padding:3px 8px;border-radius:6px;background:var(--gnG);color:var(--gn);border:1px solid rgba(16,185,129,0.2)">+ ${x}</span>`).join("")}${fe80_regArr(re,"underweight").slice(0,2).map(x => `<span style="font-family:var(--mn);font-size:9px;padding:3px 8px;border-radius:6px;background:var(--rdG);color:var(--rd);border:1px solid rgba(239,68,68,0.2)">− ${x}</span>`).join("")}</div>
+   </div>`;
+   SIGS.forEach(s=>{const bc=s.cat.includes("Bull")||s.cat==="Momentum"||s.cat==="Accumulation"||s.cat==="Contrarian"?"var(--gn)":s.cat.includes("Warning")||s.cat==="Geopolitical"?"var(--rd)":"var(--gd)";
+     const evidence=_signalEvidence(s);
+@@ -13563,7 +13574,7 @@
+ function _newsRegimeKeywords(){
+   try{
+     const re=_computeRegimeEngine();
+-    const blob=((re.label||"")+" "+(re.narrative||"")+" "+(re.overweight||[]).join(" ")+" "+(re.underweight||[]).join(" ")).toLowerCase();
++    const blob=((re.label||"")+" "+(re.narrative||"")+" "+(fe80_regArr(re,"overweight")||[]).join(" ")+" "+(fe80_regArr(re,"underweight")||[]).join(" ")).toLowerCase();
+     const keys=["oil","rates","fed","dollar","gold","risk","recession","inflation","yield","crypto","china","iran","growth","tech","energy"];
+     return keys.filter(k=>blob.includes(k));
+   }catch(e){return [];}
+@@ -14014,7 +14025,8 @@
+ function _renderBookHome(){
+   const book=_rt26BookDesk();
+   const re=_computeRegimeEngine();
+-  const score=Math.max(0,Math.min(100,Number(re.score)||0));
++  const _fe80Sk=fe80_isSkel(re);
++  const score=_fe80Sk?null:Math.max(0,Math.min(100,Number(re.score)||0));
+   const liveN=book.filter(tk=>{
+     const raw=String(tk||"");
+     const desk=(typeof resolveInternalTicker==="function"?resolveInternalTicker(raw):"")||raw;
+@@ -14025,14 +14037,14 @@
+     <div class="book-home-head">
+       <div>
+         <div class="desk-kicker book-home-kicker">Book · first surface</div>
+-        <div class="book-home-meta">Regime <strong style="color:${re.col||"var(--wire)"}">${re.label}</strong>
++        <div class="book-home-meta">Regime <strong style="color:${re.col||"var(--wire)"}">${_fe80Sk?"Regime":re.label}</strong>
+           <span style="color:var(--ink-mute);font-family:var(--mn);font-size:12px"> · ${book.length||0} symbols${book.length?` · ${liveN} priced`:""} · as of ${asOf}</span>
+         </div>
+       </div>
+       <div class="book-home-actions">
+-        <span class="regime-score" style="--regime-col:${re.col||"var(--wire)"};--regime-pct:${score}" title="Regime score ${score}/100">
+-          <span class="regime-score-ring" data-score="${score}"></span>
+-          <span class="regime-score-label">${score}<span style="opacity:.55;font-weight:500">/100</span></span>
++        <span class="regime-score" style="--regime-col:${re.col||"var(--wire)"};--regime-pct:${_fe80Sk?0:score}" title="${_fe80Sk?"Regime":("Regime score "+score+"/100")}">
++          <span class="regime-score-ring" data-score="${_fe80Sk?"":score}"></span>
++          <span class="regime-score-label">${_fe80Sk?"Regime":score}<span style="opacity:.55;font-weight:500">${_fe80Sk?"":"/100"}</span></span>
+         </span>
+         <button type="button" class="news-act news-act-gold" onclick="runMorningDeskRun()">☀ Desk Run</button>
+         <button type="button" class="news-act" onclick="_shareDeskSnapshot()">↗ Share</button>
+@@ -14385,8 +14397,8 @@
+ 
+     <div class="paper-regime">
+       <span class="paper-regime-lbl">REGIME</span>
+-      <strong style="color:${re.col||"var(--gd)"}">${_escHtml(re.label)}</strong>
+-      <span class="paper-regime-sc">${re.score}/100</span>
++      <strong style="color:${re.col||"var(--gd)"}">${_escHtml(fe80_hideScore(re)?"Regime":re.label)}</strong>
++      <span class="paper-regime-sc">${fe80_hideScore(re)?"":re.score+"/100"}</span>
+       <span class="paper-regime-sep">·</span>
+       <span>F&amp;G ${fg.score!=null?fg.score:"—"} ${_escHtml(fg.label||"")}</span>
+       <span class="paper-regime-sep">·</span>
+@@ -14448,9 +14460,9 @@
+         </div>
+         <div class="paper-rail-card">
+           <div class="paper-rail-h">Leading themes</div>
+-          ${(re.overweight||[]).slice(0,4).map(x=>`<div class="paper-rail-li paper-ow">+ ${_escHtml(x)}</div>`).join("")||`<div class="paper-rail-muted">—</div>`}
++          ${(fe80_regArr(re,"overweight")||[]).slice(0,4).map(x=>`<div class="paper-rail-li paper-ow">+ ${_escHtml(x)}</div>`).join("")||`<div class="paper-rail-muted">—</div>`}
+           <div class="paper-rail-h" style="margin-top:12px">Underweight</div>
+-          ${(re.underweight||[]).slice(0,4).map(x=>`<div class="paper-rail-li paper-uw">− ${_escHtml(x)}</div>`).join("")||`<div class="paper-rail-muted">—</div>`}
++          ${(fe80_regArr(re,"underweight")||[]).slice(0,4).map(x=>`<div class="paper-rail-li paper-uw">− ${_escHtml(x)}</div>`).join("")||`<div class="paper-rail-muted">—</div>`}
+         </div>
+         <div class="paper-rail-card">
+           <div class="paper-rail-h">Book marks</div>
+@@ -17074,10 +17086,10 @@
+           <div class="lab-regime-body">
+             ${_renderRegimeRing(re)}
+             <div>
+-              <div class="lab-regime-lbl">${re.label}</div>
+-              <div class="lab-regime-score" title="${fe78_regimeTitle(re)}">Score ${re.score}/100</div>${re.asOfUk ? `<div class="fe78-acad">${_escHtml(re.asOfUk)}</div>` : ""}
+-              <div class="lab-regime-hint"><strong>Favour:</strong> ${(re.overweight||[]).slice(0,3).join(" · ")||"—"}</div>
+-              <div class="lab-regime-hint"><strong>Lower weight:</strong> ${(re.underweight||[]).slice(0,2).join(" · ")||"—"}</div>
++              <div class="lab-regime-lbl">${fe80_hideScore(re)?"Regime":re.label}</div>
++              <div class="lab-regime-score" title="${fe78_regimeTitle(re)}">${fe80_hideScore(re)?"":("Score "+re.score+"/100")}</div>${re.asOfUk ? `<div class="fe78-acad">${_escHtml(re.asOfUk)}</div>` : ""}
++              <div class="lab-regime-hint"><strong>Favour:</strong> ${(fe80_regArr(re,"overweight")||[]).slice(0,3).join(" · ")||"—"}</div>
++              <div class="lab-regime-hint"><strong>Lower weight:</strong> ${(fe80_regArr(re,"underweight")||[]).slice(0,2).join(" · ")||"—"}</div>
+             </div>
+           </div>
+         </div>
+@@ -19062,7 +19074,7 @@
+     if (!b) return b;
+     const re = _computeRegimeEngine(), lc = v => String(v || "").toLowerCase();
+     const hit = (x, list) => (list || []).some(y => lc(x).includes(lc(y).split(/[ /(]/)[0]) || lc(y).includes(lc(x).split(/[ /(]/)[0]));
+-    return { ...b, overweight: (b.overweight || []).filter(x => !hit(x, re.underweight)), underweight: (b.underweight || []).filter(x => !hit(x, re.overweight)) };
++    return { ...b, overweight: (fe80_regArr(b,"overweight") || []).filter(x => !hit(x, fe80_regArr(re,"underweight"))), underweight: (fe80_regArr(b,"underweight") || []).filter(x => !hit(x, fe80_regArr(re,"overweight"))) };
+   } catch (e) { return b; }
+ }
+ // crypto market cap comes from CoinGecko only (one source across Compare, lens and /crypto/)
+@@ -20575,6 +20587,7 @@
+ 
+   const _sv = el.scrollTop; // keep scroll on live updates
+   let html = "";
++  try {
+   switch (pg) {
+     case "home": html = renderHome(); break;
+     case "dash": html = renderDash(); break;
+@@ -20606,6 +20619,7 @@
+     // phones while desktop looked correct.
+     default: html = renderDash();
+   }
++  } catch (e) { try { console.error("fe80", "page", e); } catch (e2) {} html = fe80_empty("page"); }
+   el.innerHTML = html + (typeof _siteFooter === "function" ? _siteFooter() : "");
+   if (typeof _fxPageEnter === "function") _fxPageEnter(el);
+   if (_sv > 10) requestAnimationFrame(() => { el.scrollTop = _sv; });
+@@ -20664,9 +20678,9 @@
+   const fg = calcFearGreed();
+   const parts = [
+     `Page: ${CHAT_PAGE_NAMES[pg] || pg}`,
+-    `Regime: ${re.label} (score ${re.score}/100)`,
++    `Regime: ${fe80_regText(re, true)}`,
+     re.narrative,
+-    `Leading themes: ${re.overweight.join(", ")} | Underweight: ${re.underweight.join(", ")}`,
++    `Leading themes: ${fe80_regArr(re,"overweight").join(", ")} | Underweight: ${fe80_regArr(re,"underweight").join(", ")} | Neutral: ${fe80_regArr(re,"neutral").join(", ")}`,
+     `Sector rotation: ${re.rotation?.label || "—"}`,
+     `Fear/Greed (live, computed now — the only valid value): ${fg.label} (${fg.score != null ? fg.score : "—"}/100)`,
+   ];
+@@ -20968,7 +20982,7 @@
+   let streamed = false;
+   const payload = () => ({
+     messages: _rt36Msgs(_chatMsgs.filter(m => !m._bb2).map(m => ({ role: m.role, content: m.content })), tickers),
+-    context: (_rt38PeerCtx(tickers, text).trim() ? _rt38PeerCtx(tickers, text).trim() + "\n\n" : "") + _buildChatContext(),
++    context: fe80_chatCtx(tickers, text),
+     tickers,
+     knownTickers: _chatKnownTickers(),
+     hints: _rt37Hints(tickers),
+@@ -25057,7 +25071,7 @@
+     what: 'A 0–100 read of how much risk the market is willing to take, worked out in your browser from five live prices. 72 and above is Risk-On (Strong), 55–71 Risk-On (Fragile), 40–54 Transition, below 40 Risk-Off.',
+     how: ['Each input adds or takes away points using fixed thresholds (left). Missing prices count as neutral rather than being guessed.', 'Recalculated every time a new price arrives. Closed markets use their last price until they reopen.'],
+     src: `VIX, S&P 500 and oil from ${_rt52E(_rt52Src('VIX'))}; dollar index ${_rt52E(_rt52Src('DXY'))}; Bitcoin ${_rt52E(_rt52Src('BTC'))}`, at: _rt52At(Date.now()),
+-    why: `It sets which styles the desk favours right now (favour: ${_rt52E((re.overweight || []).slice(0, 3).join(', '))}; avoid: ${_rt52E((re.underweight || []).slice(0, 2).join(', '))}) and feeds the brief, Signals and Market Lab fit scores. An educational model, not a forecast.` }; };
++    why: `It sets which styles the desk favours right now (favour: ${_rt52E((fe80_regArr(re,"overweight") || []).slice(0, 3).join(', '))}; avoid: ${_rt52E((fe80_regArr(re,"underweight") || []).slice(0, 2).join(', '))}) and feeds the brief, Signals and Market Lab fit scores. An educational model, not a forecast.` }; };
+ RT52_B.q = tk => { const d = RT52_Q[tk] || [`${tk} price.`, '']; const s = _rt52State(tk); let p = '—'; try { p = hasSyncedQuote(tk) ? fp(tk).p : '—'; } catch (e) {}
+   let det = ''; try { det = (_quoteMeta(tk) || {}).detail || ''; } catch (e) {}
+   return { k: 'PRICE', t: `${tk} ${p}`, what: d[0], how: [s.txt + (s.at ? ` · ${s.at}` : ''), det ? _rt52E(det) : ''], src: _rt52E(_rt52Src(tk)), at: s.at ? s.at.replace(/^(last price|as of) /, '') : '—', why: d[1] }; };
+@@ -25090,10 +25104,10 @@
+ try { renderSig = function () { const re = _computeRegimeEngine();
+   let h = _renderPgHdr('Signals', 'Desk views with a live price check · tap i for how each is scored');
+   h += _renderSiteIntelCard('signals');
+-  if (!re.loading) h += `<div class="gc" style="padding:12px;border-left:3px solid ${re.col};margin-bottom:10px">
++  if (!fe80_hideScore(re)) h += `<div class="gc" style="padding:12px;border-left:3px solid ${re.col};margin-bottom:10px">
+     <div style="display:flex;align-items:center;gap:6px;font-family:var(--mn);font-size:9px;color:${re.col};letter-spacing:0.14em;margin-bottom:6px">REGIME PLAYBOOK · ${_rt52E(re.label.toUpperCase())} · ${re.score}/100 ${_rt52I('regime', '', 'regime score')}</div>
+     <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:8px">${re.narrative}</div>
+-    <div style="display:flex;gap:6px;flex-wrap:wrap">${re.overweight.slice(0, 3).map(x => `<span class="rt52-pill up">Favour ${_rt52E(x)}</span>`).join('')}${re.underweight.slice(0, 2).map(x => `<span class="rt52-pill dn">Lower weight ${_rt52E(x)}</span>`).join('')}</div></div>`;
++    <div style="display:flex;gap:6px;flex-wrap:wrap">${fe80_regArr(re,"overweight").slice(0, 3).map(x => `<span class="rt52-pill up">Favour ${_rt52E(x)}</span>`).join('')}${fe80_regArr(re,"underweight").slice(0, 2).map(x => `<span class="rt52-pill dn">Lower weight ${_rt52E(x)}</span>`).join('')}</div></div>`;
+   SIGS.forEach((s, i) => { h += _rt52SigCard(s, i); });
+   return h + `<p class="rt52-foot">The desk score is the desk’s own 0–100 rating for each view, checked against the live price of the instrument shown. Prices from free feeds; some are delayed.</p>`; }; } catch (e) {}
+ try { const _p3 = renderP3; renderP3 = function () { _p3.apply(this, arguments); try { const el = document.getElementById('p3body'); if (!el) return;
+@@ -25153,15 +25167,15 @@
+ try { const _rge = renderGeoOps; renderGeoOps = function () { let h = _rge.apply(this, arguments);
+   try { h = h.replace(/<span style="color:(var\(--(?:rd|gd|gn)\))">(\d+)<\/span><\/button>/g, '<span style="color:$1">$2<small style="opacity:.6">/100</small></span></button>').replace('COUNTRY DOSSIERS · tap to open', 'COUNTRY DOSSIERS · desk stress score /100 · tap to open'); } catch (e) {} return h; }; } catch (e) {}
+ // 6) Market Lab: scores say what they are; the guide shows on the first visit only
+-function _rt52Fit(tk) { const re = _computeRegimeEngine(), a = A.find(x => x.tk === tk), chg = liveChg(tk), rows = [['Starting point', 50]];
++function _rt52Fit(tk) { const re = fe80_reg(_computeRegimeEngine()), a = A.find(x => x.tk === tk), chg = liveChg(tk), rows = [['Starting point', 50]];
+   if (a && a.se && a.se.includes('Bull') && re.score >= 55) rows.push([`Desk view ${a.se} and regime 55+`, 18]);
+   if (a && a.se && a.se.includes('Bear') && re.score < 45) rows.push([`Desk view ${a.se} and regime under 45`, 12]);
+-  if (a && a.cat === 'Commodity' && re.overweight.some(x => /Energy|Gold|commodit/i.test(x))) rows.push(['Commodity while the regime favours energy or gold', 15]);
++  if (a && a.cat === 'Commodity' && fe80_regArr(re,"overweight").some(x => /Energy|Gold|commodit/i.test(x))) rows.push(['Commodity while the regime favours energy or gold', 15]);
+   if (a && a.cat === 'Crypto' && re.score >= 58) rows.push(['Crypto with regime 58+', 12]);
+   if (a && a.cat === 'Crypto' && re.score < 42) rows.push(['Crypto with regime under 42', -15]);
+   if (chg != null && chg > 1.5 && re.score >= 55) rows.push([`Up ${chg.toFixed(2)}% with regime 55+`, 8]);
+   if (chg != null && chg < -2) rows.push([`Down ${Math.abs(chg).toFixed(2)}% on the day`, -10]);
+-  if (re.underweight.some(x => /growth|crypto|beta/i.test(x)) && _rt52BetaOf(tk, a) > 1.5) rows.push([`High beta while the regime avoids high-beta`, -12]);
++  if (fe80_regArr(re,"underweight").some(x => /growth|crypto|beta/i.test(x)) && _rt52BetaOf(tk, a) > 1.5) rows.push([`High beta while the regime avoids high-beta`, -12]);
+   return { rows, fit: _tickerRegimeFit(tk, re) }; }
+ RT52_B.fit = tk => { const g = _rt52Fit(tk); return { k: 'REGIME FIT', t: `${tk} · ${g.fit.score}/100 · ${g.fit.label}`, v: `<table class="rt52-tbl">${g.rows.map(([l, p]) => `<tr><td>${_rt52E(l)}</td><td><b class="${p > 0 && l !== 'Starting point' ? 'rt52-up' : p < 0 ? 'rt52-dn' : ''}">${l === 'Starting point' ? p : (p > 0 ? '+' : '−') + Math.abs(p)}</b></td></tr>`).join('')}<tr class="rt52-sum"><td>Fit (kept between 0 and 100)</td><td><b>${g.fit.score}</b></td></tr></table>`,
+   what: 'How well this name suits the current market regime, from 0 to 100. 68+ is regime-aligned, 45–67 a neutral fit, under 45 a headwind.', how: ['Starts at 50; fixed rules add or take points using the regime score, the desk’s view on the name, its asset class, beta and today’s move.'], src: `Regime model plus ${_rt52E(_rt52Src(tk))} for the price`, at: _rt52At(Date.now()), why: 'A quick check before you dig in: a headwind means the name is fighting the current backdrop.' }; };
+@@ -25301,15 +25315,15 @@
+ // screens only, which is why the same name could read 28 on one device and 40 on another)
+ const RT52_BETA = {"AAPL":1.18,"NVDA":1.72,"XOM":0.82,"MSFT":0.92,"AVGO":1.28,"TSLA":2.05,"AMZN":1.22,"GOOGL":1.08,"META":1.35,"JPM":1.12,"GS":1.38,"AMD":1.68,"NFLX":1.2,"DIS":1.05,"V":0.92,"MA":0.95,"PYPL":1.38,"CRM":1.18,"ORCL":0.88,"ADBE":1.22,"INTC":1.28,"QCOM":1.32,"MU":1.62,"CSCO":0.82,"NOW":1.08,"PANW":1.18,"CRWD":1.42,"PLTR":2.12,"COIN":3.2,"UBER":1.35,"SHOP":1.65,"SNOW":1.42,"RIVN":2.85,"F":1.38,"GM":1.22,"BA":1.42,"CAT":1.08,"DE":0.95,"NKE":0.92,"SBUX":0.88,"MCD":0.72,"JNJ":0.62,"UNH":0.68,"PFE":0.58,"LLY":0.48,"ABBV":0.62,"MRK":0.55,"WMT":0.52,"COST":0.72,"HD":1.02,"BAC":1.38,"WFC":1.18,"C":1.45,"BLK":1.28,"ISRG":0.92,"TSM":1.22,"ASML":1.18,"NVO":0.45,"SAP":0.82,"BABA":0.92,"BP":0.68,"SHEL":0.72,"ARM":1.85,"SMCI":2.2,"MRVL":1.65,"KO":0.58,"PEP":0.52,"PG":0.48,"ABNB":1.42,"DASH":1.52,"BRKB":0.88,"ACN":1.02,"SONY":0.92,"VALE":1.02,"RIO":0.78,"INFY":0.82,"CAC":1.12,"ASX200":0.85,"KOSPI":1.05,"TMO":0.72,"ABT":0.75,"PM":0.62,"NEE":0.52,"RTX":0.92,"HON":0.95,"T":0.62,"VZ":0.42,"MS":1.42,"SCHW":1.28,"TXN":1.08,"AMAT":1.45,"LRCX":1.55,"REGN":0.52,"AMGN":0.55,"CVX":0.92,"COP":0.98,"INTU":1.18,"ADSK":1.12,"NET":1.42,"DDOG":1.35,"ZS":1.38,"UPS":1.02,"LOW":1.12,"DUK":0.42,"TM":0.72,"NVS":0.48,"UL":0.52,"DEO":0.58,"SPY":1.0,"QQQ":1.15,"IWM":1.25,"RUT":1.25,"EEM":1.1,"SOXX":1.6,"ARKK":1.8,"XLK":1.2,"XLC":1.1,"XLY":1.15,"XLF":1.1,"XLV":0.7,"XLE":0.9,"XLI":1.05,"XLP":0.55,"XLB":1.0,"XLU":0.45,"XLRE":0.85,"RKLB":2.1,"HOOD":2.4,"MSTR":3.5,"GME":2.8,"SPOT":1.5,"LMT":0.65,"BMY":0.45,"GILD":0.42,"ENPH":2.0,"FSLR":1.4,"EOG":1.1,"SLB":1.2,"SO":0.42,"PLD":1.0,"AMT":0.88,"EQIX":0.95,"SPG":1.2,"O":0.75,"VRTX":0.55,"URA":1.3};
+ function _rt52BetaOf(tk, a) { const b = RT52_BETA[tk]; if (b != null) return b; const n = parseFloat(String(a && a.beta != null ? a.beta : '').replace(/x/i, '')); return isFinite(n) ? n : 0; }
+-try { _tickerRegimeFit = function (tk, re) { const a = A.find(x => x.tk === tk), chg = liveChg(tk); let score = 50;
++try { _tickerRegimeFit = function (tk, re) { re = fe80_reg(re); const a = A.find(x => x.tk === tk), chg = liveChg(tk); let score = 50;
+   if (a && a.se && a.se.includes('Bull') && re.score >= 55) score += 18;
+   if (a && a.se && a.se.includes('Bear') && re.score < 45) score += 12;
+-  if (a && a.cat === 'Commodity' && re.overweight.some(x => /Energy|Gold|commodit/i.test(x))) score += 15;
++  if (a && a.cat === 'Commodity' && fe80_regArr(re,"overweight").some(x => /Energy|Gold|commodit/i.test(x))) score += 15;
+   if (a && a.cat === 'Crypto' && re.score >= 58) score += 12;
+   if (a && a.cat === 'Crypto' && re.score < 42) score -= 15;
+   if (chg != null && chg > 1.5 && re.score >= 55) score += 8;
+   if (chg != null && chg < -2) score -= 10;
+-  if (re.underweight.some(x => /growth|crypto|beta/i.test(x)) && _rt52BetaOf(tk, a) > 1.5) score -= 12;
++  if (fe80_regArr(re,"underweight").some(x => /growth|crypto|beta/i.test(x)) && _rt52BetaOf(tk, a) > 1.5) score -= 12;
+   score = Math.max(0, Math.min(100, score)); const label = score >= 68 ? 'Regime-aligned' : score >= 45 ? 'Neutral fit' : 'Headwind';
+   const chgLbl = chg == null ? 'no price yet' : `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}% ${_rt26Day(tk)}`;
+   return { tk, score, label, note: `${label} · regime fit ${score}/100 · ${chgLbl}` }; }; } catch (e) {}
+@@ -32031,7 +32045,7 @@
+       });
+     });
+   } else {
+-    var names = leading ? b.overweight : b.underweight;
++    var names = leading ? fe80_regArr(b,"overweight") : fe80_regArr(b,"underweight");
+     if (Array.isArray(names)) names.forEach(function (x) {
+       items.push({ name: String(x), changeText: "", spyText: "", meta: "", source: "", asOf: "", line: String(x) });
+     });
+@@ -33310,6 +33324,7 @@
+   return "var(--gn)";
+ }
+ function fe78_regimeFrom(raw, local) {
++  if (raw && typeof raw === "object" && raw.localEstimate !== true && (raw.available === false || raw.score == null || raw.score === "")) return fe80_skelRegime(raw, local);
+   var srv = null;
+   if (raw && typeof raw === "object" && raw.localEstimate !== true) {
+     var label = String(raw.regime || raw.label || "").trim();
+@@ -33338,6 +33353,9 @@
+     out.loading = false;
+     out._hide = false;
+     out.col = fe78_regimeCol(srv.score);
++    out.overweight = Array.isArray(raw.overweight) ? raw.overweight : (Array.isArray(out.overweight) ? out.overweight : []);
++    out.underweight = Array.isArray(raw.underweight) ? raw.underweight : (Array.isArray(out.underweight) ? out.underweight : []);
++    out.neutral = Array.isArray(raw.neutral) ? raw.neutral : (Array.isArray(out.neutral) ? out.neutral : []);
+     return out;
+   }
+   if (!local || typeof local !== "object") return local || null;
+@@ -34077,7 +34095,10 @@
+     asOf: raw.asOf || asOf,
+     asOfUk: asOf,
+     localEstimate: raw.localEstimate === true,
+-    loading: false
++    loading: false,
++    overweight: Array.isArray(raw.overweight) ? raw.overweight : fe80_regArr(cur, "overweight"),
++    underweight: Array.isArray(raw.underweight) ? raw.underweight : fe80_regArr(cur, "underweight"),
++    neutral: Array.isArray(raw.neutral) ? raw.neutral : fe80_regArr(cur, "neutral")
+   };
+ }
+ function fe79_goldChip(q) {
+@@ -34777,7 +34798,7 @@
+ try {
+   var fe79_eng0 = _computeRegimeEngine;
+   _computeRegimeEngine = function () {
+-    if (fe79_regimeHold && fe79_regimeBox) return fe79_regimeBox;
++    if (fe79_regimeHold) return fe80_reg(fe79_regimeBox);
+     var local = null;
+     try { local = fe79_eng0.apply(this, arguments); } catch (e) { local = null; }
+     try {
+@@ -34971,6 +34992,12 @@
+   }
+ } catch (eBoot) {}
+ function fe79_takeRegime(raw) {
++  if (raw && typeof raw === "object" && (raw.available === false || raw.score == null || raw.score === "")) {
++    fe79_regimeBox = fe80_skelRegime(raw, null);
++    fe79_regimeHold = true;
++    try { fe79_paintRegime(); } catch (eSk) {}
++    return fe79_regimeBox;
++  }
+   var v = fe79_regimeView(raw);
+   if (!v || v.useLocal) {
+     fe79_regimeHold = false;
+@@ -34980,6 +35007,9 @@
+   fe79_regimeBox.thin = v.thin;
+   fe79_regimeBox.stale = v.stale;
+   fe79_regimeBox.source = "server";
++  if (Array.isArray(raw.overweight)) fe79_regimeBox.overweight = raw.overweight;
++  if (Array.isArray(raw.underweight)) fe79_regimeBox.underweight = raw.underweight;
++  if (Array.isArray(raw.neutral)) fe79_regimeBox.neutral = raw.neutral;
+   fe79_regimeHold = true;
+   try { fe79_paintRegime(); } catch (e) {}
+   return fe79_regimeBox;
+@@ -35143,3 +35173,213 @@
+     return html;
+   };
+ } catch (eNat) {}
++
++// ── rt62b ──
++// FE80_PURE_START
++function fe80_regArr(re, key) {
++  var v = re && typeof re === "object" ? re[key] : undefined;
++  return Array.isArray(v) ? v : [];
++}
++function fe80_isSkel(re) {
++  if (!re || typeof re !== "object" || Array.isArray(re)) return true;
++  if (re.skeleton === true || re.available === false) return true;
++  if (re.score == null || re.score === "" || !isFinite(Number(re.score))) return true;
++  return false;
++}
++function fe80_keepArr(raw, local, key) {
++  if (raw && Array.isArray(raw[key])) return raw[key];
++  if (local && Array.isArray(local[key])) return local[key];
++  return [];
++}
++function fe80_skelRegime(raw, local) {
++  raw = raw && typeof raw === "object" ? raw : {};
++  return {
++    label: "",
++    score: null,
++    loading: true,
++    skeleton: true,
++    available: false,
++    narrative: "",
++    col: "var(--t3)",
++    overweight: fe80_keepArr(raw, local, "overweight"),
++    underweight: fe80_keepArr(raw, local, "underweight"),
++    neutral: fe80_keepArr(raw, local, "neutral"),
++    inputs: raw.inputs && typeof raw.inputs === "object" && !Array.isArray(raw.inputs) ? raw.inputs : {},
++    rotation: {},
++    asOf: raw.asOf || "",
++    asOfUk: raw.asOfUk || raw.computedAtUk || ""
++  };
++}
++function fe80_reg(re) {
++  if (fe80_isSkel(re)) return fe80_skelRegime(re, null);
++  var ow = re.overweight, uw = re.underweight, neu = re.neutral;
++  var complete = Array.isArray(ow) && Array.isArray(uw) && Array.isArray(neu) && re.narrative != null && re.col != null && re.label != null && re.score != null && re.skeleton !== true;
++  if (complete) return re;
++  var copy = {}, k;
++  for (k in re) if (Object.prototype.hasOwnProperty.call(re, k)) copy[k] = re[k];
++  if (!Array.isArray(copy.overweight)) copy.overweight = [];
++  if (!Array.isArray(copy.underweight)) copy.underweight = [];
++  if (!Array.isArray(copy.neutral)) copy.neutral = [];
++  if (copy.narrative == null) copy.narrative = "";
++  if (copy.col == null) copy.col = "var(--t3)";
++  if (!copy.rotation || typeof copy.rotation !== "object" || Array.isArray(copy.rotation)) copy.rotation = {};
++  if (copy.inputs == null || typeof copy.inputs !== "object" || Array.isArray(copy.inputs)) copy.inputs = {};
++  return copy;
++}
++function fe80_hideScore(re) {
++  if (fe80_isSkel(re)) return true;
++  if (re && (re.loading || /loading/i.test(String(re.label || "")))) return true;
++  return false;
++}
++function fe80_regText(re, chat) {
++  if (fe80_hideScore(re)) return chat ? "loading" : "Regime";
++  re = re || {};
++  return chat ? (re.label + " (score " + re.score + "/100)") : (re.label + " · " + re.score + "/100");
++}
++function fe80_regimeChip(re) {
++  re = fe80_reg(re);
++  if (re.skeleton || re.score == null) return '<span class="htec-chip htec-chip-regime htec-chip-muted fe80-skel" data-fe80="regime">Regime</span>';
++  if (re.loading && re._hide) return "";
++  if (re.loading || /loading/i.test(String(re.label || ""))) return '<span class="htec-chip htec-chip-regime htec-chip-muted" data-fe80="regime" title="Waiting for regime inputs">Regime</span>';
++  var title = "";
++  try { title = typeof fe78_regimeTitle === "function" ? fe78_regimeTitle(re) : re.label; } catch (e) { title = re.label; }
++  return '<span class="htec-chip htec-chip-regime" title="' + title + '">' + re.label + " · " + re.score + "/100</span>";
++}
++function fe80_chatCtx(tickers, text) {
++  var peer = "";
++  try { peer = typeof _rt38PeerCtx === "function" ? String(_rt38PeerCtx(tickers, text) || "").trim() : ""; } catch (e) {}
++  var ctx = "";
++  try { ctx = _buildChatContext(); } catch (e2) { try { console.error("fe80", "ask", e2); } catch (e3) {} ctx = "Regime: loading"; }
++  return (peer ? peer + "\n\n" : "") + ctx;
++}
++function fe80_empty(name) {
++  name = String(name || "section");
++  if (name === "chip") return '<span class="bd trust-stat" data-fe80="chip">—</span>';
++  if (name === "chart") return '<div class="gc" data-fe80="chart"><div style="font-family:var(--mn);font-size:10px;color:var(--t3);letter-spacing:0.08em;padding:18px;text-align:center">LOADING CHART…</div></div>';
++  if (name === "signals") return '<div class="gc" data-fe80="signals" style="padding:12px"><div style="font-family:var(--mn);font-size:8px;color:var(--t3);letter-spacing:0.12em">SIGNALS</div></div>';
++  if (name === "header") return '<div class="rt23-stock" data-fe80="header"></div>';
++  if (name === "tab" || name === "page") return '<div class="gc" data-fe80="' + name + '" style="padding:16px;font-family:var(--mn);font-size:10px;color:var(--t3)">—</div>';
++  return '<div data-fe80="' + name + '"></div>';
++}
++function fe80_section(name, fn, empty) {
++  try {
++    var v = fn();
++    return v == null ? (empty == null ? "" : empty) : v;
++  } catch (e) {
++    try { console.error("fe80", name, e); } catch (e2) {}
++    return empty == null ? "" : empty;
++  }
++}
++// FE80_PURE_END
++try {
++  var fe80_eng = _computeRegimeEngine;
++  _computeRegimeEngine = function () {
++    var re = null;
++    try { re = fe80_eng.apply(this, arguments); } catch (e) { try { console.error("fe80", "regime", e); } catch (e2) {} }
++    return fe80_reg(re);
++  };
++} catch (eEng) {}
++try {
++  var fe80_stat = stat;
++  stat = function () {
++    try { return fe80_stat.apply(this, arguments); }
++    catch (e) { try { console.error("fe80", "chip", e); } catch (e2) {} return fe80_empty("chip"); }
++  };
++} catch (eStat) {}
++try {
++  var fe80_sig = _renderTickerSignals;
++  _renderTickerSignals = function () {
++    try { return fe80_sig.apply(this, arguments); }
++    catch (e) { try { console.error("fe80", "signals", e); } catch (e2) {} return fe80_empty("signals"); }
++  };
++} catch (eSig) {}
++try {
++  var fe80_loc = _computeLocalIntel;
++  _computeLocalIntel = function () {
++    try { return fe80_loc.apply(this, arguments); }
++    catch (e) {
++      try { console.error("fe80", "intel", e); } catch (e2) {}
++      return { headline: "", insight: "", anomalies: [], actions: [], fit: [], priority: "normal", local: true, regime: "", score: 50 };
++    }
++  };
++} catch (eLoc) {}
++try {
++  var fe80_cc = renderCandleChart;
++  renderCandleChart = async function (tk, range, containerId) {
++    try { return await fe80_cc.apply(this, arguments); }
++    catch (e) {
++      try { console.error("fe80", "chart", e); } catch (e2) {}
++      try { var el = document.getElementById(containerId); if (el) el.innerHTML = fe80_empty("chart"); } catch (e3) {}
++    }
++  };
++} catch (eCc) {}
++try {
++  var fe80_p2 = renderP2;
++  renderP2 = function () {
++    try { return fe80_p2.apply(this, arguments); }
++    catch (e) { try { console.error("fe80", "desk", e); } catch (e2) {} }
++  };
++} catch (eP2) {}
++try {
++  var fe80_p3 = renderP3;
++  renderP3 = function () {
++    try { return fe80_p3.apply(this, arguments); }
++    catch (e) { try { console.error("fe80", "signals", e); } catch (e2) {} }
++  };
++} catch (eP3) {}
++try {
++  var fe80_dyn = renderDynAnlz;
++  renderDynAnlz = function () {
++    try { return fe80_dyn.apply(this, arguments); }
++    catch (e) { try { console.error("fe80", "dyn", e); } catch (e2) {} return fe80_empty("page"); }
++  };
++} catch (eDyn) {}
++try {
++  var fe80_sub = fe78_regimeSub;
++  fe78_regimeSub = function (re) {
++    if (fe80_isSkel(re)) return "";
++    var s = "";
++    try { s = String(fe80_sub.apply(this, arguments) || ""); } catch (e) { s = ""; }
++    return s.replace(/Regime:\s*loading[^\n]{0,16}\d+\s*\/\s*100/gi, "");
++  };
++  var fe80_title = fe78_regimeTitle;
++  fe78_regimeTitle = function (re) {
++    if (fe80_isSkel(re)) return "Regime";
++    var s = "";
++    try { s = String(fe80_title.apply(this, arguments) || ""); } catch (e) { s = ""; }
++    return s.replace(/Regime:\s*loading[^\n]{0,16}\d+\s*\/\s*100/gi, "Regime");
++  };
++} catch (eSub) {}
++try {
++  var fe80_paint = fe79_paintRegime;
++  fe79_paintRegime = function () {
++    var re = fe79_regimeBox;
++    if (fe80_hideScore(re)) {
++      var nodes = document.querySelectorAll(".htec-chip-regime,.home-regime,.lab-regime-lbl");
++      for (var i = 0; i < nodes.length; i++) nodes[i].textContent = "Regime";
++      var scores = document.querySelectorAll(".lab-regime-score,.paper-regime-sc,.home-regime-sc,.regime-score-label");
++      for (var j = 0; j < scores.length; j++) scores[j].textContent = "";
++      return;
++    }
++    try { return fe80_paint.apply(this, arguments); } catch (e) {}
++  };
++} catch (ePaint) {}
++function fe80_scrubRegime(root) {
++  if (!root || !root.querySelectorAll) return;
++  var bad = /Regime:\s*loading[^\n]{0,24}\d+\s*\/\s*100/ig;
++  var nodes = root.querySelectorAll(".htec-chip-regime,.home-regime,.lab-regime-lbl,.lab-regime-score,.regime-score-label,.paper-regime-sc,.home-brief-t");
++  var skel = false;
++  try {
++    var src = (typeof fe79_regimeHold !== "undefined" && fe79_regimeHold) ? fe79_regimeBox : null;
++    if (!src && typeof fe78_srvRegime !== "undefined" && fe78_srvRegime) src = fe78_srvRegime;
++    if (src) skel = fe80_isSkel(src);
++  } catch (e) {}
++  for (var i = 0; i < nodes.length; i++) {
++    var t = nodes[i].textContent || "";
++    if (bad.test(t)) { nodes[i].textContent = t.replace(bad, "Regime"); bad.lastIndex = 0; continue; }
++    if (skel && ((/Cautious/.test(t) && /\b50\b/.test(t)) || /null\s*\/\s*100/i.test(t))) nodes[i].textContent = "Regime";
++  }
++}
++try {
++  setInterval(function () { try { fe80_scrubRegime(document.body); } catch (e) {} }, 400);
++} catch (eScr) {}
+--- /tmp/rt62-apply/index.html	2026-10-24 14:52:17.315211235 +0000
++++ /tmp/rt62b-in/index.html	2026-10-24 16:09:38.076107925 +0000
+@@ -343,7 +343,7 @@
+ 
+ <!-- Context menu -->
+ <div class="ctx-menu" id="ctxMenu"></div>
+-<script defer src="/app.js?v=chat79"></script>
++<script defer src="/app.js?v=chat80"></script>
+ <script src="https://i.replit.com/script.js" async="" data-website-id="41c83e31-7da9-45c5-a194-58f8bc4f6608"></script></body>
+ </html>
+ 
