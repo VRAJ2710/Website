@@ -551,17 +551,23 @@ diff --git a/app.js b/app.js
  const RT_LIVE_MS = 30_000;     // a stream label (LIVE·YS/CB/KR) needs a tick at least this recent
  const RT_CHG_HOLD_MS = 3000;   // a streamed coin's polled 24h % waits this long for the exchange's own basis
  const _rt = {
-@@ -5632,16 +5632,17 @@
+@@ -5632,16 +5632,23 @@
    let prev = (typeof o.prev === "number" && isFinite(o.prev) && o.prev > 0) ? o.prev : null;
    if (prev == null && !o.noBasePrev && _rt.goodPrev[tk] > 0) prev = _rt.goodPrev[tk];
    const oldP = P[tk] && liveSymbols.has(tk) ? P[tk].p : null;
 -  P[tk] = { p, c: prev ? +(((p - prev) / prev) * 100).toFixed(2) : 0 };
 -  if (prev) BASE[tk] = { p: prev, c: 0 };
 -  if (prev && (o.src === "coinbase-ws" || o.src === "kraken-ws")) _rt.roll[tk] = { prev, at: now, kind: "stream" };
-+  var fe78srv = _rt.roll[tk] && _rt.roll[tk].kind === "srv24" && now - _rt.roll[tk].at < 30 * 60_000 && _rt.roll[tk].c != null && isFinite(_rt.roll[tk].c) ? _rt.roll[tk].c : null;
-+  P[tk] = { p, c: fe78srv != null ? fe78srv : (prev ? +(((p - prev) / prev) * 100).toFixed(2) : null) };
-+  if (fe78srv == null && prev) BASE[tk] = { p: prev, c: 0 };
-+  if (fe78srv == null && prev && (o.src === "coinbase-ws" || o.src === "kraken-ws")) _rt.roll[tk] = { prev, at: now, kind: "stream" };
++  var fe78roll = _rt.roll[tk] && _rt.roll[tk].kind === "srv24" && now - _rt.roll[tk].at < 30 * 60_000 ? _rt.roll[tk] : null;
++  var fe78base = fe78roll && fe78roll.prev > 0 ? fe78roll.prev : null;
++  var fe78srv = fe78roll && fe78roll.c != null && isFinite(fe78roll.c) ? fe78roll.c : null;
++  var fe78c = fe78base ? +(((p - fe78base) / fe78base) * 100).toFixed(2) : (fe78srv != null ? fe78srv : (prev ? +(((p - prev) / prev) * 100).toFixed(2) : null));
++  if (!(typeof fe78c === "number" && isFinite(fe78c)) || fe78c === 0) fe78c = null;
++  P[tk] = { p, c: fe78c };
++  if (fe78base) BASE[tk] = { p: fe78base, c: 0 };
++  else if (fe78srv != null && p > 0 && fe78srv > -100) BASE[tk] = { p: p / (1 + fe78srv / 100), c: 0 };
++  else if (prev) BASE[tk] = { p: prev, c: 0 };
++  if (!fe78roll && prev && (o.src === "coinbase-ws" || o.src === "kraken-ws")) _rt.roll[tk] = { prev, at: now, kind: "stream" };
    liveSymbols.add(tk);
    liveQuoteTs[tk] = ts;
    liveQuoteSrc[tk] = o.src;
@@ -569,11 +575,11 @@ diff --git a/app.js b/app.js
    else if (liveQuoteProxy[tk] && !o.proxy) liveQuoteName[tk] = ""; // don't keep a proxy's name on a real print
    liveQuoteCached[tk] = false;
 -  liveQuoteChangeAvailable[tk] = prev != null;
-+  liveQuoteChangeAvailable[tk] = (typeof fe78srv !== "undefined" && fe78srv != null) || prev != null;
++  liveQuoteChangeAvailable[tk] = typeof fe78c !== "undefined" && fe78c != null;
    liveQuoteProxy[tk] = !!o.proxy;
    liveQuoteMarketClosed[tk] = false;
    liveQuoteSession[tk] = null;
-@@ -5672,12 +5673,24 @@
+@@ -5672,12 +5679,25 @@
    //    (server basis "rolling_24h") > CoinGecko 24h. A lower-ranked source is re-based onto the best basis seen in
    //    the last 30 min; a source with an unknown basis (old Yahoo 5-day prev close, Twelve Data/Finnhub day basis)
    //    shows its price but no change until a 24h basis is known.
@@ -582,15 +588,16 @@ diff --git a/app.js b/app.js
 +  if (_rtIsCrypto(tk) && fin(q.p) && q.p > 0 && (!RT_SRC.has(src) || (q && q.baseline === "24h") || (_rt.roll[tk] && _rt.roll[tk].kind === "srv24"))) {
 +    try { fe78_take(tk, q); } catch (e78) {}
 +    const fe78b = fe78_cryptoBasis(q, _rt.roll[tk], now);
-+    if (fe78b.mode === "srv") {
-+      if (fe78b.c == null) { delete q.c; delete q.change; delete q.changePct; }
++    if (fe78b.mode === "srv" || fe78b.mode === "keep") {
++      const fe78px = Number(q.p);
++      if (fe78b.prev && fe78px > 0) {
++        const fe78pct = +(((fe78px - fe78b.prev) / fe78b.prev) * 100).toFixed(2);
++        q.prev = fe78b.prev;
++        if (!isFinite(fe78pct) || fe78pct === 0) { delete q.c; delete q.change; delete q.changePct; }
++        else { q.c = fe78pct; q.changePct = fe78pct; q.change = +(fe78px - fe78b.prev).toFixed(2); }
++      } else if (fe78b.c == null) { delete q.c; delete q.change; delete q.changePct; }
 +      else { q.c = fe78b.c; q.changePct = fe78b.c; }
-+      if (fe78b.prev) q.prev = fe78b.prev;
-+      _rt.roll[tk] = { prev: fe78b.prev, at: now, kind: "srv24", c: fe78b.c };
-+    } else if (fe78b.mode === "keep") {
-+      if (fe78b.c == null) { delete q.c; delete q.change; delete q.changePct; }
-+      else { q.c = fe78b.c; q.changePct = fe78b.c; }
-+      if (fe78b.prev) q.prev = fe78b.prev;
++      if (fe78b.mode === "srv") _rt.roll[tk] = { prev: fe78b.prev, at: now, kind: "srv24", c: fe78b.c };
 +    }
 +    const r = _rt.roll[tk], rOk = r && r.prev > 0 && now - r.at < 30 * 60_000 && r.kind !== "srv24";
      const c = Number(q.c);
@@ -602,7 +609,7 @@ diff --git a/app.js b/app.js
      if (kind && (!rOk || RT_ROLL_RANK[kind] >= (RT_ROLL_RANK[r.kind] || 0))) {
        // A server-cached quote may still set the basis when its own timestamp is recent (short response cache);
        // an old cached print (stale fallback) never does.
-@@ -5686,13 +5699,13 @@
+@@ -5686,13 +5706,13 @@
        q.prev = own; q.c = ((q.p - own) / own) * 100;
      } else if (rOk) {
        q.prev = r.prev; q.c = ((q.p - r.prev) / r.prev) * 100;
@@ -618,7 +625,7 @@ diff --git a/app.js b/app.js
        const hu = _rt.holdUntil[tk] || (_rt.holdUntil[tk] = now + RT_CHG_HOLD_MS);
        if (now < hu) {
          _rt.heldPrev[tk] = q.prev;
-@@ -5790,7 +5803,7 @@
+@@ -5790,7 +5810,7 @@
      if (!_usRegularOpen()) { try { _rt43ExtTick(tks, d); } catch (e) {} return; }
    }
    const prev = d.change != null ? d.price - d.change : null;
@@ -627,17 +634,18 @@ diff --git a/app.js b/app.js
  }
  function _rtOnCb(ev) {
    _rt.stats.msgs.cb++;
-@@ -5862,7 +5875,8 @@
+@@ -5862,7 +5882,9 @@
      }
    }
    // Rankings row: put its change on the ticker's best-known 24h basis (stream / Yahoo rolling 24h).
 -  if (rOk && r.kind !== "cg" && out.p > 0) out.c24 = ((out.p - r.prev) / r.prev) * 100;
-+  if (r && r.kind === "srv24" && r.c != null && isFinite(Number(r.c))) out.c24 = Number(r.c);
++  if (r && r.kind === "srv24" && r.prev > 0 && out.p > 0) out.c24 = ((out.p - r.prev) / r.prev) * 100;
++  else if (r && r.kind === "srv24" && r.c != null && isFinite(Number(r.c))) out.c24 = Number(r.c);
 +  else if (rOk && r.kind !== "cg" && out.p > 0) out.c24 = ((out.p - r.prev) / r.prev) * 100;
    return out;
  }
  function _rtChgTxt(v) { return v == null || !isFinite(v) ? "—" : `${v > 0 ? "+" : ""}${Number(v).toFixed(2)}%`; }
-@@ -6277,7 +6291,7 @@
+@@ -6277,7 +6299,7 @@
      if (el.matches("#tape .ti")) {
        const k = el.children; if (k.length < 3) return;
        if (setText(k[1], d.p)) _rtFlash(el, tk);
@@ -646,7 +654,7 @@ diff --git a/app.js b/app.js
        var fe65sig = (d.status || "") + "|" + (d.fe64Note || "") + "|" + (d.label || "");
        if (el.dataset.rtSt !== fe65sig) { el.dataset.rtSt = fe65sig; k[0].innerHTML = `${_escHtml(fe65_tapeName(tk))}${_rtTapeBadge(d)}`; }
        el.title = `${fe65_tapeName(tk)} · ${d.fe64Note || d.label || "NO SYNC"}`;
-@@ -6295,7 +6309,7 @@
+@@ -6295,7 +6317,7 @@
        if (next && /%$/.test(next.textContent.trim()) || next && next.textContent.trim() === "—") {
          const arrow = ch == null || ch === 0 ? "" : (ch > 0 ? "↑" : "↓");
          const keepArrow = /^[↑↓]/.test(next.textContent.trim()) || !!meta || !!el.closest("#wl-table");
@@ -655,7 +663,7 @@ diff --git a/app.js b/app.js
        }
      } else if (el.matches("[data-price-card]")) {
        const showDollar = el.dataset.priceDollar === "1", pctOnly = el.dataset.priceChg === "pct";
-@@ -6303,7 +6317,7 @@
+@@ -6303,7 +6325,7 @@
        if (pe && setText(pe, (showDollar ? "$" : "") + d.p)) _rtFlash(pe, tk);
        if (ce) {
          ce.style.color = col;
@@ -664,7 +672,7 @@ diff --git a/app.js b/app.js
          ce.classList.remove("px-up", "px-dn", "px-flat");
          ce.classList.add(ch == null || ch === 0 ? "px-flat" : ch > 0 ? "px-up" : "px-dn");
        }
-@@ -6316,7 +6330,7 @@
+@@ -6316,7 +6338,7 @@
      } else if (el.matches(".data-card[data-tk]")) {
        const v = el.querySelector(".value"), c = el.querySelector(".change");
        if (v && setText(v, d.p)) _rtFlash(v, tk);
@@ -673,7 +681,15 @@ diff --git a/app.js b/app.js
      } else if (el.matches(".wl-glance-chip")) {
        if (_rtPaintChip(el, tk)) _rtFlash(el.querySelector(".wl-g-p"), tk);
      } else if (el.matches("[data-rt-px],[data-rt-c24]")) {
-@@ -6699,12 +6713,11 @@
+@@ -6338,6 +6360,7 @@
+   if (stChanged) _rtRecountSoon();
+   // Analysis header, front door, gold dashboard
+   try { if (typeof termSelTk !== "undefined" && termSelTk && dirty.has(termSelTk)) _patchP2LiveHeader(); } catch (e) {}
++  try { if (typeof fe78_patchPhoneQuote === "function") fe78_patchPhoneQuote(dirty); } catch (e) {}
+   if (pg === "home" && (dirty.has("XAU") || dirty.has("DXY") || dirty.has("PAXG") || dirty.has("VIX") || dirty.has("TNX") || dirty.has("BRENT") || dirty.has("WTI") || dirty.has("BTC"))) {
+     try {
+       if (_paintFrontDoorQuotes()) {
+@@ -6699,12 +6722,11 @@
    const fx4=typeof fe77_fxPair==="function"&&!!fe77_fxPair(tk)&&fe77_fxPair(tk).indexOf("JPY")<0;
    const p=(typeof _rtIsCrypto==="function"&&_rtIsCrypto(tk))?_rtCryptoPx(d.p):d.p>=10000?Math.round(d.p).toLocaleString():fx4?d.p.toFixed(4):d.p>=1?d.p.toFixed(2):d.p.toFixed(4);
    const fmtChg = Math.abs(chg)>=1000?Math.round(chg).toLocaleString():chg.toFixed(2);
@@ -689,7 +705,7 @@ diff --git a/app.js b/app.js
      status: meta.status, label: meta.label,
      asOf: meta.asOf, age: meta.asOf ? _fmtAge(meta.asOf) : "—",
      src: meta.src, detail: meta.detail, fe64Note: meta.fe64Note || ""
-@@ -6765,7 +6778,7 @@
+@@ -6765,7 +6787,7 @@
      if(priceEl)priceEl.textContent=hasSyncedQuote(tk)?(showDollar?"$":"")+d.p:_rt22NoSync();
      if(chgEl){
        chgEl.style.color=col;
@@ -698,7 +714,7 @@ diff --git a/app.js b/app.js
        chgEl.classList.remove("px-up","px-dn","px-flat");
        chgEl.classList.add(chgN==null||chgN===0?"px-flat":chgN>0?"px-up":"px-dn");
      }
-@@ -9258,7 +9271,7 @@
+@@ -9258,7 +9280,7 @@
      const money = a.cat === 'Stock' || a.cat === 'Crypto' || a.cat === 'Commodity';
  
      // Bullish/bearish factors derived from thesis
@@ -707,7 +723,7 @@ diff --git a/app.js b/app.js
      const _rt27F = x => String(x || '').replace(/[—\s.·-]+/g, '').length > 3;
      const bullish = thWords.filter(_rt27F).filter(s => /grow|gain|strong|lead|dominan|accelerat|beat|recover|expand|surge|buy|bullish|upside/i.test(s)).slice(0, 3);
      const bearish = thWords.filter(_rt27F).filter(s => /risk|concern|slow|headwind|declin|loss|weak|miss|challeng|uncertain|bearish|downside|eroding/i.test(s)).slice(0, 3);
-@@ -9279,9 +9292,7 @@
+@@ -9279,9 +9301,7 @@
            </div>
          </div>
          <div style="text-align:right;flex-shrink:0">
@@ -718,7 +734,7 @@ diff --git a/app.js b/app.js
          </div>
        </div>
      </div>`;
-@@ -9362,14 +9373,14 @@
+@@ -9362,14 +9382,14 @@
  
      if(aTab==="ov"){
        try { h += `<div style="padding:10px 12px 0">${_renderSiteIntelCard("ticker", { tk: a.tk })}</div>`; } catch (e) {}
@@ -735,7 +751,7 @@ diff --git a/app.js b/app.js
        const hist=reason.filter(r=>r.ticker===a.tk);
        if(hist.length){
          h += `<div style="padding:12px 16px;border-top:1px solid var(--gb)"><div style="font-family:var(--mn);font-size:8px;color:var(--t3);letter-spacing:0.1em;margin-bottom:8px">REASONING BANK HISTORY</div>`;
-@@ -10888,12 +10899,12 @@
+@@ -10888,12 +10908,12 @@
    const priceEl=document.querySelector('#p2body .ap-price');
    const chgEl=document.querySelector('#p2body .ap-chg');
    if(priceEl){
@@ -750,7 +766,15 @@ diff --git a/app.js b/app.js
    }
    const subEl=document.getElementById('p2sub');
    if(subEl)subEl.textContent=`${_rt39Cat(a).toUpperCase()} · ${_rt39Ex(a)} · ${feedLbl}`;
-@@ -10961,7 +10972,7 @@
+@@ -10918,6 +10938,7 @@
+       // Android Chrome already fires resize when the URL bar hides; full rebuilds make flicker worse.
+       _patchLiveDataIfNeeded();
+       _patchCuratedPrices();
++      try { if (typeof fe78_patchPhoneQuote === "function") fe78_patchPhoneQuote(); } catch (e) {}
+     }
+   }
+   renderStatus(); // age chips only — signature-gated to avoid DOM thrash
+@@ -10961,7 +10982,7 @@
        if (chEl) {
          const ch = liveChg(tkAttr);
          const sign = ch != null && ch >= 0 ? '+' : '';
@@ -759,7 +783,7 @@ diff --git a/app.js b/app.js
          chEl.style.color = ch == null ? 'var(--t3)' : ch > 0 ? 'var(--gn)' : ch < 0 ? 'var(--rd)' : 'var(--t3)';
        }
      });
-@@ -11074,7 +11085,7 @@
+@@ -11074,7 +11095,7 @@
      const title=_escAttr(`${k} · ${d.label||"NO SYNC"}${d.asOf?` · as of ${_fmtAsOf(d.asOf)}`:""}`);
      const chCol=ch==null?"var(--t3)":ch>0?"var(--gn)":ch<0?"var(--rd)":"var(--t3)";
      const chSign=ch!=null&&ch>=0?"+":"";
@@ -768,7 +792,7 @@ diff --git a/app.js b/app.js
    }).join("");
    const tape = document.getElementById("tape");
    if (tape) {
-@@ -11147,8 +11158,8 @@
+@@ -11147,8 +11168,8 @@
    const aiChip=!_userTierReady?"":_isPremium()
      ?`<span class="htec-chip htec-chip-ai">★ PREMIUM</span>`
      :`<span class="htec-chip htec-chip-muted">FREE</span>`;
@@ -779,7 +803,7 @@ diff --git a/app.js b/app.js
    const el=document.getElementById("statusBar");
    if(!el)return;
    el.dataset.sig=sig;
-@@ -12857,7 +12868,7 @@
+@@ -12857,7 +12878,7 @@
    // ── Greeting and where the tape stands ──
    h += `<div class="home-hero">
      <div class="home-greet">${_homeGreeting()}</div>
@@ -788,7 +812,7 @@ diff --git a/app.js b/app.js
      <div class="home-tape">${liveN
        ? [_rt37Hero(), (re.vix != null && re.vix !== "—" && re.vix !== "") ? `VIX${_usRegularOpen() ? "" : " US close"} ${re.vix}` : "", (re.spx != null && re.spx !== "—" && re.spx !== "") ? `${re.spxProxy ? "SPY" : "SPX"}${_usRegularOpen() ? "" : " US close"} ${re.spx}` : ""].filter(Boolean).join(" · ")
        : _rt20TapeFallback(re)}</div>
-@@ -12874,7 +12885,7 @@
+@@ -12874,7 +12895,7 @@
        <div class="home-brief-stance">${_escHtml(_rt20Stance(_brief, re))}</div>
        <div class="home-brief-h">${_escHtml(_rt16Dec(_brief.headline))}</div>
        ${_brief.summary ? `<div class="home-brief-s">${_escHtml(_rt16Clip(_rt16Dec(_brief.summary), 220))}</div>` : ""}
@@ -797,7 +821,7 @@ diff --git a/app.js b/app.js
        <div class="home-brief-go">Open brief →</div>
      </div>`;
    } else {
-@@ -13005,7 +13016,7 @@
+@@ -13005,7 +13026,7 @@
      h+=`<button type="button" class="idx-card" onclick="nav('mkt')" data-price-card="${idx.tk}">
        <div class="idx-card-top"><span class="idx-card-name">${idx.nm}</span><span class="idx-card-stat">${stat(idx.tk)}</span></div>
        <div class="idx-card-px asset-price">${na?_rt22NoSync():d.p}</div>
@@ -806,7 +830,7 @@ diff --git a/app.js b/app.js
        <div class="idx-card-spark">${spark(idx.tk,108,16)}</div>
        <div>${asOfTag(idx.tk)}</div>
      </button>`;
-@@ -13022,7 +13033,7 @@
+@@ -13022,7 +13043,7 @@
      const chgCls=na||chN==null?"px-flat":(chN>0?"px-up":(chN<0?"px-dn":"px-flat"));
      const sign=chN!=null&&chN>=0?"+":"";
      h+=`<button type="button" class="conv-card" onclick="openA('${a.tk}')" data-price-card="${a.tk}" data-price-dollar="1" data-price-chg="pct">
@@ -815,7 +839,7 @@ diff --git a/app.js b/app.js
        <div class="conv-nm">${a.nm}</div>
        <div class="conv-px asset-price">${na?_rt22NoSync():"$"+d.p}</div>
        <div>${asOfTag(a.tk)}</div>
-@@ -13185,7 +13196,7 @@
+@@ -13185,7 +13206,7 @@
          <span style="cursor:pointer;font-size:16px;color:${iw?"var(--gd)":"var(--t3)"}" onclick="togWatch('${a.tk}')" aria-label="${iw?'Remove from':'Add to'} watchlist">★</span>
          <button onclick="event.stopPropagation();_toggleCompare('${a.tk}')" style="background:${_compareTks.includes(a.tk)?'var(--puG)':'var(--b2)'};border:1px solid var(--gb);color:var(--t2);border-radius:5px;padding:2px 8px;font-family:var(--mn);font-size:9px;cursor:pointer">⚖</button></div>
          <div style="font-size:10px;color:var(--t2)">${a.nm}</div>
@@ -824,7 +848,7 @@ diff --git a/app.js b/app.js
      <div style="text-align:right"><div style="font-family:var(--mn);font-weight:800;font-size:24px;letter-spacing:-0.02em;color:${primary?chCol:'var(--t3)'}">${fe66_priceLine(a.tk, d, !hasSyncedQuote(a.tk))}</div>
        <div class="asset-chg" style="color:${chCol}">${fe66_chgLine(a.tk, d, !hasSyncedQuote(a.tk))}</div>
         ${!primary&&hasRetainedQuote(a.tk)?`<div style="font-family:var(--mn);font-size:8px;color:var(--t3);margin-top:4px">Context only · ${_quoteSourceLabel(d.src)} · as of ${_fmtAsOf(d.asOf)}</div>`:""}</div></div>`;
-@@ -13227,9 +13238,7 @@
+@@ -13227,9 +13248,7 @@
        </div></div>`;
      h+=`<div class="gr" style="grid-template-columns:1fr 1fr"><div class="gc"><div style="font-size:8px;color:var(--t3);font-family:var(--mn);letter-spacing:0.1em">METRICS</div>`;
      [{l:"P/E",v:a.pe},{l:"Mkt Cap",v:a.mc},{l:"Beta",v:a.cat==="Stock"?fe64_betaCell(a.beta):a.beta},{l:"Sentiment",v:a.se}].forEach(m=>{h+=`<div style="border-top:1px solid var(--gb);padding:5px 0"><div style="font-size:8px;color:var(--t3)">${m.l}</div><div style="font-family:var(--mn);font-weight:700;font-size:12px;margin-top:1px">${m.v}</div></div>`;});
@@ -835,7 +859,7 @@ diff --git a/app.js b/app.js
      const re=_computeRegimeEngine();
      h+=_rt53FitHtml(a.tk)+`<button type="button" onclick="_setATab('cm')" style="margin-top:10px;width:100%;background:var(--blG);color:var(--bl);border:1px solid rgba(79,142,247,0.2);border-radius:8px;padding:10px;font-family:var(--sn);font-size:11px;font-weight:700;cursor:pointer">⬢ Run Lens Engine on ${a.tk}</button>`;
      h += _renderTickerSignals(a.tk);
-@@ -13283,8 +13292,7 @@
+@@ -13283,8 +13302,7 @@
    }
  
    if(aTab==="th"){
@@ -845,7 +869,7 @@ diff --git a/app.js b/app.js
      const hist=reason.filter(r=>r.ticker===a.tk);
      if(hist.length){h+=`<div class="gc"><div style="font-size:8px;color:var(--t3);font-family:var(--mn);letter-spacing:0.1em">REASONING BANK HISTORY</div>`;
        hist.forEach((r,i)=>{h+=`<div style="border-top:${i?"1px solid var(--gb)":"none"};padding-top:${i?8:6}px;margin-top:${i?8:6}px"><div style="display:flex;gap:5px;align-items:center"><span style="font-size:8px;color:var(--t3);font-family:var(--mn)">${new Date(r.ts).toLocaleDateString()}</span>${bd(fe76_vword(r.verdict),"var(--t3)")}</div>
-@@ -16016,10 +16024,10 @@
+@@ -16016,10 +16034,10 @@
  
  | Confidence | Interpretation | Action |
  |-----------|----------------|--------|
@@ -859,7 +883,7 @@ diff --git a/app.js b/app.js
  
  **Never act on a single signal.** Look for confluence: a macro signal, a technical signal, AND a fundamental catalyst all pointing the same direction. That's where the highest probability setups are found.
  
-@@ -17057,7 +17065,7 @@
+@@ -17057,7 +17075,7 @@
              ${_renderRegimeRing(re)}
              <div>
                <div class="lab-regime-lbl">${re.label}</div>
@@ -868,7 +892,7 @@ diff --git a/app.js b/app.js
                <div class="lab-regime-hint"><strong>Favour:</strong> ${(re.overweight||[]).slice(0,3).join(" · ")||"—"}</div>
                <div class="lab-regime-hint"><strong>Lower weight:</strong> ${(re.underweight||[]).slice(0,2).join(" · ")||"—"}</div>
              </div>
-@@ -19685,7 +19693,7 @@
+@@ -19685,7 +19703,7 @@
      }
      _rt43Spot.DXY = { at: Date.now() };
      if (liveQuoteSrc.DXY !== "dxy-computed") liveQuoteTs.DXY = 0;
@@ -877,7 +901,7 @@ diff --git a/app.js b/app.js
    } catch (e) {}
  }
  {
-@@ -20413,8 +20421,8 @@
+@@ -20413,8 +20431,8 @@
              <div class="data-card hover-lift" role="button" tabindex="0" aria-label="Open ${a.nm} analysis" data-tk="${a.tk}" onclick="openA('${a.tk}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openA('${a.tk}')}">
                <div class="label">${a.nm}</div>
                <div class="value">${na?_rt22NoSync():d.p}</div>
@@ -888,7 +912,7 @@ diff --git a/app.js b/app.js
              </div>
            `;
          }).join('')}
-@@ -20701,7 +20709,7 @@
+@@ -20701,7 +20719,7 @@
        : "NO SYNC (do not invent a price)";
      if (a) {
        parts.push(`Active ticker: ${a.tk} ${a.nm} · Score ${a.sc}/100 · ${a.se} · ${pxBit} · Beta ${a.beta || "—"} · ${a.pe || "—"}`);
@@ -897,7 +921,7 @@ diff --git a/app.js b/app.js
      } else {
        parts.push(`Active ticker: ${selTk} · ${pxBit}`);
      }
-@@ -21228,7 +21236,7 @@
+@@ -21228,7 +21246,7 @@
  function _rt43bStatus(tk) { const d = fp(tk); return { status: d.status, label: d.label }; }
  const _rt43bSig = {};
  // 3: DXY gets a markets-table row (computed from live FX in the browser; never the ECB fix)
@@ -906,7 +930,7 @@ diff --git a/app.js b/app.js
    th: "US dollar against six major currencies (EUR, JPY, GBP, CAD, SEK, CHF) with the ICE weights, computed in your browser from live FX quotes. A weaker dollar is usually a tailwind for gold and commodities." }); } catch (e) {}
  // 4: home-listing stocks use their own venue's last close (the shared stock cache keyed on the US session)
  {
-@@ -24334,7 +24342,7 @@
+@@ -24334,7 +24352,7 @@
      <div class="rt48-msg ${M.flash && M.flash.ok ? 'ok' : ''}" role="status" aria-live="polite">${M.flash ? _rt48E(M.flash.t) : M.sel != null ? `Selected: ${_rt48E(M.pairs[M.sel].l)}. Now pick its partner.` : ''}</div>`; }
  
  // ── Price is right: guess where key markets trade now, scored by closeness ──
@@ -915,7 +939,7 @@ diff --git a/app.js b/app.js
    SPX: ['S&P 500', 'index points', 0.03], BRENT: ['Brent crude oil', 'US dollars per barrel', 0.05], EURUSD: ['EUR/USD', 'US dollars per euro', 0.015], ETH: ['Ether', 'US dollars', 0.10], WTI: ['WTI crude oil', 'US dollars per barrel', 0.05] };
  const RT48_PR_BONUS = ['SPX', 'BRENT', 'EURUSD', 'ETH', 'WTI'];
  let _rt48Pr = null;
-@@ -24780,8 +24788,8 @@
+@@ -24780,8 +24798,8 @@
  _rt48AiFetch = function () { const A = _rt48Ai || {}; if ((_rt48AutoBusy & 4) || (A.items && A.items.length) || (A.tryAt && Date.now() - A.tryAt < 15 * 6e4) || (A.n || 0) >= 8) return;
    _rt48AutoBusy |= 4; const n = (A.n || 0) + 1, day = _rt46Day(); _rt48Ai = { at: 0, items: [], n, tryAt: Date.now() }; let opts = { cache: 'no-store', credentials: 'same-origin' }; try { opts.signal = AbortSignal.timeout(9000); } catch (e) {}
    fetch('/api/academy-daily', opts).then(r => r && r.ok && /json/.test(r.headers.get('content-type') || '') ? r.json() : null).then(j => {
@@ -926,7 +950,7 @@ diff --git a/app.js b/app.js
      .catch(() => {}).finally(() => { _rt48AutoBusy &= ~4; _rt48AutoDone(); }); };
  { const _ak = _rt48AutoKick; _rt48AutoKick = function () { const r = _ak.apply(this, arguments); try { if (_rt48AutoDay === _rt46Day() && !(_rt48Ai.items && _rt48Ai.items.length)) _rt48AiFetch(); } catch (e) {} return r; }; }
  // when explainers arrive while "In the news" is open on its intro, rebuild that session so they appear
-@@ -24802,11 +24810,11 @@
+@@ -24802,11 +24820,11 @@
    _rt48AutoBusy |= 4; const n = (A.n || 0) + 1, day = _rt46Day(); _rt48Ai = Object.assign({}, A, { n, tryAt: Date.now() });
    let opts = { cache: 'no-store', credentials: 'same-origin' }; try { opts.signal = AbortSignal.timeout(9000); } catch (e) {}
    fetch('/api/academy-daily', opts).then(r => r && r.ok && /json/.test(r.headers.get('content-type') || '') ? r.json() : null).then(j => {
@@ -941,7 +965,7 @@ diff --git a/app.js b/app.js
      .catch(() => {}).finally(() => { _rt48AutoBusy &= ~4; _rt48AutoDone(); }); };
  { const _ak = _rt48AutoKick; _rt48AutoKick = function () { const r = _ak.apply(this, arguments); try { if (_rt48AutoDay === _rt46Day()) _rt48AiFetch(); } catch (e) {} return r; }; }
  { const _ns = _rt48NewsSteps; _rt48NewsSteps = function () { try { _rt48AutoKick(); } catch (e) {} return _ns.apply(this, arguments); }; }
-@@ -24860,7 +24868,7 @@
+@@ -24860,7 +24878,7 @@
      else { if (!hasSyncedQuote(tk) || !_rt18MarketOpen(tk) || _rt43Stale[tk]) return; p = P[tk].p; prev = BASE[tk] && BASE[tk].p > 0 ? BASE[tk].p : null; ts = _rt43Ms(liveQuoteTs[tk]); if (!(Date.now() - ts < 10 * 60_000)) return; }
      if (!(p > 0)) return; v *= p ** e; pv = pv && prev > 0 ? pv * prev ** e : null; if (ts) tsMin = Math.min(tsMin, ts); }
    _rt51SekOld = sekTs; _rt43Spot.DXY = { at: Date.now() }; if (liveQuoteSrc.DXY !== 'dxy-computed') liveQuoteTs.DXY = 0;
@@ -950,7 +974,7 @@ diff --git a/app.js b/app.js
  } catch (e) {} }
  setInterval(_rt51Dxy, 2000);
  { const _qm = _quoteMeta; _quoteMeta = function (tk) { const m = _qm.apply(this, arguments); try { if (tk === 'DXY' && liveQuoteSrc.DXY === 'dxy-computed' && _rt51SekOld && m && m.status === 'live')
-@@ -25146,7 +25154,7 @@
+@@ -25146,7 +25164,7 @@
    return { rows, fit: _tickerRegimeFit(tk, re) }; }
  RT52_B.fit = tk => { const g = _rt52Fit(tk); return { k: 'REGIME FIT', t: `${tk} · ${g.fit.score}/100 · ${g.fit.label}`, v: `<table class="rt52-tbl">${g.rows.map(([l, p]) => `<tr><td>${_rt52E(l)}</td><td><b class="${p > 0 && l !== 'Starting point' ? 'rt52-up' : p < 0 ? 'rt52-dn' : ''}">${l === 'Starting point' ? p : (p > 0 ? '+' : '−') + Math.abs(p)}</b></td></tr>`).join('')}<tr class="rt52-sum"><td>Fit (kept between 0 and 100)</td><td><b>${g.fit.score}</b></td></tr></table>`,
    what: 'How well this name suits the current market regime, from 0 to 100. 68+ is regime-aligned, 45–67 a neutral fit, under 45 a headwind.', how: ['Starts at 50; fixed rules add or take points using the regime score, the desk’s view on the name, its asset class, beta and today’s move.'], src: `Regime model plus ${_rt52E(_rt52Src(tk))} for the price`, at: _rt52At(Date.now()), why: 'A quick check before you dig in: a headwind means the name is fighting the current backdrop.' }; };
@@ -959,7 +983,7 @@ diff --git a/app.js b/app.js
  try { const _rl = renderLab; renderLab = function () { const h = _rl.apply(this, arguments); try { if (localStorage.getItem('td_lab_guide_v1') == null) localStorage.setItem('td_lab_guide_v1', '1'); } catch (e) {}
    try { return h.replace('<div class="lab-hud-l">DESK SCORE · MODEL</div>', `<div class="lab-hud-l">DESK SCORE ${_rt52I('conv', _labTk, 'desk score')}</div>`)
      .replace(/<div class="lab-hud-l">REGIME FIT · MODEL<\/div>(<div class="lab-hud-v"[^>]*>)(\d+)%/, (m, a, n) => `<div class="lab-hud-l">REGIME FIT ${_rt52I('fit', _labTk, 'regime fit')}</div>${a}${n}<small style="opacity:.6">/100</small>`)
-@@ -25223,7 +25231,7 @@
+@@ -25223,7 +25241,7 @@
      else { if (!hasSyncedQuote(tk) || !_rt18MarketOpen(tk) || _rt43Stale[tk]) return; p = P[tk].p; prev = BASE[tk] && BASE[tk].p > 0 ? BASE[tk].p : null; ts = _rt43Ms(liveQuoteTs[tk]); if (!(Date.now() - ts < 30 * 60_000)) return; }
      if (!(p > 0)) return; v *= p ** e; pv = pv && prev > 0 ? pv * prev ** e : null; if (ts) tsMin = Math.min(tsMin, ts); }
    _rt51SekOld = Date.now() - sekTs > 10 * 60_000 ? sekTs : 0; _rt43Spot.DXY = { at: Date.now() }; if (liveQuoteSrc.DXY !== 'dxy-computed') liveQuoteTs.DXY = 0;
@@ -968,7 +992,7 @@ diff --git a/app.js b/app.js
  } catch (e) {} }
  setInterval(_rt52Dxy, 2500);
  // 9) decorate shared chrome: regime score and quote labels open their basis; raw dates and timestamps read as words
-@@ -32144,7 +32152,7 @@
+@@ -32144,7 +32162,7 @@
  }
  function fe77_dxyTitle(ice, fallback, label) {
    if (fallback) return "Dispatch FX basket";
@@ -977,7 +1001,7 @@ diff --git a/app.js b/app.js
    return "Dispatch FX basket";
  }
  function fe77_fxPair(raw) {
-@@ -32268,7 +32276,7 @@
+@@ -32268,7 +32286,7 @@
    fe77_dxyIceQ = fe77_dxyIce ? ice : null;
    if (fe77_dxyIce) {
      var named = String((ice && (ice.label || ice.name)) || (d && (d.label || d.name)) || "");
@@ -986,7 +1010,7 @@ diff --git a/app.js b/app.js
    }
  }
  function fe77_prepXau(q) {
-@@ -33053,3 +33061,831 @@
+@@ -33053,3 +33071,912 @@
      return fe77_send1.apply(this, arguments);
    };
  } catch (e) {}
@@ -1020,6 +1044,25 @@ diff --git a/app.js b/app.js
 +  try { if (typeof _rtIsCrypto === "function" && _rtIsCrypto(s)) return true; } catch (e2) {}
 +  return false;
 +}
++function fe78_pos(v) {
++  if (typeof v !== "number" || !isFinite(v) || !(v > 0)) return null;
++  return v;
++}
++function fe78_basePx(q) {
++  if (!q || typeof q !== "object") return null;
++  var prev = fe78_pos(q.prev);
++  if (prev) return prev;
++  var named = fe78_pos(q.baselinePrice);
++  if (named) return named;
++  named = fe78_pos(q.baselinePx);
++  if (named) return named;
++  var px = fe78_pos(q.p);
++  if (px && typeof q.change === "number" && isFinite(q.change)) {
++    var derived = px - q.change;
++    if (derived > 0) return derived;
++  }
++  return null;
++}
 +function fe78_cryptoBasis(q, roll, now) {
 +  var fin = function (v) { return typeof v === "number" && isFinite(v); };
 +  var fresh = !!(roll && (now - roll.at) < 30 * 60 * 1000);
@@ -1027,7 +1070,7 @@ diff --git a/app.js b/app.js
 +  var c = Number(raw);
 +  var hasC = raw != null && raw !== "" && isFinite(c);
 +  if (q && q.baseline === "24h") {
-+    return { mode: "srv", kind: "srv24", c: hasC ? c : null, prev: fin(q.prev) && q.prev > 0 ? q.prev : null };
++    return { mode: "srv", kind: "srv24", c: hasC ? c : null, prev: fe78_basePx(q) };
 +  }
 +  if (fresh && roll.kind === "srv24") {
 +    return {
@@ -1052,6 +1095,9 @@ diff --git a/app.js b/app.js
 +    var raw = q.changePct != null ? q.changePct : q.c;
 +    var c = Number(raw);
 +    b.srvC = raw != null && isFinite(c) ? c : null;
++    var base = fe78_basePx(q);
++    if (base) b.base = base;
++    else delete b.base;
 +  }
 +  if (q.nextOpen != null && q.nextOpen !== "") b.nextOpen = q.nextOpen;
 +  else if (q.feed && q.feed.nextOpen) b.nextOpen = q.feed.nextOpen;
@@ -1345,19 +1391,30 @@ diff --git a/app.js b/app.js
 +  var text = String(s || "");
 +  return text.replace(/(\d{1,2}:\d{2}\s*UK)\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)(?:\s+\d{1,2}\s+[A-Za-z]{3})?(?:\s+\d{4})?/gi, "$1");
 +}
-+function fe78_cryptoLine(tk, px) {
-+  var b = fe78_bag(tk);
-+  if (!b || b.baseline !== "24h" || b.srvC == null || !isFinite(Number(b.srvC)) || Number(b.srvC) === 0) return "";
-+  var c = Number(b.srvC);
++function fe78_cryptoMoney(diff, c) {
++  if (!isFinite(c) || Number(c.toFixed(2)) === 0 || !isFinite(diff) || diff === 0) return "";
 +  var pct = (c > 0 ? "+" : "") + c.toFixed(2) + "%";
-+  var n = Number(px);
-+  if (!(n > 0)) return (c > 0 ? "\u2191 " : "\u2193 ") + pct + " 24h";
-+  var diff = n - n / (1 + c / 100);
 +  var abs = Math.abs(diff);
 +  var num = abs >= 1000 ? Math.round(abs).toLocaleString("en-US") : abs.toFixed(2);
 +  var sign = diff < 0 ? "-" : "+";
 +  var arrow = diff < 0 ? "\u2193 " : "\u2191 ";
 +  return arrow + sign + "$" + num + " (" + pct + ") 24h";
++}
++function fe78_cryptoLine(tk, px) {
++  var b = fe78_bag(tk);
++  if (!b || b.baseline !== "24h") return "";
++  var n = Number(px);
++  var base = Number(b.base);
++  if (base > 0 && n > 0) {
++    var live = ((n - base) / base) * 100;
++    if (!isFinite(live) || Number(live.toFixed(2)) === 0) return "";
++    return fe78_cryptoMoney(n - base, live);
++  }
++  if (b.srvC == null || !isFinite(Number(b.srvC)) || Number(b.srvC) === 0) return "";
++  var c = Number(b.srvC);
++  var pct = (c > 0 ? "+" : "") + c.toFixed(2) + "%";
++  if (!(n > 0)) return (c > 0 ? "\u2191 " : "\u2193 ") + pct + " 24h";
++  return fe78_cryptoMoney(n - n / (1 + c / 100), c);
 +}
 +function fe78_askPrefill(subject) {
 +  var raw = String(subject == null ? "" : subject).replace(/\s+/g, " ").trim();
@@ -1800,6 +1857,54 @@ diff --git a/app.js b/app.js
 +    _chatMsgs.forEach(function (m) { if (m && m.meta && m.meta.regime) fe78_stampRegime(m.meta.regime); });
 +  }
 +} catch (eBoot) {}
++function fe78_patchPhoneQuote(dirty) {
++  try {
++    if (typeof document === "undefined" || !document.getElementById) return;
++    var tk = "";
++    if (typeof _dynTk !== "undefined" && _dynTk) tk = _dynTk;
++    else if (typeof selTk !== "undefined" && selTk) tk = selTk;
++    if (!tk) return;
++    if (dirty && typeof dirty.has === "function" && !dirty.has(tk)) return;
++    var main = document.getElementById("main");
++    if (!main) return;
++    var d = typeof fp === "function" ? fp(tk) : null;
++    var na = typeof hasSyncedQuote === "function" ? !hasSyncedQuote(tk) : false;
++    var price = typeof fe66_priceLine === "function" ? fe66_priceLine(tk, d, na) : "";
++    var line = typeof fe66_chgLine === "function" ? fe66_chgLine(tk, d, na) : "";
++    var chN = null;
++    try { chN = typeof liveChg === "function" ? liveChg(tk) : null; } catch (eCh) { chN = null; }
++    var col = na || chN == null ? "var(--t3)" : chN > 0 ? "var(--gn)" : chN < 0 ? "var(--rd)" : "var(--t3)";
++    var stock = main.querySelector(".rt23-stock");
++    if (stock) {
++      var chg = stock.querySelector(".asset-chg");
++      if (chg) {
++        chg.style.color = col;
++        if (line && chg.innerHTML !== line) chg.innerHTML = line;
++        var priceEl = chg.previousElementSibling;
++        if (priceEl && price) {
++          priceEl.style.color = na ? "var(--t3)" : col;
++          if (priceEl.innerHTML !== price) priceEl.innerHTML = price;
++        }
++      }
++    }
++    if (typeof _dynTk !== "undefined" && _dynTk === tk) {
++      var rights = main.querySelectorAll("div[style*='text-align:right'], div[style*='text-align: right']");
++      var i;
++      for (i = 0; i < rights.length; i++) {
++        var kids = rights[i].children;
++        if (!kids || kids.length < 2) continue;
++        if (price) {
++          kids[0].style.color = na ? "var(--t3)" : col;
++          if (kids[0].innerHTML !== price) kids[0].innerHTML = price;
++        }
++        if (line) {
++          kids[1].style.color = col;
++          if (kids[1].innerHTML !== line) kids[1].innerHTML = line;
++        }
++      }
++    }
++  } catch (ePh) {}
++}
 +try {
 +  var fe78_step0 = _rt47StepHtml;
 +  _rt47StepHtml = function (s) {
@@ -1821,12 +1926,6 @@ diff --git a/app.js b/app.js
 diff --git a/index.html b/index.html
 --- a/index.html
 +++ b/index.html
-@@ -343,7 +343,7 @@
- 
- <!-- Context menu -->
- <div class="ctx-menu" id="ctxMenu"></div>
+@@ -339 +339 @@
 -<script defer src="/app.js?v=chat77"></script>
 +<script defer src="/app.js?v=chat78"></script>
- <script src="https://i.replit.com/script.js" async="" data-website-id="41c83e31-7da9-45c5-a194-58f8bc4f6608"></script></body>
- </html>
- 

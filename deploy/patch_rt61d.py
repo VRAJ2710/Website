@@ -105,16 +105,22 @@ def anchors(app):
         "  P[tk] = { p, c: prev ? +(((p - prev) / prev) * 100).toFixed(2) : 0 };\n"
         "  if (prev) BASE[tk] = { p: prev, c: 0 };\n"
         '  if (prev && (o.src === "coinbase-ws" || o.src === "kraken-ws")) _rt.roll[tk] = { prev, at: now, kind: "stream" };',
-        "  var fe78srv = _rt.roll[tk] && _rt.roll[tk].kind === \"srv24\" && now - _rt.roll[tk].at < 30 * 60_000 && _rt.roll[tk].c != null && isFinite(_rt.roll[tk].c) ? _rt.roll[tk].c : null;\n"
-        "  P[tk] = { p, c: fe78srv != null ? fe78srv : (prev ? +(((p - prev) / prev) * 100).toFixed(2) : null) };\n"
-        "  if (fe78srv == null && prev) BASE[tk] = { p: prev, c: 0 };\n"
-        "  if (fe78srv == null && prev && (o.src === \"coinbase-ws\" || o.src === \"kraken-ws\")) _rt.roll[tk] = { prev, at: now, kind: \"stream\" };",
+        "  var fe78roll = _rt.roll[tk] && _rt.roll[tk].kind === \"srv24\" && now - _rt.roll[tk].at < 30 * 60_000 ? _rt.roll[tk] : null;\n"
+        "  var fe78base = fe78roll && fe78roll.prev > 0 ? fe78roll.prev : null;\n"
+        "  var fe78srv = fe78roll && fe78roll.c != null && isFinite(fe78roll.c) ? fe78roll.c : null;\n"
+        "  var fe78c = fe78base ? +(((p - fe78base) / fe78base) * 100).toFixed(2) : (fe78srv != null ? fe78srv : (prev ? +(((p - prev) / prev) * 100).toFixed(2) : null));\n"
+        "  if (!(typeof fe78c === \"number\" && isFinite(fe78c)) || fe78c === 0) fe78c = null;\n"
+        "  P[tk] = { p, c: fe78c };\n"
+        "  if (fe78base) BASE[tk] = { p: fe78base, c: 0 };\n"
+        "  else if (fe78srv != null && p > 0 && fe78srv > -100) BASE[tk] = { p: p / (1 + fe78srv / 100), c: 0 };\n"
+        "  else if (prev) BASE[tk] = { p: prev, c: 0 };\n"
+        "  if (!fe78roll && prev && (o.src === \"coinbase-ws\" || o.src === \"kraken-ws\")) _rt.roll[tk] = { prev, at: now, kind: \"stream\" };",
         "stream baseline",
     )
     app = once(
         app,
         "  liveQuoteChangeAvailable[tk] = prev != null;",
-        "  liveQuoteChangeAvailable[tk] = (typeof fe78srv !== \"undefined\" && fe78srv != null) || prev != null;",
+        "  liveQuoteChangeAvailable[tk] = typeof fe78c !== \"undefined\" && fe78c != null;",
         "stream change flag",
     )
     app = once(
@@ -128,15 +134,16 @@ def anchors(app):
         """  if (_rtIsCrypto(tk) && fin(q.p) && q.p > 0 && (!RT_SRC.has(src) || (q && q.baseline === "24h") || (_rt.roll[tk] && _rt.roll[tk].kind === "srv24"))) {
     try { fe78_take(tk, q); } catch (e78) {}
     const fe78b = fe78_cryptoBasis(q, _rt.roll[tk], now);
-    if (fe78b.mode === "srv") {
-      if (fe78b.c == null) { delete q.c; delete q.change; delete q.changePct; }
+    if (fe78b.mode === "srv" || fe78b.mode === "keep") {
+      const fe78px = Number(q.p);
+      if (fe78b.prev && fe78px > 0) {
+        const fe78pct = +(((fe78px - fe78b.prev) / fe78b.prev) * 100).toFixed(2);
+        q.prev = fe78b.prev;
+        if (!isFinite(fe78pct) || fe78pct === 0) { delete q.c; delete q.change; delete q.changePct; }
+        else { q.c = fe78pct; q.changePct = fe78pct; q.change = +(fe78px - fe78b.prev).toFixed(2); }
+      } else if (fe78b.c == null) { delete q.c; delete q.change; delete q.changePct; }
       else { q.c = fe78b.c; q.changePct = fe78b.c; }
-      if (fe78b.prev) q.prev = fe78b.prev;
-      _rt.roll[tk] = { prev: fe78b.prev, at: now, kind: "srv24", c: fe78b.c };
-    } else if (fe78b.mode === "keep") {
-      if (fe78b.c == null) { delete q.c; delete q.change; delete q.changePct; }
-      else { q.c = fe78b.c; q.changePct = fe78b.c; }
-      if (fe78b.prev) q.prev = fe78b.prev;
+      if (fe78b.mode === "srv") _rt.roll[tk] = { prev: fe78b.prev, at: now, kind: "srv24", c: fe78b.c };
     }
     const r = _rt.roll[tk], rOk = r && r.prev > 0 && now - r.at < 30 * 60_000 && r.kind !== "srv24";
     const c = Number(q.c);
@@ -164,7 +171,8 @@ def anchors(app):
     app = once(
         app,
         'if (rOk && r.kind !== "cg" && out.p > 0) out.c24 = ((out.p - r.prev) / r.prev) * 100;',
-        'if (r && r.kind === "srv24" && r.c != null && isFinite(Number(r.c))) out.c24 = Number(r.c);\n'
+        'if (r && r.kind === "srv24" && r.prev > 0 && out.p > 0) out.c24 = ((out.p - r.prev) / r.prev) * 100;\n'
+        '  else if (r && r.kind === "srv24" && r.c != null && isFinite(Number(r.c))) out.c24 = Number(r.c);\n'
         '  else if (rOk && r.kind !== "cg" && out.p > 0) out.c24 = ((out.p - r.prev) / r.prev) * 100;',
         "coin view srv24",
     )
@@ -345,6 +353,26 @@ def anchors(app):
         "    chgEl.style.color=col;\n"
         "    chgEl.innerHTML=fe66_chgLine(a.tk, d, na);",
         "header html",
+    )
+    app = once(
+        app,
+        "  try { if (typeof termSelTk !== \"undefined\" && termSelTk && dirty.has(termSelTk)) _patchP2LiveHeader(); } catch (e) {}",
+        "  try { if (typeof termSelTk !== \"undefined\" && termSelTk && dirty.has(termSelTk)) _patchP2LiveHeader(); } catch (e) {}\n"
+        "  try { if (typeof fe78_patchPhoneQuote === \"function\") fe78_patchPhoneQuote(dirty); } catch (e) {}",
+        "phone quote tick",
+    )
+    app = once(
+        app,
+        "      // MOBILE: never full renderMain() here — it hard-resets scroll, inputs, and looks like a page reload.\n"
+        "      // Android Chrome already fires resize when the URL bar hides; full rebuilds make flicker worse.\n"
+        "      _patchLiveDataIfNeeded();\n"
+        "      _patchCuratedPrices();",
+        "      // MOBILE: never full renderMain() here — it hard-resets scroll, inputs, and looks like a page reload.\n"
+        "      // Android Chrome already fires resize when the URL bar hides; full rebuilds make flicker worse.\n"
+        "      _patchLiveDataIfNeeded();\n"
+        "      _patchCuratedPrices();\n"
+        "      try { if (typeof fe78_patchPhoneQuote === \"function\") fe78_patchPhoneQuote(); } catch (e) {}",
+        "phone quote heartbeat",
     )
     app = once(
         app,

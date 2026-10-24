@@ -27,6 +27,25 @@ function fe78_isCrypto(tk) {
   try { if (typeof _rtIsCrypto === "function" && _rtIsCrypto(s)) return true; } catch (e2) {}
   return false;
 }
+function fe78_pos(v) {
+  if (typeof v !== "number" || !isFinite(v) || !(v > 0)) return null;
+  return v;
+}
+function fe78_basePx(q) {
+  if (!q || typeof q !== "object") return null;
+  var prev = fe78_pos(q.prev);
+  if (prev) return prev;
+  var named = fe78_pos(q.baselinePrice);
+  if (named) return named;
+  named = fe78_pos(q.baselinePx);
+  if (named) return named;
+  var px = fe78_pos(q.p);
+  if (px && typeof q.change === "number" && isFinite(q.change)) {
+    var derived = px - q.change;
+    if (derived > 0) return derived;
+  }
+  return null;
+}
 function fe78_cryptoBasis(q, roll, now) {
   var fin = function (v) { return typeof v === "number" && isFinite(v); };
   var fresh = !!(roll && (now - roll.at) < 30 * 60 * 1000);
@@ -34,7 +53,7 @@ function fe78_cryptoBasis(q, roll, now) {
   var c = Number(raw);
   var hasC = raw != null && raw !== "" && isFinite(c);
   if (q && q.baseline === "24h") {
-    return { mode: "srv", kind: "srv24", c: hasC ? c : null, prev: fin(q.prev) && q.prev > 0 ? q.prev : null };
+    return { mode: "srv", kind: "srv24", c: hasC ? c : null, prev: fe78_basePx(q) };
   }
   if (fresh && roll.kind === "srv24") {
     return {
@@ -59,6 +78,9 @@ function fe78_take(tk, q) {
     var raw = q.changePct != null ? q.changePct : q.c;
     var c = Number(raw);
     b.srvC = raw != null && isFinite(c) ? c : null;
+    var base = fe78_basePx(q);
+    if (base) b.base = base;
+    else delete b.base;
   }
   if (q.nextOpen != null && q.nextOpen !== "") b.nextOpen = q.nextOpen;
   else if (q.feed && q.feed.nextOpen) b.nextOpen = q.feed.nextOpen;
@@ -352,19 +374,30 @@ function fe78_tidyStatus(s, tk, nextOpen) {
   var text = String(s || "");
   return text.replace(/(\d{1,2}:\d{2}\s*UK)\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)(?:\s+\d{1,2}\s+[A-Za-z]{3})?(?:\s+\d{4})?/gi, "$1");
 }
-function fe78_cryptoLine(tk, px) {
-  var b = fe78_bag(tk);
-  if (!b || b.baseline !== "24h" || b.srvC == null || !isFinite(Number(b.srvC)) || Number(b.srvC) === 0) return "";
-  var c = Number(b.srvC);
+function fe78_cryptoMoney(diff, c) {
+  if (!isFinite(c) || Number(c.toFixed(2)) === 0 || !isFinite(diff) || diff === 0) return "";
   var pct = (c > 0 ? "+" : "") + c.toFixed(2) + "%";
-  var n = Number(px);
-  if (!(n > 0)) return (c > 0 ? "\u2191 " : "\u2193 ") + pct + " 24h";
-  var diff = n - n / (1 + c / 100);
   var abs = Math.abs(diff);
   var num = abs >= 1000 ? Math.round(abs).toLocaleString("en-US") : abs.toFixed(2);
   var sign = diff < 0 ? "-" : "+";
   var arrow = diff < 0 ? "\u2193 " : "\u2191 ";
   return arrow + sign + "$" + num + " (" + pct + ") 24h";
+}
+function fe78_cryptoLine(tk, px) {
+  var b = fe78_bag(tk);
+  if (!b || b.baseline !== "24h") return "";
+  var n = Number(px);
+  var base = Number(b.base);
+  if (base > 0 && n > 0) {
+    var live = ((n - base) / base) * 100;
+    if (!isFinite(live) || Number(live.toFixed(2)) === 0) return "";
+    return fe78_cryptoMoney(n - base, live);
+  }
+  if (b.srvC == null || !isFinite(Number(b.srvC)) || Number(b.srvC) === 0) return "";
+  var c = Number(b.srvC);
+  var pct = (c > 0 ? "+" : "") + c.toFixed(2) + "%";
+  if (!(n > 0)) return (c > 0 ? "\u2191 " : "\u2193 ") + pct + " 24h";
+  return fe78_cryptoMoney(n - n / (1 + c / 100), c);
 }
 function fe78_askPrefill(subject) {
   var raw = String(subject == null ? "" : subject).replace(/\s+/g, " ").trim();
@@ -807,6 +840,54 @@ try {
     _chatMsgs.forEach(function (m) { if (m && m.meta && m.meta.regime) fe78_stampRegime(m.meta.regime); });
   }
 } catch (eBoot) {}
+function fe78_patchPhoneQuote(dirty) {
+  try {
+    if (typeof document === "undefined" || !document.getElementById) return;
+    var tk = "";
+    if (typeof _dynTk !== "undefined" && _dynTk) tk = _dynTk;
+    else if (typeof selTk !== "undefined" && selTk) tk = selTk;
+    if (!tk) return;
+    if (dirty && typeof dirty.has === "function" && !dirty.has(tk)) return;
+    var main = document.getElementById("main");
+    if (!main) return;
+    var d = typeof fp === "function" ? fp(tk) : null;
+    var na = typeof hasSyncedQuote === "function" ? !hasSyncedQuote(tk) : false;
+    var price = typeof fe66_priceLine === "function" ? fe66_priceLine(tk, d, na) : "";
+    var line = typeof fe66_chgLine === "function" ? fe66_chgLine(tk, d, na) : "";
+    var chN = null;
+    try { chN = typeof liveChg === "function" ? liveChg(tk) : null; } catch (eCh) { chN = null; }
+    var col = na || chN == null ? "var(--t3)" : chN > 0 ? "var(--gn)" : chN < 0 ? "var(--rd)" : "var(--t3)";
+    var stock = main.querySelector(".rt23-stock");
+    if (stock) {
+      var chg = stock.querySelector(".asset-chg");
+      if (chg) {
+        chg.style.color = col;
+        if (line && chg.innerHTML !== line) chg.innerHTML = line;
+        var priceEl = chg.previousElementSibling;
+        if (priceEl && price) {
+          priceEl.style.color = na ? "var(--t3)" : col;
+          if (priceEl.innerHTML !== price) priceEl.innerHTML = price;
+        }
+      }
+    }
+    if (typeof _dynTk !== "undefined" && _dynTk === tk) {
+      var rights = main.querySelectorAll("div[style*='text-align:right'], div[style*='text-align: right']");
+      var i;
+      for (i = 0; i < rights.length; i++) {
+        var kids = rights[i].children;
+        if (!kids || kids.length < 2) continue;
+        if (price) {
+          kids[0].style.color = na ? "var(--t3)" : col;
+          if (kids[0].innerHTML !== price) kids[0].innerHTML = price;
+        }
+        if (line) {
+          kids[1].style.color = col;
+          if (kids[1].innerHTML !== line) kids[1].innerHTML = line;
+        }
+      }
+    }
+  } catch (ePh) {}
+}
 try {
   var fe78_step0 = _rt47StepHtml;
   _rt47StepHtml = function (s) {
