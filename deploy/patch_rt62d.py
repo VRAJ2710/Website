@@ -83,16 +83,57 @@ function fe82_pxText(n, fx) {
   var dp = fx ? 4 : 2;
   return v.toLocaleString("en-GB", { minimumFractionDigits: dp, maximumFractionDigits: dp });
 }
+function fe82_ukToday(ms) {
+  try {
+    return new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/London" }).format(new Date(ms || Date.now()));
+  } catch (e) { return ""; }
+}
+function fe82_sameUk(a, b) {
+  return String(a || "").replace(/\s+/g, " ").trim().toLowerCase() === String(b || "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+function fe82_setLabel(set, today) {
+  set = set || {};
+  var dateUk = set.generatedDateUk != null ? String(set.generatedDateUk).trim() : "";
+  var timeUk = set.generatedAtUk != null ? String(set.generatedAtUk).replace(/\s*UK\s*$/i, "").trim() : "";
+  var label = set.updatedLabel != null ? String(set.updatedLabel).trim() : "";
+  var todayLabel = today || fe82_ukToday();
+  var isToday = !!(dateUk && todayLabel && fe82_sameUk(dateUk, todayLabel));
+  var ed = String(set.edition || "").toLowerCase();
+  var staleEd = ed === "yesterday" || ed === "sample" || ed === "legacy" || ed === "older";
+  if (label) {
+    if (dateUk && !isToday) label = label.replace(/\btoday\b/ig, dateUk);
+    else if (staleEd) label = label.replace(/\bUpdated today\b/i, "Updated").replace(/\btoday\b/ig, "").replace(/\s{2,}/g, " ").trim();
+    return label;
+  }
+  if (timeUk && dateUk) return "Updated " + (isToday && !staleEd ? "today" : dateUk) + " · " + timeUk + " UK";
+  return "";
+}
+function fe82_itemStamp(it) {
+  it = it || {};
+  return fe82_ms(it.generatedAt || it.updatedAt || it.updated || it.asOf || it.generated_at || it.updated_at);
+}
 function fe82_editionMs(j, items) {
   items = items || (j && j.items) || [];
   var i;
   for (i = 0; i < items.length; i++) {
-    var it = items[i] || {};
-    var m = fe82_ms(it.generatedAt || it.updatedAt || it.generated_at || it.updated_at);
+    var m = fe82_itemStamp(items[i]);
     if (m) return m;
   }
-  if (j) return fe82_ms(j.generatedAt || j.updatedAt || j.generated_at || j.updated_at);
+  if (j) return fe82_ms(j.generatedAt || j.updatedAt || j.asOf || j.generated_at || j.updated_at);
   return 0;
+}
+function fe82_keepLead(text) {
+  var bits = [];
+  var shielded = String(text || "").replace(/\([^)\n]*24 hours earlier[^)\n]*\)/g, function (m) {
+    bits.push(m);
+    return "\u0001" + (bits.length - 1) + "\u0001";
+  });
+  return { text: shielded, bits: bits };
+}
+function fe82_restoreLead(text, bits) {
+  var t = String(text || "");
+  (bits || []).forEach(function (m, i) { t = t.split("\u0001" + i + "\u0001").join(m); });
+  return t;
 }
 function fe82_sigMode(st) {
   st = st || {};
@@ -107,6 +148,7 @@ function fe82_sigMode(st) {
 }
 // FE82_PURE_END
 var fe82_acadAt = 0;
+var fe82_acadLabel = "";
 var fe82_goldDc = null;
 var fe82_quoteWait = [];
 var fe82_qGen = 1;
@@ -217,13 +259,22 @@ function fe82_hubFresh() {
   if (fe82_acadAt) return fe82_acadAt;
   try { return Math.max((typeof _rt48Wk !== "undefined" && _rt48Wk.at) || 0, (typeof _rt48Nw !== "undefined" && _rt48Nw.at) || 0); } catch (e) { return 0; }
 }
+function fe82_hubLine() {
+  if (fe82_acadLabel) return fe82_acadLabel;
+  var t = fe82_hubFresh();
+  if (!t) return "";
+  try { return _rt48Fresh(t); } catch (e) { return ""; }
+}
 function fe82_takeEdition(data) {
   if (!data || typeof data !== "object") return;
   var items = data.items || (data.ai && data.ai.items) || [];
+  var today = "";
+  try { today = fe82_ukToday(); } catch (e0) { today = ""; }
+  fe82_acadLabel = fe82_setLabel(data, today);
   var ms = fe82_editionMs(data, items);
-  if (!ms) return;
-  fe82_acadAt = ms;
-  try { if (typeof _rt48Ai !== "undefined" && _rt48Ai) _rt48Ai.at = ms; } catch (e) {}
+  fe82_acadAt = ms || (fe82_acadLabel ? 1 : 0);
+  if (!fe82_acadAt && !fe82_acadLabel) return;
+  try { if (typeof _rt48Ai !== "undefined" && _rt48Ai) _rt48Ai.at = fe82_acadAt; } catch (e) {}
 }
 function fe82_scrubBriefObj() {
   var ready = false;
@@ -291,7 +342,8 @@ function fe82_fixGlance() {
   }
 }
 function fe82_fixAsk(text) {
-  var t = String(text || "");
+  var held = fe82_keepLead(text);
+  var t = held.text;
   ["BTC", "ETH", "SOL"].forEach(function (tk) {
     var pct = null;
     try { pct = fe79_liveCryptoPct(tk); } catch (e) { pct = null; }
@@ -314,7 +366,7 @@ function fe82_fixAsk(text) {
   });
   if (t.indexOf("Crypto 24h:") < 0) t += "\nCrypto 24h: " + bits.join(" · ");
   if (fe82_regimeReady(typeof _computeRegimeEngine === "function" ? _computeRegimeEngine() : null)) t = fe82_stripLoad(t);
-  return t;
+  return fe82_restoreLead(t, held.bits);
 }
 try {
   var fe82_lc0 = fe79_liveCryptoPct;
@@ -406,8 +458,16 @@ try {
 try {
   var fe82_ask0 = fe79_askChip;
   fe79_askChip = function (meta) {
+    var q = (meta && meta.quote) || meta || {};
+    var quoteLine = q.quoteLine != null ? String(q.quoteLine).trim() : "";
+    var basis = q.basisLabel != null ? String(q.basisLabel).trim() : "";
+    if (quoteLine) {
+      if (basis && quoteLine.indexOf(basis) >= 0) basis = "";
+      return { label: String(q.label || ""), price: q.price != null ? String(q.price) : "", time: String(q.time || q.asOfUk || ""), source: "server", line: quoteLine, basis: basis };
+    }
     var chip = fe82_ask0.apply(this, arguments);
     try {
+      if (basis) chip.basis = basis;
       if (chip && chip.price != null && chip.price !== "") {
         var n = Number(String(chip.price).replace(/,/g, "").replace(/^\$/, ""));
         if (isFinite(n)) {
@@ -421,6 +481,23 @@ try {
     return chip;
   };
 } catch (eAsk) {}
+try {
+  var fe82_qb0 = fe76_quoteBlock;
+  fe76_quoteBlock = function (meta) {
+    var q = meta && meta.quote;
+    if (q && (q.quoteLine || q.basisLabel)) {
+      var chip = null;
+      try { chip = fe79_askChip(meta); } catch (e1) { chip = null; }
+      var line = chip && chip.line ? String(chip.line) : (q.quoteLine ? String(q.quoteLine).trim() : "");
+      var basis = chip && chip.basis ? String(chip.basis) : "";
+      var esc = function (s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); };
+      var html = '<div class="fe76-qlines"><div class="fe76-qline">' + esc(line) + "</div>";
+      if (basis) html += '<div class="fe76-qbasis">' + esc(basis) + "</div>";
+      return html + "</div>";
+    }
+    return fe82_qb0.apply(this, arguments);
+  };
+} catch (eQb) {}
 try {
   var fe82_px0 = fe78_quotePx;
   fe78_quotePx = function (q, n) {
@@ -475,9 +552,15 @@ try {
 try {
   var fe82_fr0 = _rt48Fresh;
   _rt48Fresh = function (t) {
+    if (typeof t === "string" && /Updated\b/.test(t)) return t;
+    try {
+      var newsAt = typeof _rt48Nw !== "undefined" && _rt48Nw ? _rt48Nw.at : 0;
+      var aiAt = typeof _rt48Ai !== "undefined" && _rt48Ai ? _rt48Ai.at : 0;
+      if (fe82_acadLabel && t && (t === fe82_acadAt || t === newsAt || t === aiAt)) return fe82_acadLabel;
+    } catch (e0) {}
     var use = t;
     try {
-      if (fe82_acadAt && typeof _rt48Nw !== "undefined" && _rt48Nw && t && t === _rt48Nw.at && t !== fe82_acadAt) use = fe82_acadAt;
+      if (!fe82_acadLabel && fe82_acadAt && typeof _rt48Nw !== "undefined" && _rt48Nw && t && t === _rt48Nw.at && t !== fe82_acadAt) use = fe82_acadAt;
     } catch (e) {}
     return fe82_fr0.call(this, use);
   };
@@ -486,7 +569,12 @@ try {
   var fe82_ns0 = _rt48NewsSteps;
   _rt48NewsSteps = function () {
     var st = fe82_ns0.apply(this, arguments);
-    try { if (fe82_acadAt && st && st[0] && st[0].fresh) st[0].fresh = fe82_acadAt; } catch (e) {}
+    try {
+      if (st && st[0]) {
+        if (fe82_acadLabel) st[0].fresh = fe82_acadLabel;
+        else if (fe82_acadAt && st[0].fresh) st[0].fresh = fe82_acadAt;
+      }
+    } catch (e) {}
     return st;
   };
 } catch (eNs) {}
@@ -610,13 +698,13 @@ def anchors(app):
     app = once(
         app,
         "const fresh = Math.max(_rt48Wk.at || 0, _rt48Nw.at || 0);",
-        "const fresh = (typeof fe82_hubFresh===\"function\"?fe82_hubFresh():Math.max(_rt48Wk.at || 0, _rt48Nw.at || 0));",
+        "const fresh = (typeof fe82_hubLine===\"function\"?fe82_hubLine():_rt48Fresh(Math.max(_rt48Wk.at || 0, _rt48Nw.at || 0)));",
         "academy hub",
     )
     app = once(
         app,
         "const t = Math.max(_rt48Wk.at || 0, _rt48Nw.at || 0), s = t ? _rt48Fresh(t) : '';",
-        "const t = (typeof fe82_hubFresh===\"function\"?fe82_hubFresh():Math.max(_rt48Wk.at || 0, _rt48Nw.at || 0)), s = t ? _rt48Fresh(t) : '';",
+        "const t = Math.max(_rt48Wk.at || 0, _rt48Nw.at || 0), s = (typeof fe82_hubLine===\"function\"?fe82_hubLine():(t ? _rt48Fresh(t) : ''));",
         "academy refresh",
     )
     return app
@@ -656,6 +744,21 @@ assert(fe82_pxText(3996.899902, false) === "3,996.90", "px");
 assert(fe82_pxText(1.08542, true) === "1.0854", "fx");
 var stamp = fe82_editionMs({ generatedAt: "2026-10-24T09:15:00Z" }, [{ generatedAt: "2026-10-24T08:05:00Z", h: "Fed" }]);
 assert(stamp === Date.parse("2026-10-24T08:05:00Z"), "item time");
+var oldStamp = fe82_editionMs({}, [{ updated: "2026-10-24T08:05:00Z", asOf: "2026-10-24T08:05:00Z", sourcePublishedAt: "2026-10-23T18:00:00Z" }]);
+assert(oldStamp === Date.parse("2026-10-24T08:05:00Z"), "old item");
+var srcStamp = fe82_editionMs({ generatedAt: "2026-10-24T09:15:00Z" }, [{ sourcePublishedAt: "2026-10-23T18:00:00Z", h: "Fed" }]);
+assert(srcStamp === Date.parse("2026-10-24T09:15:00Z"), "ignore source");
+assert(fe82_setLabel({ updatedLabel: "Updated today · 09:05 UK", generatedDateUk: "Sat 24 Oct", generatedAtUk: "09:05" }, "Sat 24 Oct") === "Updated today · 09:05 UK", "label today");
+assert(fe82_setLabel({ updatedLabel: "Updated today · 10:15 UK", generatedDateUk: "Fri 23 Oct", generatedAtUk: "10:15" }, "Sat 24 Oct") === "Updated Fri 23 Oct · 10:15 UK", "label yday");
+assert(fe82_setLabel({ generatedAtUk: "10:15", generatedDateUk: "Sat 24 Oct" }, "Sat 24 Oct") === "Updated today · 10:15 UK", "uk today");
+assert(fe82_setLabel({ generatedAtUk: "10:15", generatedDateUk: "Fri 23 Oct" }, "Sat 24 Oct") === "Updated Fri 23 Oct · 10:15 UK", "uk yday");
+assert(fe82_setLabel({ edition: "yesterday", updatedLabel: "Updated today · 10:15 UK" }, "Sat 24 Oct").indexOf("today") < 0, "edition yday");
+var lead = "ETH -2.95% (24 hours earlier $10,000.00)";
+var held = fe82_keepLead(lead);
+assert(held.text.indexOf("24 hours earlier") < 0, "shield");
+var back = fe82_restoreLead(held.text.replace("-2.95%", "-3.82%"), held.bits);
+assert(back === "ETH -3.82% (24 hours earlier $10,000.00)", "lead intact");
+assert(back.split("(").length === 2 && back.indexOf("((") < 0, "one paren");
 assert(fe82_sigMode({ have: true, err: true }) === "cards", "sig cards");
 assert(fe82_sigMode({ err: true, open: false, age: 100 }) === "unavailable", "sig err");
 assert(fe82_sigMode({ open: true, age: 3000 }) === "skeleton", "sig wait");
