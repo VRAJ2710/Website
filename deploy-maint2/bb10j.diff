@@ -1,0 +1,34 @@
+--- /workspace/dispatch-live-bb10i/server.js	2026-10-25 16:51:44.543380879 +0000
++++ /workspace/dispatch-live-bb10j/server.js	2026-10-25 17:14:17.083886765 +0000
+@@ -23550,3 +23550,31 @@
+   return bb10iSend(req, res, p);
+ };
+ // BB10I_JS_END
++// ── bb10j: GET/HEAD "/" answers 200 (maintenance page, noindex) so the Replit Autoscale Promote health check passes ─────────
++// Only the maintenance responder changes (bb10i's handler, exemptions and admin check are untouched). With the flag false nothing here is reachable.
++//  - "/" (raw request path exactly "/" - or the absolute-form http://host/ - any query string, any Host; "//x", "/." and "/./" stay 503) on GET/HEAD: 200, same branded page, X-Robots-Tag noindex, Cache-Control no-store, no Retry-After.
++//    A HEAD gets the headers without a body. Cookie-less guests: no DB, no session lookup. A cookie holder is still checked by bb10i first (admin -> real site); a non-admin gets this 200 page.
++//  - every other maintenance response stays 503 + Retry-After 3600 + no-store (API JSON body unchanged) and now also carries X-Robots-Tag: noindex.
++//  - the HTML (200 and 503) gets <meta name="robots" content="noindex">.
++var BB10J_HTML_BODY = BB10I_HTML_BODY.replace('<meta name="color-scheme" content="dark">', '<meta name="color-scheme" content="dark"><meta name="robots" content="noindex">');
++BB10I_HTML_BODY = BB10J_HTML_BODY;
++var BB10J_HTML_LEN = Buffer.byteLength(BB10J_HTML_BODY);
++var bb10jSend0 = bb10iSend;
++bb10iSend = function bb10jSend(req, res, p) {
++  var bb10jRaw = String(req.url || "").split(/[?#]/)[0];
++  if (p === "/" && (req.method === "GET" || req.method === "HEAD") && (bb10jRaw === "/" || /^https?:\/\/[^\/]*\/?$/i.test(bb10jRaw))) {
++    res.writeHead(200, {
++      "Content-Type": "text/html; charset=utf-8",
++      "Cache-Control": "no-store",
++      "X-Robots-Tag": "noindex",
++      "Content-Length": BB10J_HTML_LEN,
++      "X-Content-Type-Options": "nosniff",
++      "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
++    });
++    res.end(req.method === "HEAD" ? undefined : BB10J_HTML_BODY);
++    return;
++  }
++  res.setHeader("X-Robots-Tag", "noindex");
++  return bb10jSend0(req, res, p);
++};
++// BB10J_JS_END
