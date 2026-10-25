@@ -1,0 +1,260 @@
+--- /workspace/dispatch-live-bb10e/server.js	2026-10-24 23:43:25.298340685 +0100
++++ /workspace/dispatch-live-bb10f/server.js	2026-10-25 01:20:09.363380457 +0100
+@@ -22931,3 +22931,257 @@
+   if (!bb8rReg || typeof bb8rReg !== "object") bb8rReg = { at: 0, row: null };
+ } catch (e) { console.warn("bb10e regime guard skipped", e && e.message); }
+ // BB10E_JS_END
++// ── bb10f: QA fix for the crypto Ask. Server-only; no secrets, tables, feeds or background timers; nothing new is fetched. ──
++// (a) Coin coverage: a coin the question names (BTC, Ether, SOL, XRP ... the bb10c coin map) must carry its own figure in the answer. After the
++//     bb10d/bb10c post-checks, a named coin with a Coinbase snapshot that the answer never states with a figure gets one deterministic
++//     sentence (basis, price, its own [n]); its Coinbase source line is appended to the list if the answer did not already cite it. A month/week/year
++//     figure is only given when a real Yahoo chart figure for that very coin is in the server context; otherwise the sentence says plainly that
++//     the period figure is not available and only the 24h move is shown. Nothing is invented.
++// (b) Source relevance: in a crypto Ask, a sentence about crypto/Bitcoin/Ether cannot cite an equity, volatility, index, rates, dollar, oil/gold or
++//     regime source unless the sentence itself is about that instrument (the VIX is 17.3 [n]). The marker is dropped; if the sentence then carries
++//     a figure with no [n] left it is dropped (the bb10d rule); an other-instrument source that is no longer cited leaves the list and the numbering
++//     closes up. For a crypto-only question those macro sources are also not shown to the model unless the question asks for macro context.
++var BB10F_MACRO_KEYS = { "^GSPC": 1, "^VIX": 1, "DX-Y.NYB": 1, "^TNX": 1, "regime": 1 };
++var BB10F_MACRO_Q_RE = /\b(?:vix|volatility index|s&p|spx|sp ?500|stocks?|equit\w+|nasdaq|dow jones|wall street|indices|indexes|dollar|dxy|treasur\w+|yields?|10-?year|bonds?|fed|federal reserve|fomc|interest rates?|inflation|cpi|oil|crude|gold|macro\w*|market mood|regime|risk[- ](?:on|off)|safe haven|correlat\w+)\b/i;
++var BB10F_OTHER = {
++  "^VIX": /\bvix\b|volatility index|cboe/i,
++  "^GSPC": /s&p|\bspx\b|sp ?500|stock market|wall street|equit\w+|\bstocks?\b/i,
++  "^IXIC": /nasdaq/i, "^DJI": /\bdow\b/i, "^FTSE": /ftse/i, "^N225": /nikkei/i,
++  "DX-Y.NYB": /\bdxy\b|dollar index|(?:us|u\.s\.) dollar|\bdollar\b/i,
++  "^TNX": /treasur\w+|10-?year|\byields?\b|\btnx\b/i,
++  "CL=F": /\boil\b|crude|\bwti\b|brent/i, "GC=F": /\bgold\b/i, "SI=F": /\bsilver\b/i, "SPY": /\bspy\b|s&p|\bstocks?\b/i,
++  "regime": /regime|market mood|risk[- ](?:on|off)/i
++};
++var BB10F_CRYPTO_VOL_RE = /\b(?:volatil\w*|vol)\b[^.;\n]{0,60}\b(?:in|of|across|for|within)\b[^.;\n]{0,40}\b(?:crypto\w*|bitcoin|ether\w*|digital assets?|coins?)\b|\b(?:crypto\w*|bitcoin|ether\w*|digital assets?)\b[^.;\n]{0,30}\bvolatil\w*/i;
++var BB10F_CRYPTO_SUBJ_RE = /\bcrypto(?:currenc\w+|s)?\b|\bdigital assets?\b|\btokens?\b|\bcoins?\b/i;
++var BB10F_FIG_RE = /[$%\u00a3\u20ac]|\d+\.\d+|\d{1,3}(?:,\d{3})+/;
++var BB10F_SENT_SPLIT = /(?<=[.!?\]\u27e7])\s+(?=[A-Z"(\u27e6\[])/;
++// sentences of one line; a marker that sits after the full stop ("... 17.30. [3]") belongs to the sentence before it
++function bb10fSents(line) {
++  var out = [];
++  String(line).split(BB10F_SENT_SPLIT).forEach(function (x) {
++    if (out.length && /^(?:\[\d+\]\s*)+$/.test(x)) out[out.length - 1] += " " + x.trim(); else out.push(x);
++  });
++  return out;
++}
++
++// the other-instrument kind of one source line of the answer's list ("" for crypto or anything else)
++function bb10fOtherKind(src) {
++  try {
++    if (!src) return "";
++    var name = String(src.name || ""), link = String(src.link || ""), det = String(src.det || src.detail || "");
++    if (/coinbase|coingecko/i.test(name) || /products\/[A-Z0-9]+-USD\/stats/.test(link)) return "";
++    if (/Dispatch regime model/i.test(name)) return "regime";
++    var m = /finance\.yahoo\.com\/quote\/([^\/?#]+)/i.exec(link), sym = "";
++    if (m) { try { sym = decodeURIComponent(m[1]).toUpperCase(); } catch (e) { sym = String(m[1]).toUpperCase(); } }
++    if (sym && /^(?:BTC|ETH|SOL|XRP|DOGE|ADA|AVAX|LINK|LTC|DOT|BCH)-USD$/.test(sym)) return "";
++    if (sym && (BB10F_OTHER[sym] || /^\^/.test(sym))) return sym;
++    if (!sym && BB10F_MACRO_KEYS[src.bb8qKey]) return src.bb8qKey;
++    return "";
++  } catch (e) { return ""; }
++}
++// does this sentence speak about that other instrument itself (a crypto-volatility claim never counts)
++function bb10fAboutKind(sent, kind) {
++  if (BB10F_CRYPTO_VOL_RE.test(sent)) return false;
++  var re = BB10F_OTHER[kind];
++  if (!re && /^\^/.test(kind)) re = /\bindex\b|\bindices\b/i;
++  return !!(re && re.test(sent));
++}
++function bb10fCryptoSubject(sent) {
++  var c = [];
++  try { c = bb10cCoinsIn(sent); } catch (e) { c = []; }
++  return c.length > 0 || BB10F_CRYPTO_SUBJ_RE.test(sent);
++}
++function bb10fHasFig(sent) { return BB10F_FIG_RE.test(String(sent).replace(/\[\d+\]/g, "")); }
++// the parts of a reply: body, tail, source lines
++function bb10fSplit(reply) {
++  var i = reply.search(/\n\nSources:/);
++  return i >= 0 ? { body: reply.slice(0, i), tail: reply.slice(i) } : { body: reply, tail: "" };
++}
++function bb10fTailMax(tail) {
++  var mx = 0;
++  String(tail || "").split("\n").forEach(function (l) { var m = /^\[(\d+)\]\s/.exec(l); if (m && Number(m[1]) > mx) mx = Number(m[1]); });
++  return mx;
++}
++// step 1: drop other-instrument markers from crypto sentences. Returns { body, lost: {n: kind}, dropped: [sentences] }
++function bb10fRelevance(body, srcs) {
++  var lost = {}, dropped = [], kinds = {};
++  Object.keys(srcs).forEach(function (n) { var k = bb10fOtherKind(srcs[n]); if (k) kinds[n] = k; });
++  if (!Object.keys(kinds).length) return { body: body, lost: lost, dropped: dropped };
++  var out = body.split("\n").map(function (line) {
++    if (!line.trim() || /^\s*(?:Basis|Sources):/.test(line)) return line;
++    var kept = bb10fSents(line).map(function (sent) {
++      var marks = sent.match(/\[(\d+)\]/g);
++      if (!marks || !bb10fCryptoSubject(sent)) return sent;
++      var s2 = sent, changed = false;
++      marks.forEach(function (mk) {
++        var n = mk.slice(1, -1), k = kinds[n];
++        if (!k || bb10fAboutKind(sent, k)) return;
++        s2 = s2.replace(new RegExp("\\s?\\[" + n + "\\]", "g"), ""); lost[n] = k; changed = true;
++      });
++      if (!changed) return sent;
++      s2 = s2.replace(/\s+([.,;!?])/g, "$1");
++      if (!/\[\d+\]/.test(s2) && bb10fHasFig(s2)) { dropped.push(sent); return null; }
++      return s2;
++    }).filter(function (x) { return x !== null; });
++    return kept.join(" ");
++  });
++  var text = out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/^\n+/, "");
++  return { body: text, lost: lost, dropped: dropped };
++}
++// step 2: remove now-uncited other-instrument sources and close the numbering up (body, tail, sources[])
++function bb10fRenumber(body, tail, lost, sources) {
++  var cited = {};
++  (body.match(/\[(\d+)\]/g) || []).forEach(function (m) { cited[m.slice(1, -1)] = 1; });
++  var gone = {};
++  Object.keys(lost).forEach(function (n) { if (!cited[n]) gone[n] = 1; });
++  if (!Object.keys(gone).length) return { body: body, tail: tail, sources: sources, removed: 0 };
++  var map = {}, next = 1, max = bb10fTailMax(tail);
++  for (var i = 1; i <= max; i++) { if (!gone[String(i)]) map[String(i)] = String(next++); }
++  var nb = body.replace(/\[(\d+)\]/g, function (m, n) { return map[n] ? "[" + map[n] + "]" : m; });
++  var nt = tail.split("\n").map(function (l) {
++    var m = /^\[(\d+)\](\s.*)$/.exec(l);
++    if (!m) return l;
++    return gone[m[1]] ? null : "[" + map[m[1]] + "]" + m[2];
++  }).filter(function (l) { return l !== null; }).join("\n");
++  var ns = sources;
++  if (Array.isArray(sources) && sources.length === max) ns = sources.filter(function (s, k) { return !gone[String(k + 1)]; });
++  return { body: nb, tail: nt, sources: ns, removed: Object.keys(gone).length };
++}
++// step 3: coin coverage
++function bb10fCovered(body, coin) {
++  var found = false;
++  body.split("\n").forEach(function (line) {
++    if (/^\s*(?:Basis|Sources):/.test(line)) return;
++    bb10fSents(line).forEach(function (sent) {
++      var cs = []; try { cs = bb10cCoinsIn(sent); } catch (e) { cs = []; }
++      if (cs.indexOf(coin) >= 0 && bb10fHasFig(sent)) found = true;
++    });
++  });
++  return found;
++}
++var BB10F_PERIOD = { week: "week-to-date", month: "month-to-date", ytd: "year-to-date" };
++function bb10fSourceLine(n, src) {
++  var asOf = ""; try { asOf = bb8qUk(Date.parse(src.asOf)); } catch (e) { asOf = ""; }
++  return "[" + n + "] " + src.name + " | " + src.link + " | " + (asOf ? "as of " + asOf : "as of now") + " | " + String(src.detail || "").replace(/\s*\n\s*/g, " ");
++}
++function bb10fCover(body, tail, sources, st, named) {
++  var rows = st.bb10cRows || {}, ctx = st.bb8qCtx || null, added = [], newSrc = [];
++  var add = [];
++  var period = ctx && BB10F_PERIOD[ctx.tfReq] ? ctx.tfReq : "";
++  var nextN = bb10fTailMax(tail);
++  var lines = [];
++  var cite = function (coin) {
++    var c = "";
++    try { c = bb10dCiteOf(tail + "\n" + lines.join("\n"), coin); } catch (e) { c = ""; }
++    if (c) return c;
++    var s = rows[coin], text = bb10cFactText(coin, s).replace(/\.$/, ""), o = {};
++    bb10cApplySrc(o, coin, s, bb10cFactText(coin, s));
++    nextN += 1;
++    lines.push(bb10fSourceLine(nextN, o)); newSrc.push(o);
++    return "[" + nextN + "]";
++  };
++  named.forEach(function (coin) {
++    var s = rows[coin];
++    if (!s || !(Number(s.price) > 0) || bb10fCovered(body + "\n" + add.join("\n"), coin)) return;
++    var parts = [];
++    // a period figure only when this very coin has a real chart figure in the server context
++    var hasPeriod = period && ctx.tf && ctx.tf.text && ctx.tf.src && bb10cCoinFromSym(ctx.tf.sym) === coin;
++    if (hasPeriod) {
++      var ts = ctx.tf.src, found = "";
++      try { found = (new RegExp("(?:^|\\n)\\[(\\d+)\\][^\\n]*" + String(ts.link).replace(/[.*+?^${}()|[\]\\\/]/g, "\\$&"))).exec(tail + "\n" + lines.join("\n")); found = found ? "[" + found[1] + "]" : ""; } catch (e) { found = ""; }
++      if (!found) { nextN += 1; var o2 = { name: ts.name, link: ts.link, asOf: ts.asOf, detail: ts.detail }; lines.push(bb10fSourceLine(nextN, o2)); newSrc.push(o2); found = "[" + nextN + "]"; }
++      parts.push(String(ctx.tf.text).replace(/\.$/, "") + " " + found + ".");
++    }
++    var c = cite(coin);
++    parts.push(bb10cName(coin) + " " + bb10cMoveText(s) + " at " + bb10bFmtUsd(s.price) + " (" + bb10cBasis(s) + ")" + (c ? " " + c : "") + ".");
++    if (period && !hasPeriod) parts.push("A " + BB10F_PERIOD[period] + " figure for " + bb10cName(coin) + " is not available from our data, so only the 24-hour move is shown.");
++    add.push(parts.join(" "));
++    added.push(coin);
++  });
++  return { add: add, lines: lines, sources: newSrc, added: added };
++}
++function bb10fInsert(body, add) {
++  if (!add.length) return body;
++  var paras = body.split("\n\n"), at = paras.length;
++  while (at > 0 && /^\s*(?:Basis:|In short:|Live:|What we do have)/i.test(paras[at - 1])) at--;
++  paras.splice(at, 0, add.join(" "));
++  return paras.join("\n\n");
++}
++function bb10fApply(r, st) {
++  if (!r || typeof r !== "object" || typeof r.reply !== "string" || !st || !st.bb10cRows) return r;
++  var sp = bb10fSplit(r.reply), body = sp.body, tail = sp.tail, sources = r.sources, info = { dropped: [], removed: 0, added: [] };
++  var srcs = bb10dParseSources(tail);
++  var rel = bb10fRelevance(body, srcs);
++  body = rel.body; info.dropped = rel.dropped;
++  var rn = bb10fRenumber(body, tail, rel.lost, sources);
++  body = rn.body; tail = rn.tail; sources = rn.sources; info.removed = rn.removed;
++  var named = (st.bb10fNamed || []).filter(function (c) { return st.bb10cRows[c]; });
++  var cov = bb10fCover(body, tail, sources, st, named);
++  if (cov.add.length) {
++    body = bb10fInsert(body, cov.add);
++    if (cov.lines.length) {
++      if (tail && bb10fTailMax(tail) > 0) tail = tail.replace(/\s+$/, "") + "\n" + cov.lines.join("\n");
++      else tail = "\n\nSources:\n" + cov.lines.join("\n");
++      if (Array.isArray(sources)) sources = sources.concat(cov.sources);
++      else if (sources == null) sources = cov.sources.slice();
++    }
++    info.added = cov.added;
++  }
++  if (body === sp.body && tail === sp.tail) return r;
++  var o = Object.assign({}, r);
++  o.reply = body + tail;
++  if (sources !== r.sources) o.sources = sources;
++  st.bb10fApplied = info;
++  return o;
++}
++// crypto-only question: the equity/volatility/rates/dollar/regime sources are not offered to the model unless the question asks for macro context
++function bb10fCtx(ctx, st) {
++  if (!ctx || !ctx.bb10c || !Array.isArray(ctx.facts) || !Array.isArray(ctx.sources)) return ctx;
++  var named = Array.isArray(ctx.bb10c.named) ? ctx.bb10c.named.slice() : [], q = String(ctx.q || "");
++  if (st) { st.bb10fNamed = named; st.bb10fQ = q; }
++  if (!named.length || BB10F_MACRO_Q_RE.test(q)) return ctx;
++  var drop = function (s) { return !!(s && s.bb8q && BB10F_MACRO_KEYS[s.bb8qKey]); };
++  var n0 = ctx.facts.length;
++  ctx.facts = ctx.facts.filter(function (f) { return !drop(f && f.src); });
++  ctx.sources = ctx.sources.filter(function (s) { return !drop(s); });
++  if (st) st.bb10fMacroDropped = n0 - ctx.facts.length;
++  return ctx;
++}
++try {
++  var bb10fBuild0 = bb8qBuild;
++  bb8qBuild = async function (st, body) {
++    var ctx = await bb10fBuild0.apply(this, arguments);
++    try { if (st && ctx && ctx.bb10c && Array.isArray(ctx.bb10c.named)) { st.bb10fNamed = ctx.bb10c.named.slice(); st.bb10fQ = String(ctx.q || ""); } } catch (e) {}
++    try { bb10fCtx(ctx, st); } catch (e) { console.warn("bb10f ctx", e && e.message); }
++    return ctx;
++  };
++  var bb10fFin0 = bb8qFinish;
++  bb8qFinish = function (out, st) {
++    var r = bb10fFin0.apply(this, arguments);
++    try { return bb10fApply(r, st); } catch (e) { console.warn("bb10f finish", e && e.message); return r; }
++  };
++} catch (e) { console.warn("bb10f crypto Ask hooks skipped", e && e.message); }
++
++// ── (d) four more routes under the bb10e deadline wrapper: same 8 s deadline, last good copy first, else an empty shape the client already reads ──
++// crypto-snapshot: available:false with every requested coin listed as unavailable (the route's own no-reading shape); ticker-news: no items;
++// real-yield and eia-spot: available:false (the client ignores those and keeps its previous value).
++BB10E_ROUTES["/api/crypto-snapshot"] = "bb10fSnap";
++BB10E_ROUTES["/api/ticker-news"] = "bb10fNews";
++BB10E_ROUTES["/api/real-yield"] = "bb10fRealYield";
++BB10E_ROUTES["/api/eia-spot"] = "bb10fEia";
++var bb10fEmpty0 = bb10eEmpty;
++bb10eEmpty = function (route, url) {
++  var now = Date.now(), iso = bb10Iso(now), uk = bb10Uk(now);
++  if (route === "bb10fSnap") {
++    var raw = String(url.searchParams.get("coins") || url.searchParams.get("ids") || "");
++    var list = raw.split(",").map(function (c) { c = c.trim(); return BB10_CG_ID[c.toLowerCase()] || c.toUpperCase(); }).filter(function (c) { return BB10_CB_COINS[c]; });
++    list = Array.from(new Set(list.length ? list : BB10B_PULSE_DEFAULT)).slice(0, 12);
++    var rows = list.map(function (c) { return { coin: c, symbol: c + "-USD", available: false, price: null, changePct: null, note: "No Coinbase reading for " + c + " right now." }; });
++    return { available: false, rows: rows, pulse: bb10bPulse(rows, 3), snapshotAt: null, snapshotAtUk: null, note: "The Coinbase snapshot did not answer in time. Try again in a minute.", retryAfterSec: 30 };
++  }
++  if (route === "bb10fNews") return { symbol: String(url.searchParams.get("symbol") || "").trim().toUpperCase().slice(0, 15), items: [], available: false, reason: "deadline" };
++  if (route === "bb10fRealYield" || route === "bb10fEia") return { available: false, reason: "deadline" };
++  return bb10fEmpty0.apply(this, arguments);
++};
++// BB10F_JS_END
