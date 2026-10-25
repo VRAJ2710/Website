@@ -1,0 +1,313 @@
+--- dispatch-live-bb10f/server.js	2026-10-25 01:20:09.363380457 +0100
++++ dispatch-live-bb10g/server.js	2026-10-25 08:28:34.958794744 +0000
+@@ -23185,3 +23185,310 @@
+   return bb10fEmpty0.apply(this, arguments);
+ };
+ // BB10F_JS_END
++// ── bb10g: QA fix (chat85) for the gold Ask and the crypto Ask wording. Server-only; no secrets, tables, feeds or background timers; nothing new is fetched. ──
++// (P1) Gold price consistency. The Ask has ONE headline gold instrument, the one bb10 puts in meta.quote: gold spot (gold-api.com) when the spot read is
++//      in the answer's server context, otherwise gold futures (GC=F). The answer text may also carry the other instrument (spot and futures differ by
++//      a few dollars). A gold dollar figure in the text that is within 0.05% of the spot price or of the futures price, but has no label of its own
++//      instrument next to it, is rewritten to "$X (spot, gold-api.com, as of <its own UK time>)" or "$X (futures, GC=F, as of <its own UK time>)". A figure
++//      whose adjacent label names the OTHER instrument ("futures $3,996.90" where 3,996.90 is the spot read) drops its sentence. A time right after
++//      the figure that is not that instrument's own time is replaced by the own time. Figures that match neither instrument (previous close, day
++//      range, desk levels, targets, news headlines, quoted or attributed figures) are never touched. The spot source line in the list carries its
++//      "spot" label ("gold-api.com spot") next to its own as-of time. Stream and JSON paths (both end in bb8qFinish).
++// (P2a) Gold Ask calendar sources. The free week calendar (FOMC, BEA, ONS) is attached to any "this week" question. For a gold question the
++//      ONS/BEA/BLS/FOMC entries are dropped from the context (so the model cannot cite them and they never reach the list) unless the question is about
++//      that kind of event, or the event is gold-relevant (FOMC, US CPI, nonfarm payrolls, PCE) and falls within today..+4 days. UK ONS releases are
++//      never gold-relevant on their own. Only the gold context is touched; every other Ask is byte-identical to bb10f.
++// (P2b) Crypto Ask wording. A coin whose month/week/year figure is not in the server context gets one plain line per coin:
++//      "Ether: month-to-date figure unavailable; last 24 h -1.08% at $2,340.48 (Coinbase 24h rolling, as of 08:16 UK) [n]." (bb10f's deterministic coin
++//      sentence now has this form, and a model sentence about that coin is replaced by it). "As a proxy, Currently," is collapsed to one prefix, and a
++//      coin's own Coinbase line is not called a proxy.
++var BB10G_TOL = 0.0005;
++var BB10G_MONEY_RE = /\$\s?(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{3,5}(?:\.\d+)?)(?![\d,]|\.\d|\s?(?:k|m|bn|b|trillion|billion|million|%)\b)/g;
++var BB10G_SPOT_LBL = /\bspot\b|gold-api/gi;
++var BB10G_FUT_LBL = /\bfutures?\b|GC=F/gi;
++var BB10G_ATTR_RE = /["\u201c\u201d]|\b(?:said|says|according to|reported|reports|reuters|bloomberg|analysts?|strategists?|headline|wrote|forecasts?|predicts?)\b/i;
++var BB10G_DESC_RE = /\b(?:range|high|highs|low|lows|previous close|prior close|prev close|closed? at|opened?|open|target|targets|support|resistance|level|levels|stop|entry|breakeven|break)\b/i;
++var BB10G_TIME = "(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*\\.?,?\\s+)?(?:\\d{1,2}\\s+[A-Z][a-z]{2,8}\\.?,?\\s+)?\\d{1,2}[:.]\\d{2}(?:\\s*(?:UK(?:\\s+time)?|BST|GMT))?";
++var BB10G_ASOF_RE = new RegExp("^(?:\\s*,?\\s*\\(\\s*as of\\s+" + BB10G_TIME + "\\s*\\)|\\s*,?\\s*as of\\s+" + BB10G_TIME + ")", "i");
++var BB10G_ADJ_RE = /^[\s,]*\(?\s*(?:gold\s+)?(spot|futures?|GC=F|gold-api\.com|Yahoo)/i;
++
++// the gold prices of this Ask, from the server context the model was given (never from the text)
++function bb10gKnown(st) {
++  var c = st && st.bb8qCtx, out = { head: "", items: [] };
++  if (!c || !c.gold) return out;
++  try {
++    if (c.spot && c.spot.q && Number(c.spot.q.p) > 0) {
++      var sms = Number(c.spot.ms) || 0;
++      out.items.push({ kind: "spot", p: Number(c.spot.q.p), ms: sms, uk: bb8qUk(sms), lbl: "spot, gold-api.com" });
++    }
++    if (c.fut && c.fut.sn && isFinite(Number(c.fut.sn.goldLast)) && Number(c.fut.sn.goldLast) > 0) {
++      var fms = Number(c.fut.sn.goldTs) * 1000;
++      out.items.push({ kind: "fut", p: Number(c.fut.sn.goldLast), ms: fms, uk: bb8qUk(fms), lbl: "futures, GC=F" });
++    }
++  } catch (e) {}
++  out.head = out.items.length ? (out.items[0].kind) : "";   // spot first = the instrument bb10 shows in meta.quote; futures when spot is absent
++  return out;
++}
++function bb10gLastLabel(txt) {
++  var best = { kind: "", at: -1 }, m;
++  BB10G_SPOT_LBL.lastIndex = 0; while ((m = BB10G_SPOT_LBL.exec(txt))) if (m.index > best.at) best = { kind: "spot", at: m.index, len: m[0].length };
++  BB10G_FUT_LBL.lastIndex = 0; while ((m = BB10G_FUT_LBL.exec(txt))) if (m.index > best.at) best = { kind: "fut", at: m.index, len: m[0].length };
++  return best;
++}
++function bb10gSameDay(txt, uk) {
++  // does an "as of" phrase already name this instrument's own time (hh:mm, and the day when the phrase has one)
++  var hm = /(\d{1,2}:\d{2})/.exec(uk || ""), pm = /(\d{1,2})[:.](\d{2})/.exec(txt || "");
++  if (!hm || !pm) return false;
++  var a = hm[1].split(":"), same = Number(a[0]) === Number(pm[1]) && Number(a[1]) === Number(pm[2]);
++  if (!same) return false;
++  var dm = /(\d{1,2})\s+([A-Z][a-z]{2})/.exec(txt), um = /(\d{1,2})\s+([A-Z][a-z]{2})/.exec(uk || "");
++  if (dm && um && (Number(dm[1]) !== Number(um[1]) || dm[2] !== um[2])) return false;
++  var wd = /\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)/.exec(txt), uw = /\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)/.exec(uk || "");
++  if (wd && uw && wd[1] !== uw[1]) return false;
++  return true;
++}
++// one sentence: relabel or drop. Returns { s: text|null, edits: n, dropped: bool }
++function bb10gFixSentence(sent, known, goldSrc, st) {
++  if (!known.items.length) return { s: sent, edits: 0 };
++  var plain = sent.replace(/\[\d+\]/g, "");
++  if (BB10G_ATTR_RE.test(plain)) return { s: sent, edits: 0 };
++  var marks = sent.match(/\[(\d+)\]/g);
++  if (marks && marks.length && marks.every(function (mk) { return goldSrc[mk.slice(1, -1)] === false; })) return { s: sent, edits: 0 };
++  var figs = [], m;
++  BB10G_MONEY_RE.lastIndex = 0;
++  while ((m = BB10G_MONEY_RE.exec(sent))) figs.push({ i: m.index, j: m.index + m[0].length, v: parseFloat(m[1].replace(/,/g, "")) });
++  if (!figs.length) return { s: sent, edits: 0 };
++  var edits = [];
++  for (var k = 0; k < figs.length; k++) {
++    var f = figs[k], hit = known.items.filter(function (it) { return Math.abs(f.v / it.p - 1) <= BB10G_TOL; });
++    if (!hit.length) continue;
++    var prevEnd = k > 0 ? figs[k - 1].j : 0, semi = sent.lastIndexOf(";", f.i);
++    var lstart = Math.max(prevEnd, semi + 1, f.i - 70), left = sent.slice(lstart, f.i);
++    if (BB10G_DESC_RE.test(left) || /\$[\d,.]+\s*(?:to|-|\u2013)\s*$/.test(sent.slice(0, f.i))) continue;
++    var nextStart = k + 1 < figs.length ? figs[k + 1].i : sent.length, after = sent.slice(f.j, nextStart);
++    var lab = bb10gLastLabel(left), adj = BB10G_ADJ_RE.exec(after), have = "";
++    if (adj) have = /^(?:spot|gold-api)/i.test(adj[1]) ? "spot" : "fut";
++    var tight = lab.kind && lab.at >= 0 && !/[,;.\[\]()]/.test(left.slice(lab.at + lab.len));
++    if (!have && lab.kind && lab.at >= left.length - 45 && !/[;.]/.test(left.slice(lab.at))) have = lab.kind;
++    // a sentence that names only one instrument (anywhere in it) and whose figure is that instrument's price is labelled already
++    if (!have) { var sk = (/\bspot\b|gold-api/i.test(plain) ? 1 : 0) + (/\bfutures?\b|GC=F/i.test(plain) ? 2 : 0); if (sk === 1 || sk === 2) { var sKind = sk === 1 ? "spot" : "fut"; if (hit.some(function (x) { return x.kind === sKind; })) have = sKind; } }
++    var right = hit.filter(function (it) { return it.kind === have; })[0];
++    if (have && !right) {
++      // the adjacent label names the other instrument than the figure's own
++      if (tight || adj) return { s: null, edits: 0, dropped: true, why: "mislabelled " + have + " " + f.v };
++      have = "";
++    }
++    var it = right || hit.filter(function (x) { return x.kind === known.head; })[0] || hit[0];
++    var am = BB10G_ASOF_RE.exec(after);
++    if (right) {
++      // labelled with the right instrument: only a wrong time right after the figure is corrected
++      if (am && !bb10gSameDay(am[0], it.uk)) edits.push({ a: f.j, b: f.j + am[0].length, t: " as of " + it.uk });
++      continue;
++    }
++    var ins = " (" + it.lbl + ", as of " + it.uk + ")";
++    if (am) edits.push({ a: f.j, b: f.j + am[0].length, t: ins }); else edits.push({ a: f.j, b: f.j, t: ins });
++  }
++  if (!edits.length) return { s: sent, edits: 0 };
++  var out = sent;
++  edits.sort(function (x, y) { return y.a - x.a; }).forEach(function (e) { out = out.slice(0, e.a) + e.t + out.slice(e.b); });
++  return { s: out, edits: edits.length };
++}
++// which [n] of this answer's list is a gold price source (true), a news or other source (false)
++function bb10gGoldSrcMap(tail) {
++  var srcs = bb10dParseSources(tail), o = {};
++  Object.keys(srcs).forEach(function (n) {
++    var s = srcs[n], l = String(s.link || "") + " " + String(s.name || "");
++    o[n] = /gold-api\.com|finance\.yahoo\.com\/quote\/(?:GC%3DF|GC=F|XAU)/i.test(l) ? true : (/^(?:Dispatch regime model)/i.test(s.name) ? false : (/finance\.yahoo\.com|coinbase|ons\.gov|bea\.gov|federalreserve/i.test(l) ? false : null));
++  });
++  return o;
++}
++function bb10gGold(body, tail, sources, st) {
++  var known = bb10gKnown(st);
++  if (!known.items.length) return null;
++  var gsm = bb10gGoldSrcMap(tail), info = { edits: 0, dropped: [], head: known.head }, before = {}, lost = {};
++  (body.match(/\[(\d+)\]/g) || []).forEach(function (m) { before[m.slice(1, -1)] = 1; });
++  var lines = body.split("\n").map(function (line) {
++    if (!line.trim() || /^\s*(?:Basis|Sources):/.test(line)) return line;
++    var kept = bb10fSents(line).map(function (sent) {
++      var r = bb10gFixSentence(sent, known, gsm, st);
++      if (r.dropped) { info.dropped.push(sent); return null; }
++      info.edits += r.edits;
++      return r.s;
++    }).filter(function (x) { return x !== null; });
++    return kept.join(" ");
++  });
++  var nb = lines.join("\n").replace(/\n{3,}/g, "\n\n").replace(/^\n+/, "");
++  if (nb === body) return null;
++  var after = {}; (nb.match(/\[(\d+)\]/g) || []).forEach(function (m) { after[m.slice(1, -1)] = 1; });
++  Object.keys(before).forEach(function (n) { if (!after[n]) lost[n] = "bb10g"; });
++  var rn = bb10fRenumber(nb, tail, lost, sources);
++  info.removed = rn.removed;
++  return { body: rn.body, tail: rn.tail, sources: rn.sources, info: info };
++}
++
++// ── (P2b) crypto wording ──
++function bb10gSigned(p) {
++  var x = Number(p);
++  if (!isFinite(x)) return "";
++  if (Math.abs(x) < 0.005) return "0.00%";
++  return (x < 0 ? "-" : "+") + Math.abs(x).toFixed(2) + "%";
++}
++// one plain line per coin; period = "month-to-date" etc. when that figure was asked for and is not in the context
++function bb10gCoinLine(coin, s, period, cite) {
++  return bb10cName(coin) + ": " + (period ? period + " figure unavailable; " : "") + "last 24 h " + bb10gSigned(s.changePct) + " at " + bb10bFmtUsd(s.price) +
++    " (" + bb10cBasis(s) + ")" + (cite ? " " + cite : "") + ".";
++}
++var BB10G_PLAIN_RE = /^\s*[A-Z][A-Za-z ]*: (?:[a-z-]+ figure unavailable; )?last 24 h [+-]?\d/;
++var bb10gCover0 = bb10fCover;
++bb10fCover = function (body, tail, sources, st, named) {
++  var rows = st.bb10cRows || {}, ctx = st.bb8qCtx || null, added = [], newSrc = [], add = [];
++  var period = ctx && BB10F_PERIOD[ctx.tfReq] ? ctx.tfReq : "";
++  var nextN = bb10fTailMax(tail), lines = [];
++  var cite = function (coin) {
++    var c = "";
++    try { c = bb10dCiteOf(tail + "\n" + lines.join("\n"), coin); } catch (e) { c = ""; }
++    if (c) return c;
++    var s = rows[coin], o = {};
++    bb10cApplySrc(o, coin, s, bb10cFactText(coin, s));
++    nextN += 1;
++    lines.push(bb10fSourceLine(nextN, o)); newSrc.push(o);
++    return "[" + nextN + "]";
++  };
++  named.forEach(function (coin) {
++    var s = rows[coin];
++    if (!s || !(Number(s.price) > 0) || bb10fCovered(body + "\n" + add.join("\n"), coin)) return;
++    var parts = [];
++    var hasPeriod = period && ctx.tf && ctx.tf.text && ctx.tf.src && bb10cCoinFromSym(ctx.tf.sym) === coin;
++    if (hasPeriod) {
++      var ts = ctx.tf.src, found = "";
++      try { found = (new RegExp("(?:^|\\n)\\[(\\d+)\\][^\\n]*" + String(ts.link).replace(/[.*+?^${}()|[\]\\\/]/g, "\\$&"))).exec(tail + "\n" + lines.join("\n")); found = found ? "[" + found[1] + "]" : ""; } catch (e) { found = ""; }
++      if (!found) { nextN += 1; var o2 = { name: ts.name, link: ts.link, asOf: ts.asOf, detail: ts.detail }; lines.push(bb10fSourceLine(nextN, o2)); newSrc.push(o2); found = "[" + nextN + "]"; }
++      parts.push(String(ctx.tf.text).replace(/\.$/, "") + " " + found + ".");
++    }
++    parts.push(bb10gCoinLine(coin, s, period && !hasPeriod ? BB10F_PERIOD[period] : "", cite(coin)));
++    add.push(parts.join("\n\n"));
++    added.push(coin);
++  });
++  return { add: add, lines: lines, sources: newSrc, added: added };
++};
++// the cite of a coin's own Coinbase line in this sentence or in the list
++function bb10gOwnCite(sent, tail, coin) {
++  var srcs = bb10dParseSources(tail), link = bb10cStatsLink(coin), m = sent.match(/\[(\d+)\]/g) || [];
++  for (var i = 0; i < m.length; i++) { var n = m[i].slice(1, -1); if (srcs[n] && String(srcs[n].link) === link) return "[" + n + "]"; }
++  return "";
++}
++function bb10gUnProxy(sent) {
++  return sent.replace(/^(\s*)As a proxy,\s*(?:Currently|Right now|At the moment),?\s*(\S)/i, function (m, a, c) { return a + "As a proxy, " + c; });
++}
++function bb10gCrypto(body, tail, st) {
++  var rows = st.bb10cRows, named = (st.bb10fNamed || []).filter(function (c) { return rows && rows[c]; }), ctx = st.bb8qCtx || null;
++  var period = ctx && BB10F_PERIOD[ctx.tfReq] ? ctx.tfReq : "", changed = false, repl = {};
++
++  var out = body.split("\n").map(function (line) {
++    if (!line.trim() || /^\s*(?:Basis|Sources):/.test(line)) return line;
++    var parts = [], any = false;
++    bb10fSents(line).forEach(function (sent) {
++      var s2 = sent, cs = [];
++      try { cs = bb10cCoinsIn(sent); } catch (e) { cs = []; }
++      var one = cs.length === 1 ? cs[0] : "";
++      s2 = bb10gUnProxy(s2);
++      if (s2 !== sent) changed = true;
++      // period asked, coin has no period figure: one plain line for it (first single-coin sentence with a figure)
++      if (period && one && rows[one] && named.indexOf(one) >= 0 && !repl[one] && bb10fHasFig(s2) && !BB10G_PLAIN_RE.test(s2)) {
++        var hasP = ctx.tf && ctx.tf.text && ctx.tf.src && bb10cCoinFromSym(ctx.tf.sym) === one, c = bb10gOwnCite(sent, tail, one);
++        if (!hasP && c) { repl[one] = 1; s2 = bb10gCoinLine(one, rows[one], BB10F_PERIOD[period], c); changed = true; any = true; parts.push({ t: s2, own: true }); return; }
++      }
++      parts.push({ t: s2, own: false });
++    });
++    if (!any) return parts.map(function (p) { return p.t; }).join(" ");
++    var res = "", cur = [];
++    parts.forEach(function (p) {
++      if (p.own) { if (cur.length) res += cur.join(" ") + "\n\n"; cur = []; res += p.t + "\n\n"; } else cur.push(p.t);
++    });
++    return (res + cur.join(" ")).replace(/\n\n$/, "");
++  });
++  return changed ? out.join("\n").replace(/\n{3,}/g, "\n\n") : body;
++}
++
++// ── (P2a) gold calendar relevance ──
++var BB10G_CAL_GENERIC_RE = /\b(?:calendar|schedule|scheduled|release|releases|data release|economic data|economic events?|economic indicators?|macro\w*|upcoming (?:data|events|releases)|what(?:'s| is) due|due this week|data this week)\b/i;
++var BB10G_CAL_TOPICS = [
++  [/\b(?:fed|fomc|federal reserve|powell|rate (?:decision|cut|hike)s?|interest rates?)\b/i, /\bFOMC\b|federal reserve|\bFed\b|monetary policy/i],
++  [/\b(?:cpi|inflation|consumer prices?|ppi|producer prices?)\b/i, /\b(?:CPI|CPIH|inflation|producer price|PPI)\b/i],
++  [/\b(?:jobs?|payrolls?|nfp|employment|unemployment|labou?r market|wages?)\b/i, /\b(?:labou?r market|employment|payrolls?|nonfarm)\b/i],
++  [/\bgdp\b|\beconomic growth\b/i, /\bGDP\b/i],
++  [/\b(?:pce|personal income|personal spending)\b/i, /personal income|\bPCE\b/i],
++  [/\bretail sales\b/i, /retail sales/i],
++  [/\b(?:trade (?:deficit|balance)|international trade)\b/i, /international trade/i]
++];
++var BB10G_GOLD_REL_RE = /\bFOMC\b|federal reserve|\bFed\b|\bCPI\b|consumer price|non-?farm|payrolls?|employment situation|\bPCE\b|personal income|personal consumption/i;
++function bb10gCalKeep(e, q, todayYmd) {
++  var text = String(e.text || ""), src = String(e.source || e.kind || "");
++  if (BB10G_CAL_GENERIC_RE.test(q)) return true;
++  for (var i = 0; i < BB10G_CAL_TOPICS.length; i++) if (BB10G_CAL_TOPICS[i][0].test(q) && BB10G_CAL_TOPICS[i][1].test(text)) return true;
++  if (/\bons\b/i.test(q) && /^ONS$/i.test(src)) return true;
++  if (/\bbea\b/i.test(q) && /^BEA$/i.test(src)) return true;
++  if (/\bbls\b/i.test(q) && /^BLS$/i.test(src)) return true;
++  if (/^ONS$/i.test(src)) return false;
++  if (!BB10G_GOLD_REL_RE.test(text) && !/^FOMC$/i.test(src)) return false;
++  var d = Date.parse(String(e.date) + "T12:00:00Z"), t = Date.parse(String(todayYmd) + "T12:00:00Z");
++  if (!isFinite(d) || !isFinite(t)) return false;
++  var days = Math.round((d - t) / 86400000);
++  return days >= 0 && days <= 4;
++}
++function bb10gCal(ctx, st) {
++  if (!ctx || !ctx.gold || !ctx.bb8rCal || !Array.isArray(ctx.bb8rCal.events) || !ctx.bb8rCal.events.length) return ctx;
++  var q = String(ctx.q || ""), today = bb8rUkYmd(Date.now()), keep = [], drop = [];
++  ctx.bb8rCal.events.forEach(function (e) { (bb10gCalKeep(e, q, today) ? keep : drop).push(e); });
++  if (!drop.length) return ctx;
++  var gone = drop.map(function (e) { return e.src; }).filter(Boolean);
++  ctx.facts = (ctx.facts || []).filter(function (f) { return !(f && gone.indexOf(f.src) >= 0); });
++  ctx.sources = (ctx.sources || []).filter(function (s) { return gone.indexOf(s) < 0; });
++  ctx.bb8rCal.events = keep;
++  if (!keep.length) ctx.bb8rCal.checked = [];
++  if (st) st.bb10gCalDropped = drop.map(function (e) { return e.text; });
++  return ctx;
++}
++// the spot source says "spot" in the list, next to its own as-of time
++function bb10gSpotName(ctx) {
++  try { if (ctx && ctx.gold && ctx.spot && ctx.spot.src && /^gold-api\.com$/i.test(String(ctx.spot.src.name || ""))) ctx.spot.src.name = "gold-api.com spot"; } catch (e) {}
++  return ctx;
++}
++
++function bb10gApply(r, st) {
++  if (!r || typeof r !== "object" || typeof r.reply !== "string" || !st) return r;
++  var sp = bb10fSplit(r.reply), body = sp.body, tail = sp.tail, sources = r.sources, info = {};
++  var b0 = body;
++  // the doubled prefix, wherever it appears (it only ever came from bb8o's proxy label stacked on a model "Currently,")
++  body = body.split("\n").map(function (l) { return /As a proxy,\s*(?:Currently|Right now|At the moment),/i.test(l) ? l.replace(/(^|[.!?\]]\s+)As a proxy,\s*(?:Currently|Right now|At the moment),\s*(\S)/gi, function (m, a, c) { return a + "As a proxy, " + c; }) : l; }).join("\n");
++  if (st.bb10cRows && Array.isArray(st.bb10fNamed) && st.bb10fNamed.length) {
++    try { body = bb10gCrypto(body, tail, st); } catch (e) { console.warn("bb10g crypto", e && e.message); }
++  }
++  if (st.bb8qCtx && st.bb8qCtx.gold) {
++    try {
++      var g = bb10gGold(body, tail, sources, st);
++      if (g) { body = g.body; tail = g.tail; sources = g.sources; info.gold = g.info; }
++    } catch (e) { console.warn("bb10g gold", e && e.message); }
++  }
++  if (body === sp.body && tail === sp.tail) return r;
++  var o = Object.assign({}, r);
++  o.reply = body + tail;
++  if (sources !== r.sources) o.sources = sources;
++  st.bb10gApplied = info;
++  return o;
++}
++try {
++  var bb10gBuild0 = bb8qBuild;
++  bb8qBuild = async function (st, body) {
++    var ctx = await bb10gBuild0.apply(this, arguments);
++    try { bb10gSpotName(ctx); } catch (e) {}
++    try { bb10gCal(ctx, st); } catch (e) { console.warn("bb10g cal", e && e.message); }
++    return ctx;
++  };
++  var bb10gFin0 = bb8qFinish;
++  bb8qFinish = function (out, st) {
++    var r = bb10gFin0.apply(this, arguments);
++    try { return bb10gApply(r, st); } catch (e) { console.warn("bb10g finish", e && e.message); return r; }
++  };
++} catch (e) { console.warn("bb10g Ask hooks skipped", e && e.message); }
++// BB10G_JS_END
