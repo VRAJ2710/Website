@@ -1,0 +1,68 @@
+--- /workspace/dispatch-live-bb10g/server.js	2026-10-25 08:28:34.958794744 +0000
++++ /workspace/dispatch-live-bb10i/server.js	2026-10-25 16:51:44.543380879 +0000
+@@ -1,3 +1,4 @@
++const BB10I_MAINTENANCE_ON = true; // set false to turn maintenance off (restart to apply)
+ const http = require("http");
+ // rt25s: process-wide CoinGecko backoff. During a 429 episode, answer locally instead of re-hitting the API.
+ (() => {
+@@ -23492,3 +23493,60 @@
+   };
+ } catch (e) { console.warn("bb10g Ask hooks skipped", e && e.message); }
+ // BB10G_JS_END
++// ── bb10i: site-wide maintenance page (flag: BB10I_MAINTENANCE_ON, first line of the file) ─────────
++// Outermost request handler (it wraps every earlier `handle`, so it runs before the canonical redirect, static files and every route).
++// Flag false: one boolean test, then the previous handler untouched. Flag true: a path test first; the session and admin lookup only run for
++// non-exempt paths and only when a dispatch_session cookie is present (guests without a cookie get the 503 with no lookup at all).
++var BB10I_RETRY_AFTER = "3600";
++var BB10I_JSON_BODY = '{"error":"maintenance"}';
++var BB10I_HTML_BODY = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark">' +
++  '<title>The Dispatch \u2014 Under maintenance</title>' +
++  '<style>html,body{height:100%;margin:0}body{background:#0b0d10;color:#e8e6df;display:flex;align-items:center;justify-content:center;text-align:center;padding:24px;box-sizing:border-box;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}' +
++  'main{max-width:30rem}.k{color:#d4a93a;letter-spacing:.32em;font-size:.8rem;font-weight:600;text-transform:uppercase;margin:0 0 1.4rem}' +
++  'h1{font:400 2.4rem/1.2 Georgia,"Times New Roman",Times,serif;margin:0 0 1rem;color:#f3f0e8}p{margin:0;color:#b9b6ad}' +
++  '.o{margin-top:3rem;font-size:.75rem}.o a{color:#6f6d66;text-decoration:none;border-bottom:1px solid #2a2c30}.o a:hover{color:#d4a93a;border-color:#d4a93a}</style></head>' +
++  '<body><main><p class="k">The Dispatch</p><h1>Under maintenance</h1><p>We are making improvements and will be back shortly.</p>' +
++  '<p class="o"><a href="/__auth/login" rel="nofollow">Owner sign in</a></p></main></body></html>';
++var BB10I_AUTH_PATHS = new Set(["/__auth/login", "/__auth/logout", "/__auth/recover", "/__auth/reset"]);
++function bb10iPath(req) {
++  try { return new URL(req.url || "/", "http://localhost").pathname; } catch (e) { return null; }
++}
++function bb10iExempt(req, p) {
++  var m = req.method;
++  if (p === "/api/stripe/webhook") return true;                                    // raw-body handler, order and bytes untouched
++  if (m === "GET" || m === "HEAD") {
++    var h = p.length > 1 && p.charAt(p.length - 1) === "/" ? p.slice(0, -1) : p;  // same normalisation as bb5bEarly
++    if (h === "/health" || h === "/healthz" || h === "/api/health") return true;
++  }
++  if ((m === "GET" || m === "POST") && BB10I_AUTH_PATHS.has(p)) return true;       // the owner sign-in flow (page is self-contained: no assets)
++  return false;
++}
++function bb10iSend(req, res, p) {
++  var api = p !== null && (p === "/api" || p.indexOf("/api/") === 0);
++  var body = api ? BB10I_JSON_BODY : BB10I_HTML_BODY;
++  var hd = {
++    "Content-Type": api ? "application/json; charset=utf-8" : "text/html; charset=utf-8",
++    "Cache-Control": "no-store",
++    "Retry-After": BB10I_RETRY_AFTER,
++    "Content-Length": Buffer.byteLength(body),
++    "X-Content-Type-Options": "nosniff"
++  };
++  if (!api) hd["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
++  res.writeHead(503, hd);
++  res.end(req.method === "HEAD" ? undefined : body);
++}
++var bb10iHandle0 = handle;
++handle = async function (req, res) {
++  if (!BB10I_MAINTENANCE_ON) return bb10iHandle0.apply(this, arguments);
++  var p = bb10iPath(req);
++  if (p !== null && bb10iExempt(req, p)) return bb10iHandle0.apply(this, arguments);
++  try {
++    var ck = req.headers && req.headers.cookie;
++    if (ck && dispatchSessionTokens(ck).length) {
++      var u = await currentUser(req);
++      if (isAdminUser(u)) return bb10iHandle0.apply(this, arguments);   // server-side session -> existing admin check; never a client flag
++    }
++  } catch (e) { /* fail closed: the maintenance page */ }
++  return bb10iSend(req, res, p);
++};
++// BB10I_JS_END
