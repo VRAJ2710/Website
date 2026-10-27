@@ -1,0 +1,33 @@
+--- /workspace/dispatch-live-bb12c/server.js	2026-10-27 12:06:11.132041106 +0000
++++ /workspace/dispatch-live-bb12d/server.js	2026-10-27 12:12:53.455001708 +0000
+@@ -24332,6 +24332,12 @@
+   if (xf.length) { k = bb12bIp(xf[xf.length - 1]); if (k) return k; }
+   return bb12bIp(req && req.socket && req.socket.remoteAddress) || "unknown";
+ }
++function bb12dDiag(req) {                                             // bb12d: two diagnostic response headers for the monitor routes. NEVER an address or part of one, never the XFF value: only a count and a word.
++  var raw = String(((req && req.headers) || {})["x-forwarded-for"] || "");   // node already joins repeated X-Forwarded-For lines with ", "
++  var n = raw.split(",").map(function (x) { return x.trim(); }).filter(Boolean).length;
++  var tail = raw.slice(-2048).split(",").map(function (x) { return x.trim(); }).filter(Boolean);   // same window and parsing as bb12cClientKey
++  return { "X-Dispatch-Xff-N": String(n), "X-Dispatch-RL-Key": tail.length && bb12bIp(tail[tail.length - 1]) ? "last" : "socket" };
++}
+ function bb12bSeedPull(seed) {                                            // bb12b: the embedded seed already is a market pull of its own UK day (fetched 2026-10-27 09:52 UTC), so a cold start on that UK day does not pull again; later UK days pull once as designed
+   var eps = BB11_TICKERS.map(function (t) { var m = seed.market[t]; return m && !("error" in m) && bb11Num(m.fetched_epoch) ? m.fetched_epoch : null; }).filter(function (x) { return x !== null; });
+   if (!eps.length) return { uk_day: null, at: null, ok: null, fetched: 0, failed: 0 };
+@@ -24541,7 +24547,7 @@
+   h["Content-Length"] = Buffer.byteLength(body);
+   res.writeHead(status, h); res.end(req.method === "HEAD" ? undefined : body);
+ }
+-function bb11Err(req, res, status, code, extra) { bb11Send(req, res, status, JSON.stringify(Object.assign({ ok: false, error: code }, extra && extra.body)), extra && extra.headers); }
++function bb11Err(req, res, status, code, extra) { bb11Send(req, res, status, JSON.stringify(Object.assign({ ok: false, error: code }, extra && extra.body)), Object.assign({}, extra && extra.headers, bb12dDiag(req))); }
+ async function bb11Route(req, res) {
+   var raw = String(req.url || "").split(/[?#]/)[0];
+   if (raw !== "/api/monitor" && raw.indexOf("/api/monitor/") !== 0) return false;
+@@ -24566,7 +24572,7 @@
+   var rp = bb11Refresh(st);                                              // starts (or joins) a refresh when something is due; never awaited by the request
+   var hit = bb11Body(st, tkr === null ? "radar" : "detail", now, limit, tkr);
+   if (rp) rp.catch(function () { });
+-  var h = Object.assign({ "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=300, stale-while-revalidate=600", ETag: hit.etag, "X-Robots-Tag": "noindex" }, SECURITY_HEADERS);
++  var h = Object.assign({ "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=300, stale-while-revalidate=600", ETag: hit.etag, "X-Robots-Tag": "noindex" }, SECURITY_HEADERS, bb12dDiag(req));
+   if (req.headers["if-none-match"] && String(req.headers["if-none-match"]).split(",").some(function (x) { return x.trim() === hit.etag; })) { delete h["Content-Type"]; res.writeHead(304, h); res.end(); return true; }
+   h["Content-Length"] = hit.len;
+   res.writeHead(200, h); res.end(req.method === "HEAD" ? undefined : hit.body);
