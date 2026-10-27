@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# deploy-chat88: apply bb12 (server.js) + rt62j + rt63 (app.js) + index token chat88 on top of live maint2/bb10j / chat86, in the Replit Shell.
+# deploy-chat88: apply bb12b (server.js) + rt62j + rt63 (app.js) + index token chat88 on top of live maint2/bb10j / chat86, in the Replit Shell.
 # Does NOT: run the server, npm start, git, DB, .replit, package.json, env vars, Stripe. Click Republish yourself afterwards.
 # Usage: bash deploy.sh [--dry-run] [--dir /path/to/project]
 #   --dry-run  do everything in a scratch dir and verify, but do not touch the live files.
@@ -11,13 +11,13 @@ BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/${REF}/deploy-chat8
 LIVE_SERVER_MD5=92a2ce51dfc1bf3e16466d7451d9ae1a   # maint2 / bb10j
 LIVE_APP_MD5=21f3cee5da20d9fc2f2f03d21623dcb4      # chat86
 LIVE_INDEX_MD5=35084b102b38f99b582838aa19dadfad    # chat86
-NEW_SERVER_MD5=a1a9e785e744fe023eb7be8bbba6d854
-NEW_SERVER_SHA256=5064181a3f8905654f11abaa7039b011ee2d3152e0e88ed0b40217fbcf5678a4
+NEW_SERVER_MD5=5d4cb84f987f2e189d0a298e6f44025c
+NEW_SERVER_SHA256=ebdca89cd2a3b5f5328526a1308125499d80ba0ab74b62de3d06f5d642638662
 NEW_APP_MD5=dfd17c656fe880907efb073be5e03a3c
 NEW_APP_SHA256=522bcbb18f5bd3faa9126a4a252cb903d24d52e0bce86fa36f7af17c81458e71
 NEW_INDEX_MD5=66b40f0face11c13288c3e83f6ee86ec
 NEW_INDEX_SHA256=fd4309b9dfbdc1a7ce58b9aeee022beb5d2f6880406735d7b5b5e9daa5919fab
-SHA_PATCH_BB12=74a0c926755302c2414e7838e94bc8499459a4c9379adf86ad5650124877ecab
+SHA_PATCH_BB12B=b92d237c261e6faa7ad5c8f87d76192a3dd15adf9c4c442128c47cbcf030c300
 SHA_PATCH_RT62J=940abbd7281e8117673e9dbc6385e39771bbadb7c3b37afe53d7375f817b0b30
 SHA_PATCH_RT63=99c78d25d161701cb9336def2a77b41b2b10f2336ed2f53af07624d2391e5603
 SHA_PATCH_BUMP88=0de1163d41448fdfca0716f008e211319c827c862d20da80d4fe0a556b079d39
@@ -69,7 +69,7 @@ say "current md5: server $sm | app $am | index $im"
 
 # ---- 2. idempotency ----
 if [ "$sm" = "$NEW_SERVER_MD5" ] && [ "$am" = "$NEW_APP_MD5" ] && [ "$im" = "$NEW_INDEX_MD5" ]; then
-  say "REFUSE: already applied (all three files are at the chat88/bb12 md5s). Nothing to do. Click Republish if not done yet."; exit 0
+  say "REFUSE: already applied (all three files are at the chat88/bb12b md5s). Nothing to do. Click Republish if not done yet."; exit 0
 fi
 if [ "$sm" = "$NEW_SERVER_MD5" ] || [ "$am" = "$NEW_APP_MD5" ] || [ "$im" = "$NEW_INDEX_MD5" ]; then
   die "PARTIAL state: some files already patched, some not (server $sm, app $am, index $im). Do not continue; report this."
@@ -88,11 +88,11 @@ getp(){ # file sha
   [ "$(sha256of "$P/$1")" = "$2" ] || die "sha256 mismatch for $1 (got $(sha256of "$P/$1"), want $2)"
   say "patch file ok: $1 sha256 ${2:0:16}…"
 }
-getp patch_bb12.py "$SHA_PATCH_BB12"; getp patch_rt62j.py "$SHA_PATCH_RT62J"; getp patch_rt63.py "$SHA_PATCH_RT63"; getp bump_chat88.py "$SHA_PATCH_BUMP88"
+getp patch_bb12b.py "$SHA_PATCH_BB12B"; getp patch_rt62j.py "$SHA_PATCH_RT62J"; getp patch_rt63.py "$SHA_PATCH_RT63"; getp bump_chat88.py "$SHA_PATCH_BUMP88"
 
 # ---- 4. dry run in scratch ----
 cp "$SERVER" "$S/server.js"; cp "$APP" "$S/app.js"; cp "$INDEX" "$S/index.html"
-python3 "$P/patch_bb12.py" "$S" || die "bb12 patch script failed"
+python3 "$P/patch_bb12b.py" "$S" || die "bb12b patch script failed"
 python3 "$P/patch_rt62j.py" "$S/app.js" "$S/index.html" || die "rt62j patch script failed"
 python3 "$P/patch_rt63.py" "$S/app.js" "$S/index.html" || die "rt63 patch script failed"
 python3 "$P/bump_chat88.py" "$S/index.html" || die "chat88 index token bump failed"

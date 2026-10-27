@@ -1,4 +1,11 @@
-"""bb12: ONE combined patch on the live server bb10j (md5 92a2ce51dfc1bf3e16466d7451d9ae1a, 23580 lines). Applies, in this order:
+"""bb12b = bb12 + DevOps review fixes, as ONE patch on the live server bb10j (md5 92a2ce51dfc1bf3e16466d7451d9ae1a, 23580 lines). Output is bb12 (below) plus, inside the bb11 block only:
+ (a) /api/monitor rate-limit key never trusts a client-set first X-Forwarded-For entry: cf-connecting-ip (if it looks like an IP) > XFF entry before the last (2+ entries) > only XFF entry > socket address; IPv6/port forms normalised, key capped.
+     Per-client limit 120/min (was 240) plus a global backstop of 2000/min for all monitor routes (same FixedWindowRateLimiter, no timers). 429 body/headers unchanged.
+ (b) BB11_FACTS_MAX_BYTES = 25 MB (26214400). Still 4 companyfacts/day, concurrency 4.
+ (c) Radar list and per-ticker detail: Cache-Control "public, max-age=300, stale-while-revalidate=600" (weak ETag / 304 unchanged).
+ (d) Cold start: the seed counts as a market pull of its own UK day (refresh.last_market_pull = {uk_day, at, ok:true, fetched, failed:0, seed:true}); same-day cold start does not pull, later UK days pull once. Persisted-file restore unchanged.
+--- bb12 description follows ---
+bb12: ONE combined patch on the live server bb10j (md5 92a2ce51dfc1bf3e16466d7451d9ae1a, 23580 lines). Applies, in this order:
  1. bb11 + bb11b: Capital Sustainability Monitor data side (GET|HEAD /api/monitor, /api/monitor/{TICKER}), ONE market adapter (bb11bMarketAdapter) and the delayed-data `label`.
     Block inserted after // BB10J_JS_END (inside bb10i's maintenance wrapper, via bb10iHandle0). Content identical to /workspace/dispatch-live-bb11b.
  2. bb10h: stale crypto Ask fix (build-id keys + TTLs), doubled BTC paragraph, brief/intelligence/lenses period labels, gold spot label.
@@ -10,7 +17,7 @@
     /research/:slug editorial route so these paths win. Everything else under /research, /brief, /report is unchanged. Maintenance behaviour is unchanged
     (the route sits inside the maintenance wrapper: guests 503 except "/", admin gets the shell).
 Server-only. No new packages, tables, timers/cron/polling, env values (DISPATCH_SEC_UA from bb11 stays optional) or LLM calls. New names are bb12-prefixed (bb10h/bb11 names unchanged).
-Usage: python3 patch_bb12.py <folder containing server.js> [--check]
+Usage: python3 patch_bb12b.py <folder containing server.js> [--check]
 --check is a dry run (nothing written). A second run prints REFUSE and exits 0. A base md5 mismatch only WARNs. CRLF files stay CRLF."""
 import sys, os, hashlib, subprocess
 BASE_MD5 = "92a2ce51dfc1bf3e16466d7451d9ae1a"
@@ -29,7 +36,7 @@ BB11 = r'''// ── bb11: Capital Sustainability Monitor, data side (GET /api/m
 var BB11_VERSION = "bb11-1";
 var BB11_CAP = 25;                 // hard cap on instruments per pull / per request (plan: 25)
 var BB11_LIMIT_DEFAULT = 10, BB11_LIMIT_MAX = 25;
-var BB11_FETCH_MS = 8000, BB11_SEC_MS = 12000, BB11_FACTS_MS = 60000, BB11_FACTS_MAX_BYTES = 64 * 1024 * 1024;
+var BB11_FETCH_MS = 8000, BB11_SEC_MS = 12000, BB11_FACTS_MS = 60000, BB11_FACTS_MAX_BYTES = 25 * 1024 * 1024;
 var BB11_MAX_FACTS_PER_DAY = 4;    // company-facts downloads per UK day (each is 1-15 MB)
 var BB11_CONCURRENCY = 4;
 var BB11_FILE = require("path").join(require("os").tmpdir(), "dispatch-monitor-v1.json");
@@ -418,13 +425,44 @@ var bb11SecGet = async function (url, ua, ims, timeoutMs, maxBytes) {  // the ON
   var text = await withTimeout(readTextCapped(resp, maxBytes), timeoutMs, "SEC read timed out");
   return { status: 200, text: text, lastModified: resp.headers.get("last-modified") || null };
 };
-var bb11Rl = new FixedWindowRateLimiter({ limit: 240, windowMs: 60000, maxKeys: 1024 });
+var bb11Rl = new FixedWindowRateLimiter({ limit: 120, windowMs: 60000, maxKeys: 1024 });   // bb12b: per client 120/min (was 240)
+var bb12bGlobalRl = new FixedWindowRateLimiter({ limit: 2000, windowMs: 60000, maxKeys: 4 });   // bb12b: backstop for all monitor routes together, 2000/min; same fixed-window mechanism, no timers
+function bb12bOctets(s) { var o = s.split("."); return o.length === 4 && o.every(function (x) { return /^\d{1,3}$/.test(x) && +x <= 255; }) ? o.map(Number) : null; }
+function bb12bIp(raw) {                                                   // bb12b: one address -> normalised key text (no port/brackets/zone, v4-mapped v6 -> v4, v6 -> 8 lowercase groups), or null if it does not look like an IP
+  var s = String(raw == null ? "" : raw).trim().toLowerCase(), m, o;
+  if (!s || s.length > 64) return null;
+  if ((m = /^\[([^\]]+)\](?::\d{1,5})?$/.exec(s))) s = m[1];
+  else if (/^\d{1,3}(?:\.\d{1,3}){3}:\d{1,5}$/.test(s)) s = s.slice(0, s.lastIndexOf(":"));
+  if (s.indexOf("%") > 0) s = s.slice(0, s.indexOf("%"));
+  if ((m = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(s))) s = m[1];
+  if (s.indexOf(":") < 0) { o = bb12bOctets(s); return o ? o.join(".") : null; }
+  if (!/^[0-9a-f:.]+$/.test(s) || s.indexOf(":::") >= 0 || s.split("::").length > 2) return null;
+  if ((m = /(\d{1,3}(?:\.\d{1,3}){3})$/.exec(s))) { o = bb12bOctets(m[1]); if (!o) return null; s = s.slice(0, s.length - m[1].length) + ((o[0] << 8) | o[1]).toString(16) + ":" + ((o[2] << 8) | o[3]).toString(16); }
+  var parts = s.split("::"), a = parts[0] ? parts[0].split(":") : [], b = parts.length > 1 && parts[1] ? parts[1].split(":") : [], all = a.concat(b);
+  if (!all.every(function (h) { return /^[0-9a-f]{1,4}$/.test(h); })) return null;
+  if (parts.length === 1 ? all.length !== 8 : all.length > 7) return null;
+  while (a.length + b.length < 8) a.push("0");
+  return a.concat(b).map(function (h) { return h.replace(/^0+(?=.)/, ""); }).join(":");
+}
+function bb12bClientKey(req) {                                            // bb12b: rate-limit key for the monitor routes. Never the client-set first X-Forwarded-For entry.
+  var h = (req && req.headers) || {}, k = bb12bIp(h["cf-connecting-ip"]);  // 1) cf-connecting-ip, when it looks like an IP
+  if (k) return k;
+  var xf = String(h["x-forwarded-for"] || "").slice(-2048).split(",").map(function (x) { return x.trim(); }).filter(Boolean);
+  if (xf.length) { k = bb12bIp(xf.length >= 2 ? xf[xf.length - 2] : xf[0]); if (k) return k; }   // 2) entry before the last (Google frontend appends client, then its own hop); 3) the only entry
+  return bb12bIp(req && req.socket && req.socket.remoteAddress) || "unknown";   // 4) socket address
+}
+function bb12bSeedPull(seed) {                                            // bb12b: the embedded seed already is a market pull of its own UK day (fetched 2026-10-27 09:52 UTC), so a cold start on that UK day does not pull again; later UK days pull once as designed
+  var eps = BB11_TICKERS.map(function (t) { var m = seed.market[t]; return m && !("error" in m) && bb11Num(m.fetched_epoch) ? m.fetched_epoch : null; }).filter(function (x) { return x !== null; });
+  if (!eps.length) return { uk_day: null, at: null, ok: null, fetched: 0, failed: 0 };
+  var at = Math.max.apply(null, eps) * 1000;
+  return { uk_day: bb11UkDay(at), at: new Date(at).toISOString(), ok: true, fetched: eps.length, failed: BB11_TICKERS.length - eps.length, seed: true };
+}
 var bb11DayFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" });
 function bb11UkDay(ms) { var o = {}; bb11DayFmt.formatToParts(new Date(ms)).forEach(function (p) { o[p.type] = p.value; }); return o.year + "-" + o.month + "-" + o.day; }
 function bb11Utc(ms) { return new Date(ms).toISOString().slice(0, 16).replace("T", " ") + " UTC"; }
 var bb11St = null, bb11LoadP = null, bb11Inflight = null;
 function bb11Init() {
-  var seed = BB11_SEED, st = { v: 1, rev: 1, live: false, companies: {}, market: {}, pull: { uk_day: null, at: null, ok: null, fetched: 0, failed: 0 }, sec: { day: null, facts_today: 0, checked: {}, new_filings: [], errors: [] }, persist: { ok: null, error: null, saved_at: null }, view: null, viewKey: null, bodies: new Map(), perr: null };
+  var seed = BB11_SEED, st = { v: 1, rev: 1, live: false, companies: {}, market: {}, pull: bb12bSeedPull(seed), sec: { day: null, facts_today: 0, checked: {}, new_filings: [], errors: [] }, persist: { ok: null, error: null, saved_at: null }, view: null, viewKey: null, bodies: new Map(), perr: null };
   BB11_TICKERS.forEach(function (t) { st.companies[t] = seed.companies[t]; st.market[t] = seed.market[t]; });
   return st;
 }
@@ -446,6 +484,7 @@ function bb11Merge(st, j) {                                              // adop
     var m = j.market && j.market[t]; if (bb11GoodMarket(m) && m.fetched_epoch >= (st.market[t].fetched_epoch || 0)) st.market[t] = m;
   });
   if (j.pull && typeof j.pull === "object" && (j.pull.uk_day === null || /^\d{4}-\d{2}-\d{2}$/.test(String(j.pull.uk_day)))) st.pull = { uk_day: j.pull.uk_day || null, at: typeof j.pull.at === "string" ? j.pull.at : null, ok: j.pull.ok === true ? true : (j.pull.ok === false ? false : null), fetched: bb11Num(j.pull.fetched) ? j.pull.fetched : 0, failed: bb11Num(j.pull.failed) ? j.pull.failed : 0 };
+  if (j.pull && st.pull && j.pull.seed === true && st.pull.uk_day === j.pull.uk_day && st.pull.ok === true && j.pull.at === bb12bSeedPull(BB11_SEED).at) st.pull.seed = true;   // bb12b: a persisted seed marker survives a restore
   var s = j.sec;
   if (s && typeof s === "object") {
     st.sec.day = typeof s.day === "string" ? s.day : null; st.sec.facts_today = bb11Num(s.facts_today) ? s.facts_today : 0;
@@ -586,7 +625,7 @@ function bb11Meta(st, now) {
       market: { source: BB11_MARKET_SOURCE, label: bb11bLabel(eps.length ? bb11Utc(Math.max.apply(null, eps) * 1000) : null), last_bar_date_min: bars[0] || null, last_bar_date_max: bars[bars.length - 1] || null, fetched_utc_oldest: eps.length ? bb11Utc(Math.min.apply(null, eps) * 1000) : null, fetched_utc_newest: eps.length ? bb11Utc(Math.max.apply(null, eps) * 1000) : null, stale: stale },
       filings: { source: BB11_SEC_SOURCE, latest_period_end_min: flings[0], latest_period_end_max: flings[flings.length - 1], seed_retrieved: BB11_SEED.sec_retrieved }
     },
-    refresh: { in_progress: !!bb11Inflight, market_pulls_per_uk_day: 1, market_pull_due: bb11MarketDue(st, now), last_market_pull: { uk_day: st.pull.uk_day, at: st.pull.at, ok: st.pull.ok, fetched: st.pull.fetched, failed: st.pull.failed }, instrument_cap: BB11_CAP },
+    refresh: { in_progress: !!bb11Inflight, market_pulls_per_uk_day: 1, market_pull_due: bb11MarketDue(st, now), last_market_pull: { uk_day: st.pull.uk_day, at: st.pull.at, ok: st.pull.ok, fetched: st.pull.fetched, failed: st.pull.failed, seed: st.pull.seed === true }, instrument_cap: BB11_CAP },
     sec: sec, persistence: { ok: st.persist.ok, saved_at: st.persist.saved_at }
   };
 }
@@ -627,7 +666,7 @@ async function bb11Route(req, res) {
   if (raw !== "/api/monitor" && raw.indexOf("/api/monitor/") !== 0) return false;
   var p = raw.length > 1 && raw.charAt(raw.length - 1) === "/" ? raw.slice(0, -1) : raw;
   if (req.method !== "GET" && req.method !== "HEAD") { bb11Err(req, res, 405, "method_not_allowed", { headers: { Allow: "GET, HEAD" } }); return true; }
-  if (!bb11Rl.allow(bb10Addr(req))) { bb11Err(req, res, 429, "rate_limited", { headers: { "Retry-After": "60" } }); return true; }
+  if (!bb11Rl.allow(bb12bClientKey(req), bb11Now()) || !bb12bGlobalRl.allow("monitor", bb11Now())) { bb11Err(req, res, 429, "rate_limited", { headers: { "Retry-After": "60" } }); return true; }
   var tkr = null;
   if (p !== "/api/monitor") {
     var seg = p.slice("/api/monitor/".length);
@@ -646,7 +685,7 @@ async function bb11Route(req, res) {
   var rp = bb11Refresh(st);                                              // starts (or joins) a refresh when something is due; never awaited by the request
   var hit = bb11Body(st, tkr === null ? "radar" : "detail", now, limit, tkr);
   if (rp) rp.catch(function () { });
-  var h = Object.assign({ "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=60", ETag: hit.etag, "X-Robots-Tag": "noindex" }, SECURITY_HEADERS);
+  var h = Object.assign({ "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=300, stale-while-revalidate=600", ETag: hit.etag, "X-Robots-Tag": "noindex" }, SECURITY_HEADERS);
   if (req.headers["if-none-match"] && String(req.headers["if-none-match"]).split(",").some(function (x) { return x.trim() === hit.etag; })) { delete h["Content-Type"]; res.writeHead(304, h); res.end(); return true; }
   h["Content-Length"] = hit.len;
   res.writeHead(200, h); res.end(req.method === "HEAD" ? undefined : hit.body);
@@ -1000,26 +1039,26 @@ EDITS = [
 
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]; check = "--check" in sys.argv
-    if not args: print("usage: patch_bb12.py <folder> [--check]"); return 0
+    if not args: print("usage: patch_bb12b.py <folder> [--check]"); return 0
     f = os.path.join(args[0], "server.js")
     if not os.path.isfile(f): print("REFUSE: no server.js in " + args[0]); return 0
     raw = open(f, "rb").read(); m0 = md5(raw)
-    print(f"bb12: {f} md5 {m0} lines {raw.count(b'\n')}")
+    print(f"bb12b: {f} md5 {m0} lines {raw.count(b'\n')}")
     if m0 != BASE_MD5: print(f"WARN: md5 {m0} != expected base {BASE_MD5} (bb10j live); continuing on anchors")
     crlf = b"\r\n" in raw; s = raw.decode("utf-8").replace("\r\n", "\n")
-    if "// ── bb11:" in s or "BB11_JS_END" in s or "// ── bb10h:" in s or "BB10H_JS_END" in s or "// bb12:" in s: print("REFUSE: bb12 (or bb10h / bb11) already applied"); return 0
+    if "// ── bb11:" in s or "BB11_JS_END" in s or "// ── bb10h:" in s or "BB10H_JS_END" in s or "// bb12:" in s: print("REFUSE: bb12b (or bb12 / bb10h / bb11) already applied"); return 0
     if "BB10I_MAINTENANCE_ON" not in s or "var bb10iHandle0" not in s or "bb10jSend" not in s: print("REFUSE: bb10i/bb10j is not applied (BB10I_MAINTENANCE_ON / bb10iHandle0 / bb10jSend missing)"); return 0
     for a, b in EDITS:
         n = s.count(a)
         if n != 1: print(f"REFUSE: anchor found {n}x: {a[:90]!r}"); return 0
         s = s.replace(a, b, 1)
     out = s.replace("\n", "\r\n") if crlf else s
-    data = out.encode("utf-8"); tmp = f + ".bb12.tmp.js"; open(tmp, "wb").write(data)
+    data = out.encode("utf-8"); tmp = f + ".bb12b.tmp.js"; open(tmp, "wb").write(data)
     r = subprocess.run(["node", "--check", tmp], capture_output=True, text=True)
     if r.returncode != 0:
         os.remove(tmp); print("REFUSE: node --check failed\n" + r.stderr); return 0
     print("node --check: ok")
     if check:
         os.remove(tmp); print(f"--check: dry run ok, would write md5 {md5(data)} sha256 {sha(data)} lines {data.count(b'\n')}"); return 0
-    os.replace(tmp, f); print(f"bb12: wrote {f} md5 {md5(data)} sha256 {sha(data)} lines {data.count(b'\n')}"); return 0
+    os.replace(tmp, f); print(f"bb12b: wrote {f} md5 {md5(data)} sha256 {sha(data)} lines {data.count(b'\n')}"); return 0
 if __name__ == "__main__": sys.exit(main())

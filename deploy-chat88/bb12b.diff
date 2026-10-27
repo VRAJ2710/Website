@@ -1,0 +1,93 @@
+--- /workspace/dispatch-live-bb12/server.js	2026-10-27 11:14:34.470765745 +0000
++++ /workspace/dispatch-live-bb12b/server.js	2026-10-27 11:29:45.708411683 +0000
+@@ -23918,7 +23918,7 @@
+ var BB11_VERSION = "bb11-1";
+ var BB11_CAP = 25;                 // hard cap on instruments per pull / per request (plan: 25)
+ var BB11_LIMIT_DEFAULT = 10, BB11_LIMIT_MAX = 25;
+-var BB11_FETCH_MS = 8000, BB11_SEC_MS = 12000, BB11_FACTS_MS = 60000, BB11_FACTS_MAX_BYTES = 64 * 1024 * 1024;
++var BB11_FETCH_MS = 8000, BB11_SEC_MS = 12000, BB11_FACTS_MS = 60000, BB11_FACTS_MAX_BYTES = 25 * 1024 * 1024;
+ var BB11_MAX_FACTS_PER_DAY = 4;    // company-facts downloads per UK day (each is 1-15 MB)
+ var BB11_CONCURRENCY = 4;
+ var BB11_FILE = require("path").join(require("os").tmpdir(), "dispatch-monitor-v1.json");
+@@ -24307,13 +24307,44 @@
+   var text = await withTimeout(readTextCapped(resp, maxBytes), timeoutMs, "SEC read timed out");
+   return { status: 200, text: text, lastModified: resp.headers.get("last-modified") || null };
+ };
+-var bb11Rl = new FixedWindowRateLimiter({ limit: 240, windowMs: 60000, maxKeys: 1024 });
++var bb11Rl = new FixedWindowRateLimiter({ limit: 120, windowMs: 60000, maxKeys: 1024 });   // bb12b: per client 120/min (was 240)
++var bb12bGlobalRl = new FixedWindowRateLimiter({ limit: 2000, windowMs: 60000, maxKeys: 4 });   // bb12b: backstop for all monitor routes together, 2000/min; same fixed-window mechanism, no timers
++function bb12bOctets(s) { var o = s.split("."); return o.length === 4 && o.every(function (x) { return /^\d{1,3}$/.test(x) && +x <= 255; }) ? o.map(Number) : null; }
++function bb12bIp(raw) {                                                   // bb12b: one address -> normalised key text (no port/brackets/zone, v4-mapped v6 -> v4, v6 -> 8 lowercase groups), or null if it does not look like an IP
++  var s = String(raw == null ? "" : raw).trim().toLowerCase(), m, o;
++  if (!s || s.length > 64) return null;
++  if ((m = /^\[([^\]]+)\](?::\d{1,5})?$/.exec(s))) s = m[1];
++  else if (/^\d{1,3}(?:\.\d{1,3}){3}:\d{1,5}$/.test(s)) s = s.slice(0, s.lastIndexOf(":"));
++  if (s.indexOf("%") > 0) s = s.slice(0, s.indexOf("%"));
++  if ((m = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(s))) s = m[1];
++  if (s.indexOf(":") < 0) { o = bb12bOctets(s); return o ? o.join(".") : null; }
++  if (!/^[0-9a-f:.]+$/.test(s) || s.indexOf(":::") >= 0 || s.split("::").length > 2) return null;
++  if ((m = /(\d{1,3}(?:\.\d{1,3}){3})$/.exec(s))) { o = bb12bOctets(m[1]); if (!o) return null; s = s.slice(0, s.length - m[1].length) + ((o[0] << 8) | o[1]).toString(16) + ":" + ((o[2] << 8) | o[3]).toString(16); }
++  var parts = s.split("::"), a = parts[0] ? parts[0].split(":") : [], b = parts.length > 1 && parts[1] ? parts[1].split(":") : [], all = a.concat(b);
++  if (!all.every(function (h) { return /^[0-9a-f]{1,4}$/.test(h); })) return null;
++  if (parts.length === 1 ? all.length !== 8 : all.length > 7) return null;
++  while (a.length + b.length < 8) a.push("0");
++  return a.concat(b).map(function (h) { return h.replace(/^0+(?=.)/, ""); }).join(":");
++}
++function bb12bClientKey(req) {                                            // bb12b: rate-limit key for the monitor routes. Never the client-set first X-Forwarded-For entry.
++  var h = (req && req.headers) || {}, k = bb12bIp(h["cf-connecting-ip"]);  // 1) cf-connecting-ip, when it looks like an IP
++  if (k) return k;
++  var xf = String(h["x-forwarded-for"] || "").slice(-2048).split(",").map(function (x) { return x.trim(); }).filter(Boolean);
++  if (xf.length) { k = bb12bIp(xf.length >= 2 ? xf[xf.length - 2] : xf[0]); if (k) return k; }   // 2) entry before the last (Google frontend appends client, then its own hop); 3) the only entry
++  return bb12bIp(req && req.socket && req.socket.remoteAddress) || "unknown";   // 4) socket address
++}
++function bb12bSeedPull(seed) {                                            // bb12b: the embedded seed already is a market pull of its own UK day (fetched 2026-10-27 09:52 UTC), so a cold start on that UK day does not pull again; later UK days pull once as designed
++  var eps = BB11_TICKERS.map(function (t) { var m = seed.market[t]; return m && !("error" in m) && bb11Num(m.fetched_epoch) ? m.fetched_epoch : null; }).filter(function (x) { return x !== null; });
++  if (!eps.length) return { uk_day: null, at: null, ok: null, fetched: 0, failed: 0 };
++  var at = Math.max.apply(null, eps) * 1000;
++  return { uk_day: bb11UkDay(at), at: new Date(at).toISOString(), ok: true, fetched: eps.length, failed: BB11_TICKERS.length - eps.length, seed: true };
++}
+ var bb11DayFmt = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit" });
+ function bb11UkDay(ms) { var o = {}; bb11DayFmt.formatToParts(new Date(ms)).forEach(function (p) { o[p.type] = p.value; }); return o.year + "-" + o.month + "-" + o.day; }
+ function bb11Utc(ms) { return new Date(ms).toISOString().slice(0, 16).replace("T", " ") + " UTC"; }
+ var bb11St = null, bb11LoadP = null, bb11Inflight = null;
+ function bb11Init() {
+-  var seed = BB11_SEED, st = { v: 1, rev: 1, live: false, companies: {}, market: {}, pull: { uk_day: null, at: null, ok: null, fetched: 0, failed: 0 }, sec: { day: null, facts_today: 0, checked: {}, new_filings: [], errors: [] }, persist: { ok: null, error: null, saved_at: null }, view: null, viewKey: null, bodies: new Map(), perr: null };
++  var seed = BB11_SEED, st = { v: 1, rev: 1, live: false, companies: {}, market: {}, pull: bb12bSeedPull(seed), sec: { day: null, facts_today: 0, checked: {}, new_filings: [], errors: [] }, persist: { ok: null, error: null, saved_at: null }, view: null, viewKey: null, bodies: new Map(), perr: null };
+   BB11_TICKERS.forEach(function (t) { st.companies[t] = seed.companies[t]; st.market[t] = seed.market[t]; });
+   return st;
+ }
+@@ -24335,6 +24366,7 @@
+     var m = j.market && j.market[t]; if (bb11GoodMarket(m) && m.fetched_epoch >= (st.market[t].fetched_epoch || 0)) st.market[t] = m;
+   });
+   if (j.pull && typeof j.pull === "object" && (j.pull.uk_day === null || /^\d{4}-\d{2}-\d{2}$/.test(String(j.pull.uk_day)))) st.pull = { uk_day: j.pull.uk_day || null, at: typeof j.pull.at === "string" ? j.pull.at : null, ok: j.pull.ok === true ? true : (j.pull.ok === false ? false : null), fetched: bb11Num(j.pull.fetched) ? j.pull.fetched : 0, failed: bb11Num(j.pull.failed) ? j.pull.failed : 0 };
++  if (j.pull && st.pull && j.pull.seed === true && st.pull.uk_day === j.pull.uk_day && st.pull.ok === true && j.pull.at === bb12bSeedPull(BB11_SEED).at) st.pull.seed = true;   // bb12b: a persisted seed marker survives a restore
+   var s = j.sec;
+   if (s && typeof s === "object") {
+     st.sec.day = typeof s.day === "string" ? s.day : null; st.sec.facts_today = bb11Num(s.facts_today) ? s.facts_today : 0;
+@@ -24475,7 +24507,7 @@
+       market: { source: BB11_MARKET_SOURCE, label: bb11bLabel(eps.length ? bb11Utc(Math.max.apply(null, eps) * 1000) : null), last_bar_date_min: bars[0] || null, last_bar_date_max: bars[bars.length - 1] || null, fetched_utc_oldest: eps.length ? bb11Utc(Math.min.apply(null, eps) * 1000) : null, fetched_utc_newest: eps.length ? bb11Utc(Math.max.apply(null, eps) * 1000) : null, stale: stale },
+       filings: { source: BB11_SEC_SOURCE, latest_period_end_min: flings[0], latest_period_end_max: flings[flings.length - 1], seed_retrieved: BB11_SEED.sec_retrieved }
+     },
+-    refresh: { in_progress: !!bb11Inflight, market_pulls_per_uk_day: 1, market_pull_due: bb11MarketDue(st, now), last_market_pull: { uk_day: st.pull.uk_day, at: st.pull.at, ok: st.pull.ok, fetched: st.pull.fetched, failed: st.pull.failed }, instrument_cap: BB11_CAP },
++    refresh: { in_progress: !!bb11Inflight, market_pulls_per_uk_day: 1, market_pull_due: bb11MarketDue(st, now), last_market_pull: { uk_day: st.pull.uk_day, at: st.pull.at, ok: st.pull.ok, fetched: st.pull.fetched, failed: st.pull.failed, seed: st.pull.seed === true }, instrument_cap: BB11_CAP },
+     sec: sec, persistence: { ok: st.persist.ok, saved_at: st.persist.saved_at }
+   };
+ }
+@@ -24516,7 +24548,7 @@
+   if (raw !== "/api/monitor" && raw.indexOf("/api/monitor/") !== 0) return false;
+   var p = raw.length > 1 && raw.charAt(raw.length - 1) === "/" ? raw.slice(0, -1) : raw;
+   if (req.method !== "GET" && req.method !== "HEAD") { bb11Err(req, res, 405, "method_not_allowed", { headers: { Allow: "GET, HEAD" } }); return true; }
+-  if (!bb11Rl.allow(bb10Addr(req))) { bb11Err(req, res, 429, "rate_limited", { headers: { "Retry-After": "60" } }); return true; }
++  if (!bb11Rl.allow(bb12bClientKey(req), bb11Now()) || !bb12bGlobalRl.allow("monitor", bb11Now())) { bb11Err(req, res, 429, "rate_limited", { headers: { "Retry-After": "60" } }); return true; }
+   var tkr = null;
+   if (p !== "/api/monitor") {
+     var seg = p.slice("/api/monitor/".length);
+@@ -24535,7 +24567,7 @@
+   var rp = bb11Refresh(st);                                              // starts (or joins) a refresh when something is due; never awaited by the request
+   var hit = bb11Body(st, tkr === null ? "radar" : "detail", now, limit, tkr);
+   if (rp) rp.catch(function () { });
+-  var h = Object.assign({ "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=60", ETag: hit.etag, "X-Robots-Tag": "noindex" }, SECURITY_HEADERS);
++  var h = Object.assign({ "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=300, stale-while-revalidate=600", ETag: hit.etag, "X-Robots-Tag": "noindex" }, SECURITY_HEADERS);
+   if (req.headers["if-none-match"] && String(req.headers["if-none-match"]).split(",").some(function (x) { return x.trim() === hit.etag; })) { delete h["Content-Type"]; res.writeHead(304, h); res.end(); return true; }
+   h["Content-Length"] = hit.len;
+   res.writeHead(200, h); res.end(req.method === "HEAD" ? undefined : hit.body);
