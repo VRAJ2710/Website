@@ -1,0 +1,915 @@
+--- app.js
++++ app.js
+@@ -10,3 +10,903 @@
+ var pg = "home";
+ function IS_DESKTOP(){ return (typeof window !== "undefined" && window.innerWidth >= 768); }
+ // ── rt62i ──
++
++// ── rt63 ──
++// fe88: Capital Sustainability Monitor. Three client routes, one research card.
++// Market stamps use the API label verbatim. A UK clock is added only when we
++// format fetched_utc ourselves because the label is absent.
++// fe88-pure-begin
++var FE88_BASE = "/research/capital-sustainability";
++var FE88_DISC = "Not investment advice. Capital at risk.";
++var FE88_UNCOVERED = "That ticker isn't covered yet. The monitor currently analyses the 19 companies listed above (US-listed SEC filers); commodities, indices and non-US filers aren't supported.";
++var FE88_BAD = "That doesn't look like a ticker.";
++var FE88_RATE = "You're loading this quickly. Please try again in a minute.";
++var FE88_DOWN = "The monitor is briefly unavailable. Please try again shortly.";
++var FE88_LIST = ["MSFT", "GOOGL", "AMZN", "META", "ORCL", "CRWV", "NVDA", "AVGO", "AMD", "MU", "VRT", "CEG", "VST", "NEE", "EQIX", "DLR", "XOM", "T", "CRM"];
++var FE88_FLAG_ORDER = ["sustainability_gap", "fcf_coverage", "debt_reliance", "interest_burden", "margin_trend"];
++var fe88_NUM = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 2 });
++var fe88_PX = new Intl.NumberFormat("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
++var fe88_INT = new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 });
++var fe88_PCT;
++try {
++  fe88_PCT = new Intl.NumberFormat("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2, signDisplay: "exceptZero" });
++} catch (ePct) {
++  fe88_PCT = new Intl.NumberFormat("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
++}
++var fe88_UK = new Intl.DateTimeFormat("en-GB", {
++  timeZone: "Europe/London",
++  weekday: "short",
++  day: "numeric",
++  month: "short",
++  hour: "2-digit",
++  minute: "2-digit",
++  hourCycle: "h23"
++});
++
++function fe88_esc(s) {
++  return String(s == null ? "" : s)
++    .replace(/&/g, "&amp;")
++    .replace(/</g, "&lt;")
++    .replace(/>/g, "&gt;")
++    .replace(/"/g, "&quot;");
++}
++function fe88_known(tk) {
++  var i;
++  for (i = 0; i < FE88_LIST.length; i++) if (FE88_LIST[i] === tk) return true;
++  return false;
++}
++function fe88_tickerOk(tk) {
++  return /^[A-Z0-9.-]{1,10}$/.test(String(tk || ""));
++}
++function fe88_parse(pathname) {
++  var p = String(pathname || "");
++  var cut = p.indexOf("?");
++  if (cut >= 0) p = p.slice(0, cut);
++  cut = p.indexOf("#");
++  if (cut >= 0) p = p.slice(0, cut);
++  if (p.length > 1 && p.charAt(p.length - 1) === "/") p = p.slice(0, -1);
++  if (p !== FE88_BASE && p.indexOf(FE88_BASE + "/") !== 0) return null;
++  var rest = p.slice(FE88_BASE.length);
++  if (!rest) return { kind: "radar", more: false };
++  var seg = rest.charAt(0) === "/" ? rest.slice(1) : rest;
++  try { seg = decodeURIComponent(seg); } catch (eDec) {}
++  if (!seg || seg.indexOf("/") >= 0) return { kind: "bad", raw: seg };
++  if (seg.toLowerCase() === "method") return { kind: "method" };
++  var tk = seg.toUpperCase();
++  if (!fe88_tickerOk(tk)) return { kind: "bad", raw: seg };
++  return { kind: "company", ticker: tk };
++}
++function fe88_path(spec) {
++  if (!spec || spec.kind === "radar") return FE88_BASE;
++  if (spec.kind === "method") return FE88_BASE + "/method";
++  if (spec.kind === "company" && spec.ticker) return FE88_BASE + "/" + spec.ticker;
++  return FE88_BASE;
++}
++function fe88_key(spec) {
++  if (!spec) return "";
++  if (spec.kind === "company") return "c:" + spec.ticker;
++  if (spec.kind === "method") return "m";
++  return spec.more ? "r:25" : "r:10";
++}
++function fe88_num(v) {
++  if (v == null || v === "") return "";
++  var n = typeof v === "number" ? v : Number(String(v).replace(/,/g, ""));
++  if (!isFinite(n)) return "";
++  return fe88_NUM.format(n);
++}
++function fe88_px(v) {
++  if (v == null || v === "") return "";
++  var n = typeof v === "number" ? v : Number(v);
++  if (!isFinite(n)) return "";
++  return fe88_PX.format(n);
++}
++function fe88_int(v) {
++  if (v == null || v === "") return "";
++  var n = typeof v === "number" ? v : Number(v);
++  if (!isFinite(n)) return "";
++  return fe88_INT.format(n);
++}
++function fe88_pct(v) {
++  if (v == null || v === "") return "";
++  var n = typeof v === "number" ? v : Number(v);
++  if (!isFinite(n)) return "";
++  return fe88_PCT.format(n) + "%";
++}
++function fe88_parseUtc(s) {
++  if (s == null || s === "") return null;
++  var t = String(s).trim();
++  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(t)) t = t.replace(" ", "T").replace(/ UTC$/i, "Z");
++  else if (/ UTC$/i.test(t)) t = t.replace(/ UTC$/i, "Z");
++  var d = new Date(t);
++  if (isNaN(d.getTime())) return null;
++  return d;
++}
++function fe88_uk(s) {
++  var d = fe88_parseUtc(s);
++  if (!d) return "";
++  return fe88_UK.format(d) + " UK";
++}
++function fe88_human(key) {
++  var t = String(key || "").replace(/_/g, " ").replace(/\s+/g, " ").trim();
++  if (!t) return "";
++  return t.charAt(0).toUpperCase() + t.slice(1);
++}
++function fe88_flagMark(v) {
++  var s = String(v == null ? "" : v).toLowerCase();
++  if (s === "red") return "R";
++  if (s === "amber") return "A";
++  if (s === "green") return "G";
++  if (s === "n/a" || s === "n-a" || s === "na") return "n/a";
++  return "";
++}
++function fe88_flagName(key) {
++  if (key === "sustainability_gap") return "sustainability gap";
++  if (key === "fcf_coverage") return "free cash flow coverage";
++  if (key === "debt_reliance") return "debt reliance";
++  if (key === "interest_burden") return "interest burden";
++  if (key === "margin_trend") return "margin trend";
++  return fe88_human(key).toLowerCase();
++}
++function fe88_labelOf(obj) {
++  if (!obj || typeof obj.label !== "string") return "";
++  if (!obj.label) return "";
++  return obj.label;
++}
++function fe88_fallbackStamp(src, bar, fetched) {
++  var parts = [];
++  if (src) parts.push(String(src));
++  if (bar) parts.push("last bar " + String(bar));
++  var uk = fe88_uk(fetched);
++  if (uk) parts.push("fetched " + uk);
++  parts.push("delayed end-of-day, not live");
++  return parts.join(" · ");
++}
++function fe88_headerMarketStamp(asOf) {
++  var m = asOf && asOf.market;
++  var label = fe88_labelOf(m);
++  if (label) return label;
++  if (!m) return fe88_fallbackStamp("", "", "");
++  return fe88_fallbackStamp(m.source, m.last_bar_date_max || m.last_bar_date_min || "", m.fetched_utc_newest || m.fetched_utc_oldest || m.fetched_utc || "");
++}
++function fe88_rowMarketStamp(market) {
++  var label = fe88_labelOf(market);
++  if (label) return label;
++  if (!market || market.status !== "ok") return "Market data unavailable";
++  return fe88_fallbackStamp(market.source, market.as_of || market.last_bar_date || "", market.fetched_utc || "");
++}
++function fe88_filingStamp(filings) {
++  var range = "";
++  if (filings && filings.latest_period_end_min && filings.latest_period_end_max) {
++    range = filings.latest_period_end_min === filings.latest_period_end_max
++      ? String(filings.latest_period_end_min)
++      : String(filings.latest_period_end_min) + " to " + String(filings.latest_period_end_max);
++  } else if (filings && (filings.latest_period_end_min || filings.latest_period_end_max)) {
++    range = String(filings.latest_period_end_min || filings.latest_period_end_max);
++  }
++  return "Filing data: SEC filings" + (range ? ", latest period " + range : "");
++}
++function fe88_marketOk(market) {
++  return !!(market && market.status === "ok");
++}
++function fe88_scoreBits(row) {
++  if (!row) return { text: "", note: "" };
++  if (!fe88_marketOk(row.market)) {
++    var filing = row.filing_only_score;
++    if (filing == null && row.filing_score && typeof row.filing_score === "object") filing = row.filing_score.score;
++    if (filing == null && typeof row.filing_score === "number") filing = row.filing_score;
++    return { text: fe88_num(filing), note: "Filing score" };
++  }
++  var radar = row.radar_score;
++  if (radar == null && row.market_score && typeof row.market_score === "object") radar = null;
++  return { text: fe88_num(radar), note: "Radar score" };
++}
++function fe88_spark(values) {
++  if (!Array.isArray(values)) return "";
++  var nums = [];
++  var i, n, min, max, span, w, h, d, x, y, k;
++  for (i = 0; i < values.length; i++) {
++    n = values[i];
++    if (typeof n === "string" && n && isFinite(Number(n))) n = Number(n);
++    if (typeof n === "number" && isFinite(n)) nums.push(n);
++  }
++  if (nums.length < 2) return "";
++  min = nums[0];
++  max = nums[0];
++  for (i = 1; i < nums.length; i++) {
++    if (nums[i] < min) min = nums[i];
++    if (nums[i] > max) max = nums[i];
++  }
++  w = 88;
++  h = 28;
++  span = (max - min) || 1;
++  d = [];
++  for (k = 0; k < nums.length; k++) {
++    x = (k / (nums.length - 1)) * (w - 2) + 1;
++    y = (h - 2) - ((nums[k] - min) / span) * (h - 4);
++    d.push((k ? "L" : "M") + x.toFixed(1) + " " + y.toFixed(1));
++  }
++  return '<svg class="fe88-spark" viewBox="0 0 ' + w + ' ' + h + '" width="' + w + '" height="' + h + '" role="img" aria-label="' + fe88_esc("Daily closes, " + nums.length + " sessions, delayed") + '" focusable="false"><path d="' + d.join(" ") + '" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"></path></svg>';
++}
++function fe88_miss(label) {
++  return '<span class="fe88-miss" aria-label="' + fe88_esc(label) + '">\u2014</span>';
++}
++function fe88_secHref(item, cik) {
++  if (!item || typeof item !== "object") return "";
++  var url = typeof item.url === "string" ? item.url : "";
++  if (url && /sec\.gov/i.test(url)) return url;
++  var acc = item.accession || item.latest_accession || "";
++  var c = item.cik != null ? item.cik : cik;
++  if (!acc || c == null || c === "") return "";
++  var digits = String(c).replace(/\D/g, "").replace(/^0+/, "");
++  var accPath = String(acc).replace(/-/g, "");
++  if (!digits || !/^\d+$/.test(accPath)) return "";
++  return "https://www.sec.gov/Archives/edgar/data/" + digits + "/" + accPath + "/";
++}
++function fe88_isLinkRow(item) {
++  return !!(item && typeof item === "object" && (item.url || item.accession || item.latest_accession || item.label || item.title || item.form));
++}
++function fe88_generic(value, depth, cik) {
++  if (value == null) return "";
++  if (depth > 3) return "";
++  if (typeof value === "number") return fe88_esc(fe88_num(value));
++  if (typeof value === "string") {
++    if (!value || value === "null" || value === "undefined" || value === "NaN") return "";
++    return fe88_esc(value);
++  }
++  if (typeof value === "boolean") return value ? "Yes" : "No";
++  if (Array.isArray(value)) {
++    var i, parts = [], child, href, name;
++    if (!value.length) return "";
++    for (i = 0; i < value.length && i < 12; i++) {
++      child = value[i];
++      if (child == null) continue;
++      if (typeof child === "string" || typeof child === "number") {
++        var bit = fe88_generic(child, depth + 1, cik);
++        if (bit) parts.push("<li>" + bit + "</li>");
++        continue;
++      }
++      if (fe88_isLinkRow(child)) {
++        href = fe88_secHref(child, cik);
++        name = child.label || child.title || child.form || child.accession || "SEC filing";
++        var meta = [];
++        if (child.form && child.form !== name) meta.push(String(child.form));
++        if (child.filed) meta.push("filed " + String(child.filed));
++        if (child.accession && child.accession !== name) meta.push(String(child.accession));
++        var line = href
++          ? '<a href="' + fe88_esc(href) + '" rel="noopener noreferrer">' + fe88_esc(name) + "</a>"
++          : fe88_esc(name);
++        if (meta.length) line += ' <span class="fe88-meta">' + fe88_esc(meta.join(" · ")) + "</span>";
++        parts.push("<li>" + line + "</li>");
++        continue;
++      }
++      var inner = fe88_generic(child, depth + 1, cik);
++      if (inner) parts.push("<li>" + inner + "</li>");
++    }
++    return parts.length ? "<ul>" + parts.join("") + "</ul>" : "";
++  }
++  if (typeof value === "object") {
++    var keys = Object.keys(value);
++    var rows = [];
++    var k, cell;
++    for (k = 0; k < keys.length && k < 40; k++) {
++      if (keys[k] === "label" && keys.length > 1) continue;
++      cell = fe88_generic(value[keys[k]], depth + 1, value.cik || cik);
++      if (!cell) continue;
++      rows.push("<tr><th scope=\"row\">" + fe88_esc(fe88_human(keys[k])) + "</th><td>" + cell + "</td></tr>");
++    }
++    return rows.length ? '<table class="fe88-kv"><tbody>' + rows.join("") + "</tbody></table>" : "";
++  }
++  return "";
++}
++function fe88_flagBadge(flag, thresholds) {
++  var overall = flag && flag.overall;
++  var mark = fe88_flagMark(overall) || "n/a";
++  var flags = (flag && flag.flags) || {};
++  var bits = [];
++  var i, key, one;
++  for (i = 0; i < FE88_FLAG_ORDER.length; i++) {
++    key = FE88_FLAG_ORDER[i];
++    one = fe88_flagMark(flags[key]);
++    bits.push(fe88_flagName(key) + " " + (one || "n/a"));
++  }
++  var turns = "";
++  if (flag && Array.isArray(flag.turned_worse) && flag.turned_worse.length) {
++    turns += " Turned worse: " + flag.turned_worse.map(fe88_flagName).join(", ") + ".";
++  }
++  if (flag && Array.isArray(flag.turned_better) && flag.turned_better.length) {
++    turns += " Turned better: " + flag.turned_better.map(fe88_flagName).join(", ") + ".";
++  }
++  var aria = "Filing flag " + String(overall || "n/a") + ". " + bits.join(", ") + "." + turns;
++  return '<span class="fe88-flag" data-flag="' + fe88_esc(String(overall || "n/a")) + '" aria-label="' + fe88_esc(aria) + '" title="' + fe88_esc(aria) + '">' + fe88_esc(mark) + "</span>" +
++    (turns ? '<span class="fe88-turn">' + fe88_esc(turns.trim()) + "</span>" : "");
++}
++function fe88_pair(aLabel, a, bLabel, b, unit) {
++  var bits = [];
++  var u = unit ? " " + unit : "";
++  if (a != null && a !== "") bits.push(aLabel + " " + String(a) + u);
++  if (b != null && b !== "") bits.push(bLabel + " " + String(b) + u);
++  return bits.length ? " (" + bits.join(", ") + ")" : "";
++}
++function fe88_flagLines(thresholds) {
++  var th = thresholds || {};
++  var gap = th.gap_pp || {};
++  var fcf = th.fcf_cov || {};
++  var debt = th.debt_capex || {};
++  var interest = th.int_opinc || {};
++  var margin = th.margin_pp || {};
++  return [
++    ["Sustainability gap", "How far capital spending runs ahead of the cash the business produces" + fe88_pair("amber", gap.amber, "red", gap.red, "pp") + "."],
++    ["Free cash flow coverage", "Whether free cash flow covers capital spending" + fe88_pair("green", fcf.green, "amber", fcf.amber, "") + "."],
++    ["Debt reliance", "The share of capital spending funded by new borrowing" + fe88_pair("amber", debt.amber, "red", debt.red, "") + "."],
++    ["Interest burden", "Interest cost compared with operating profit" + fe88_pair("amber", interest.amber, "red", interest.red, "") + "."],
++    ["Margin trend", "Whether the operating margin is narrowing" + fe88_pair("amber", margin.amber, "red", margin.red, "pp") + "."]
++  ];
++}
++function fe88_glossary() {
++  return '<p class="fe88-gloss">Capex, short for capital spending, is set against operating cash flow, the cash from operations. Free cash flow coverage asks whether free cash flow covers that spending. The sustainability gap is how far capital spending runs ahead of the cash the business produces. Debt reliance is the share of capital spending funded by new borrowing. The interest burden is interest cost compared with operating profit. The margin trend is whether the operating margin is narrowing. A red, amber or green mark is a filing flag, not a recommendation.</p>';
++}
++function fe88_picker(note) {
++  var opts = FE88_LIST.map(function (tk) { return '<option value="' + tk + '"></option>'; }).join("");
++  var msg = note === "bad" ? '<p class="fe88-err" role="alert">' + fe88_esc(FE88_BAD) + "</p>" : "";
++  return '<form class="fe88-pick" data-fe88-pick>' +
++    "<h2>Analyse any instrument</h2>" + msg +
++    '<label for="fe88-tk">Ticker</label>' +
++    '<input id="fe88-tk" name="ticker" list="fe88-list" autocomplete="off" spellcheck="false" aria-describedby="fe88-pick-help">' +
++    '<datalist id="fe88-list">' + opts + "</datalist>" +
++    '<button type="submit">Open</button>' +
++    '<p id="fe88-pick-help" class="fe88-help">Nineteen US-listed SEC filers. Commodities, indices and non-US filers are not covered.</p>' +
++    "</form>";
++}
++function fe88_listNames() {
++  return '<ul class="fe88-universe">' + FE88_LIST.map(function (tk) {
++    return '<li><a href="' + FE88_BASE + "/" + tk + '">' + tk + "</a></li>";
++  }).join("") + "</ul>";
++}
++function fe88_stamps(payload) {
++  var asOf = payload && payload.as_of;
++  var market = '<p class="fe88-mstamp" data-fe88-stamp="market">' + fe88_esc(fe88_headerMarketStamp(asOf)) + "</p>";
++  var filing = '<p class="fe88-fstamp" data-fe88-stamp="filing">' + fe88_esc(fe88_filingStamp(asOf && asOf.filings)) + "</p>";
++  var quiet = payload && payload.stale ? '<p class="fe88-quiet">Data refreshing</p>' : "";
++  return market + filing + quiet;
++}
++function fe88_shell(kind, title, lede, stamps, body) {
++  return '<article class="fe88" data-fe88-page="' + fe88_esc(kind) + '">' +
++    '<header class="fe88-hd">' +
++      '<p class="fe88-disc">' + FE88_DISC + "</p>" +
++      '<h1 id="fe88-h">' + fe88_esc(title) + "</h1>" +
++      (lede ? '<p class="fe88-lede">' + fe88_esc(lede) + "</p>" : "") +
++      (stamps || "") +
++    "</header>" +
++    body +
++    '<footer class="fe88-ft"><p class="fe88-disc">' + FE88_DISC + "</p></footer>" +
++    "</article>";
++}
++function fe88_cardHtml() {
++  return '<a class="fe88-card gc" href="' + FE88_BASE + '">' +
++    '<span class="fe88-card-k">Research</span>' +
++    '<span class="fe88-card-t">Capital Sustainability Monitor</span>' +
++    '<span class="fe88-card-d">What is drawing attention, and what filings show about how capital spending is funded.</span>' +
++    "</a>";
++}
++function fe88_row(row) {
++  var score = fe88_scoreBits(row);
++  var reasons = Array.isArray(row.reasons) ? row.reasons.filter(Boolean).slice(0, 2) : [];
++  var why = reasons.length ? reasons.map(function (r) { return fe88_esc(r); }).join(" ") : fe88_miss("No reasons supplied");
++  var ok = fe88_marketOk(row.market);
++  var close = ok ? fe88_px(row.market.last_close) : "";
++  var move = ok ? fe88_pct(row.market.ret_5d_pct) : "";
++  var priceCell = ok
++    ? (close ? fe88_esc(close) : fe88_miss("Last close not disclosed"))
++    : "Market data unavailable";
++  var moveCell = ok
++    ? (move ? fe88_esc(move) : fe88_miss("Five-day move not disclosed"))
++    : fe88_miss("Five-day move unavailable");
++  var spark = ok ? fe88_spark(row.market && row.market.spark) : "";
++  var filing = row.filing || {};
++  var asofBits = [];
++  if (filing.latest_period_end) asofBits.push("period " + filing.latest_period_end);
++  if (filing.latest_filed) asofBits.push("filed " + filing.latest_filed);
++  var marketStamp = fe88_rowMarketStamp(row.market);
++  if (marketStamp) asofBits.push(marketStamp);
++  var att = row.attention ? String(row.attention) : "";
++  var tag = row.tag ? '<span class="fe88-tag">' + fe88_esc(row.tag) + "</span>" : "";
++  var group = row.group ? '<span class="fe88-group">' + fe88_esc(row.group) + "</span>" : "";
++  var company = row.company ? '<span class="fe88-co">' + fe88_esc(row.company) + "</span>" : "";
++  var href = FE88_BASE + "/" + encodeURIComponent(row.ticker || "");
++  var filingNote = filing.status && filing.status !== "ok" && filing.message
++    ? '<span class="fe88-note">' + fe88_esc(filing.message) + "</span>" : "";
++  return "<tr>" +
++    '<td data-label="Rank">' + fe88_esc(row.rank == null ? "" : String(row.rank)) + "</td>" +
++    '<th scope="row" data-label="Instrument"><a href="' + href + '">' + fe88_esc(row.ticker || "") + "</a>" + company + group + "</th>" +
++    '<td data-label="' + fe88_esc(score.note || "Score") + '"><span class="fe88-score">' + (score.text ? fe88_esc(score.text) : fe88_miss("Score not disclosed")) + '</span><span class="fe88-score-k">' + fe88_esc(score.note) + "</span></td>" +
++    '<td data-label="Why it is on the radar">' + why + filingNote + "</td>" +
++    '<td data-label="Filing flag">' + fe88_flagBadge(row.filing_flag) + "</td>" +
++    '<td data-label="Attention">' + (att ? '<span class="fe88-att" data-att="' + fe88_esc(att) + '">' + fe88_esc(att.charAt(0).toUpperCase() + att.slice(1)) + "</span>" : fe88_miss("Attention not set")) + tag + "</td>" +
++    '<td data-label="Closes">' + (spark || fe88_miss("No daily closes")) + "</td>" +
++    '<td data-label="Last close">' + priceCell + "</td>" +
++    '<td data-label="Five-day move">' + moveCell + "</td>" +
++    '<td data-label="As of"><span class="fe88-asof">' + fe88_esc(asofBits.join(" · ")) + "</span></td>" +
++    "</tr>";
++}
++function fe88_radarHtml(payload, spec, pickNote) {
++  var rows = payload && Array.isArray(payload.ranking) ? payload.ranking : [];
++  var body = rows.map(fe88_row).join("");
++  var total = payload && payload.total != null ? payload.total : rows.length;
++  var more = spec && spec.more;
++  var showMore = !more && rows.length && total != null && rows.length < Number(total)
++    ? '<button type="button" class="fe88-more" data-fe88-more="25">Show more</button>' : "";
++  var table = '<section class="fe88-radar"><h2>On the radar today</h2>' +
++    '<table class="fe88-table"><caption>Ranked by attention and what the filings show about funding capital spending.</caption><thead><tr>' +
++    "<th>Rank</th><th>Instrument</th><th>Score</th><th>Why it is on the radar</th><th>Filing flag</th><th>Attention</th><th>Closes</th><th>Last close</th><th>Five-day move</th><th>As of</th>" +
++    "</tr></thead><tbody>" + (body || '<tr><td colspan="10">No rows returned.</td></tr>') + "</tbody></table>" +
++    '<p class="fe88-legend">R red, A amber, G green, n/a not disclosed. The five flags are the sustainability gap, free cash flow coverage, debt reliance, the interest burden and the margin trend.</p>' +
++    showMore + "</section>";
++  var read = '<section class="fe88-read"><h2>How to read this</h2>' + fe88_glossary() +
++    '<p><a href="' + FE88_BASE + '/method">How this monitor is put together</a></p></section>';
++  var lede = "A ranking of what is drawing attention in the market and what company filings show about how capital spending is being funded. Not a recommendation.";
++  return fe88_shell("radar", payload && payload.title ? payload.title : "Capital Sustainability Monitor", lede, fe88_stamps(payload), table + fe88_picker(pickNote) + read);
++}
++function fe88_changed(inst) {
++  var html = fe88_generic(inst.changes_since_last_quarter, 0, inst.cik);
++  var flag = inst.filing_flag || {};
++  var bits = [];
++  if (Array.isArray(flag.turned_worse) && flag.turned_worse.length) bits.push("Turned worse: " + flag.turned_worse.map(fe88_flagName).join(", "));
++  if (Array.isArray(flag.turned_better) && flag.turned_better.length) bits.push("Turned better: " + flag.turned_better.map(fe88_flagName).join(", "));
++  if (flag.previous_overall) bits.push("Previous quarter overall " + String(flag.previous_overall));
++  var extra = bits.length ? "<p>" + fe88_esc(bits.join(". ") + ".") + "</p>" : "";
++  var prev = fe88_generic(inst.previous_quarter_flags, 0, inst.cik);
++  if (!html && !extra && !prev) return "<p>No quarter-on-quarter change was supplied.</p>";
++  return extra + (html || "") + (prev ? "<h3>Previous quarter flags</h3>" + prev : "");
++}
++function fe88_keyNumbers(inst) {
++  var parts = [];
++  var ttm = fe88_generic(inst.ttm, 0, inst.cik);
++  var prior = fe88_generic(inst.ttm_prior, 0, inst.cik);
++  var q = fe88_generic(inst.latest_quarter, 0, inst.cik);
++  if (ttm) parts.push("<h3>Trailing twelve months</h3>" + ttm);
++  if (prior) parts.push("<h3>Prior trailing twelve months</h3>" + prior);
++  if (q) parts.push("<h3>Latest quarter</h3>" + q);
++  var nd = fe88_generic(inst.not_disclosed_or_na, 0, inst.cik);
++  if (nd) parts.push("<h3>Not disclosed</h3>" + nd);
++  return parts.length ? parts.join("") : "<p>Key figures were not supplied for this company.</p>";
++}
++function fe88_marketBlock(market) {
++  if (!fe88_marketOk(market)) {
++    var stamp = fe88_rowMarketStamp(market);
++    return "<p>Market data unavailable</p>" + (stamp && stamp !== "Market data unavailable" ? '<p class="fe88-mstamp" data-fe88-stamp="company">' + fe88_esc(stamp) + "</p>" : "");
++  }
++  var rows = [];
++  function add(label, text) { if (text) rows.push("<tr><th scope=\"row\">" + label + "</th><td>" + fe88_esc(text) + "</td></tr>"); }
++  add("Last close", market.currency ? fe88_px(market.last_close) + " " + market.currency : fe88_px(market.last_close));
++  add("One-day move", fe88_pct(market.ret_1d_pct));
++  add("Five-day move", fe88_pct(market.ret_5d_pct));
++  if (market.volume_last != null && fe88_int(market.volume_last)) {
++    var vol = fe88_int(market.volume_last);
++    var avg = fe88_int(market.volume_avg_20d);
++    var ratio = fe88_num(market.volume_ratio);
++    var volText = vol + (avg ? " against a 20-day average of " + avg : "");
++    if (ratio) volText += " (" + ratio + " times)";
++    add("Volume", volText);
++  }
++  var spark = fe88_spark(market.spark);
++  return (rows.length ? '<table class="fe88-kv"><tbody>' + rows.join("") + "</tbody></table>" : "") +
++    (spark || fe88_miss("No daily closes")) +
++    '<p class="fe88-mstamp" data-fe88-stamp="company">' + fe88_esc(fe88_rowMarketStamp(market)) + "</p>";
++}
++function fe88_sources(inst, payload) {
++  var filing = inst.filing || {};
++  var bits = [];
++  if (filing.form) bits.push(filing.form);
++  if (filing.latest_accession) bits.push(filing.latest_accession);
++  if (filing.latest_filed) bits.push("filed " + filing.latest_filed);
++  if (filing.latest_period_end) bits.push("period end " + filing.latest_period_end);
++  var href = fe88_secHref({ accession: filing.latest_accession, url: filing.url }, inst.cik);
++  var link = href ? '<a href="' + fe88_esc(href) + '" rel="noopener noreferrer">SEC filing</a>' : "";
++  var filings = fe88_generic(inst.source_filings, 0, inst.cik);
++  var extra = fe88_generic(inst.disclosures, 0, inst.cik);
++  var xbrl = fe88_generic(inst.xbrl_commitments, 0, inst.cik);
++  var head = '<p class="fe88-fstamp">' + fe88_esc(fe88_filingStamp(payload && payload.as_of && payload.as_of.filings)) + "</p>";
++  return head +
++    (bits.length ? "<p>" + fe88_esc(bits.join(" · ")) + (link ? " · " + link : "") + "</p>" : (link ? "<p>" + link + "</p>" : "")) +
++    (filing.source ? "<p>" + fe88_esc(filing.source) + "</p>" : "") +
++    (filings || "") + (extra || "") + (xbrl ? "<h3>XBRL commitments</h3>" + xbrl : "");
++}
++function fe88_summary(inst) {
++  var bits = [];
++  if (inst.tag) bits.push(String(inst.tag));
++  if (Array.isArray(inst.reasons)) {
++    var i;
++    for (i = 0; i < inst.reasons.length && bits.length < 3; i++) if (inst.reasons[i]) bits.push(String(inst.reasons[i]));
++  }
++  return bits.join(" · ");
++}
++function fe88_extras(inst) {
++  if (!inst || typeof inst !== "object") return "";
++  var skip = {
++    rank: 1, ticker: 1, company: 1, group: 1, radar_score: 1, filing_only_score: 1, scoreable: 1,
++    attention: 1, tag: 1, reasons: 1, filing_flag: 1, filing: 1, market: 1, market_score: 1,
++    filing_score: 1, cik: 1, metrics: 1, tags: 1, not_disclosed_or_na: 1, changes_since_last_quarter: 1,
++    previous_quarter_flags: 1, ttm: 1, ttm_prior: 1, latest_quarter: 1, xbrl_commitments: 1,
++    source_filings: 1, disclosures: 1
++  };
++  var extra = {};
++  var keys = Object.keys(inst);
++  var i, n = 0;
++  for (i = 0; i < keys.length; i++) {
++    if (skip[keys[i]]) continue;
++    extra[keys[i]] = inst[keys[i]];
++    n += 1;
++  }
++  if (!n) return "";
++  return fe88_generic(extra, 0, inst.cik);
++}
++function fe88_companyHtml(payload, neighbors) {
++  var inst = (payload && payload.instrument) || {};
++  var tk = payload && payload.ticker ? payload.ticker : inst.ticker;
++  var title = (inst.company ? inst.company + " (" + (tk || "") + ")" : (tk || "Company"));
++  var score = fe88_scoreBits(inst);
++  var rank = payload && payload.rank_of != null ? "Rank " + payload.rank_of : (inst.rank != null ? "Rank " + inst.rank : "");
++  var total = payload && payload.total != null ? " of " + payload.total : "";
++  var att = inst.attention ? String(inst.attention) : "";
++  var facts = [rank + total, score.note && score.text ? score.note + " " + score.text : "", att ? "Attention " + att : "", inst.group || ""].filter(Boolean);
++  var lines = fe88_flagLines(payload && payload.thresholds);
++  var flag = inst.filing_flag || {};
++  var flags = flag.flags || {};
++  var flagHtml = lines.map(function (pair, idx) {
++    var key = FE88_FLAG_ORDER[idx];
++    var mark = fe88_flagMark(flags[key]) || "n/a";
++    var raw = flags[key] || "n/a";
++    return "<li><span class=\"fe88-flag\" data-flag=\"" + fe88_esc(String(raw)) + "\" aria-label=\"" + fe88_esc(pair[0] + " " + raw) + "\">" + fe88_esc(mark) + "</span> <strong>" + fe88_esc(pair[0]) + "</strong> " + fe88_esc(pair[1]) + "</li>";
++  }).join("");
++  var summary = fe88_summary(inst);
++  var pager = "";
++  if (neighbors && (neighbors.prev || neighbors.next)) {
++    pager = '<nav class="fe88-pager" aria-label="Adjacent companies">';
++    if (neighbors.prev) pager += '<a href="' + FE88_BASE + "/" + neighbors.prev + '">Previous ' + fe88_esc(neighbors.prev) + "</a>";
++    if (neighbors.next) pager += '<a href="' + FE88_BASE + "/" + neighbors.next + '">Next ' + fe88_esc(neighbors.next) + "</a>";
++    pager += "</nav>";
++  }
++  var metrics = fe88_generic(inst.metrics, 0, inst.cik);
++  var tags = fe88_generic(inst.tags, 0, inst.cik);
++  var body = '<p class="fe88-back"><a href="' + FE88_BASE + '">Back to the radar</a></p>' +
++    (facts.length ? '<p class="fe88-facts">' + fe88_esc(facts.join(" · ")) + "</p>" : "") +
++    (summary ? '<p class="fe88-summary">' + fe88_esc(summary) + "</p>" : "") +
++    "<section><h2>Five filing flags</h2><ul class=\"fe88-flags\">" + flagHtml + "</ul></section>" +
++    "<section><h2>What changed since last quarter</h2>" + fe88_changed(inst) + "</section>" +
++    "<section><h2>Key numbers</h2>" + fe88_keyNumbers(inst) + (metrics ? "<h3>Metrics</h3>" + metrics : "") + (tags ? "<h3>Tags</h3>" + tags : "") + "</section>" +
++    "<section><h2>Market</h2>" + fe88_marketBlock(inst.market) + "</section>" +
++    "<section><h2>Sources and as of</h2>" + fe88_sources(inst, payload) + "</section>" +
++    pager +
++    '<section class="fe88-read"><h2>How to read the flags</h2>' + fe88_glossary() + "</section>";
++  var lede = inst.company ? inst.company + (inst.group ? " · " + inst.group : "") : "";
++  var extras = fe88_extras(inst);
++  if (extras) body += "<section><h2>Other figures</h2>" + extras + "</section>";
++  return fe88_shell("company", title, lede, fe88_stamps(payload), body);
++}
++function fe88_methodHtml(payload) {
++  var formula = payload && payload.formula ? "<h2>The score</h2><p class=\"fe88-formula\">" + fe88_esc(payload.formula) + "</p>" : "<h2>The score</h2><p>The formula is published with the monitor feed. Weights and cut-offs are editorial judgments, not facts.</p>";
++  var note = payload && payload.note ? "<p>" + fe88_esc(payload.note) + "</p>" : "";
++  var thresholds = payload && payload.thresholds ? "<h2>Cut-offs in this edition</h2>" + fe88_generic(payload.thresholds, 0) : "";
++  var lines = fe88_flagLines(payload && payload.thresholds).map(function (pair) {
++    return "<li><strong>" + fe88_esc(pair[0]) + ".</strong> " + fe88_esc(pair[1]) + "</li>";
++  }).join("");
++  var body = '<p class="fe88-back"><a href="' + FE88_BASE + '">Back to the radar</a></p>' +
++    "<section><h2>The question</h2><p>Is capital spending growing faster than the cash, revenue and profit it produces, and how is it funded?</p></section>" +
++    "<section><h2>What this is not</h2><p>It is not a forecast, a valuation, or a recommendation. It does not tell a reader to take a position, and it does not name a price to aim for.</p></section>" +
++    "<section><h2>Sources</h2><p>Filing figures come from SEC EDGAR XBRL company facts. Market figures come from the Yahoo Finance chart API, which is free and unofficial: daily delayed bars, one batched pull per UK day, never a live quote.</p></section>" +
++    "<section><h2>No estimates</h2><p>Where a company has not disclosed a figure, the monitor says it is not disclosed. Nothing is filled in or interpolated.</p></section>" +
++    formula + note +
++    "<section><h2>The five flags</h2><ul>" + lines + "</ul></section>" +
++    thresholds +
++    "<section><h2>Words used here</h2>" + fe88_glossary() + "</section>" +
++    "<section><h2>Scope</h2><p>Nineteen US-listed SEC filers. Commodities, indices, crypto, and 20-F or 40-F filers are not supported.</p></section>" +
++    "<section><h2>When the data is refreshing</h2><p>A quiet note, Data refreshing, sits with the as-of lines. The figures stay on the page. The market stamp is the feed's own label when it sends one, including its own clock. A UK time appears only when this page formats fetched_utc itself, because that label was absent.</p></section>";
++  return fe88_shell("method", "How to read the Capital Sustainability Monitor", "Methodology for the radar, the flags and the stamps.", fe88_stamps(payload), body);
++}
++function fe88_errorHtml(kind) {
++  var copy = FE88_DOWN;
++  if (kind === "rate") copy = FE88_RATE;
++  else if (kind === "bad") copy = FE88_BAD;
++  else if (kind === "uncovered") copy = FE88_UNCOVERED;
++  else if (kind === "network") copy = "The monitor could not be loaded.";
++  var retry = kind === "bad" ? "" : '<button type="button" data-fe88-retry="1">Try again</button>';
++  var list = kind === "uncovered" || kind === "bad" ? fe88_listNames() : "";
++  var body = list + '<p class="fe88-err" role="alert">' + fe88_esc(copy) + "</p>" + retry + fe88_picker(kind === "bad" ? "" : "");
++  var title = kind === "uncovered" ? "Not covered yet" : "Capital Sustainability Monitor";
++  return fe88_shell(kind === "uncovered" ? "uncovered" : "error", title, "", "", body + '<p class="fe88-back"><a href="' + FE88_BASE + '">Back to the radar</a></p>');
++}
++function fe88_skeletonHtml(spec) {
++  var title = spec && spec.kind === "method" ? "How to read the Capital Sustainability Monitor" : "Capital Sustainability Monitor";
++  if (spec && spec.kind === "company") title = spec.ticker || title;
++  return fe88_shell("loading", title, "", "", '<div class="fe88-skel" role="status" aria-live="polite">Loading the monitor.</div>');
++}
++function fe88_docTitle(spec, payload) {
++  if (!spec || spec.kind === "radar" || spec.kind === "loading") return "Capital Sustainability Monitor | The Dispatch";
++  if (spec.kind === "method") return "How to read the Capital Sustainability Monitor | The Dispatch";
++  if (spec.kind === "company") {
++    var inst = payload && payload.instrument;
++    var name = inst && inst.company ? inst.company + " (" + spec.ticker + ")" : spec.ticker;
++    return name + " · Capital Sustainability Monitor | The Dispatch";
++  }
++  return "Capital Sustainability Monitor | The Dispatch";
++}
++function fe88_metaDesc(spec) {
++  if (spec && spec.kind === "method") return "How the Capital Sustainability Monitor reads filings and delayed daily market data. Not a recommendation. Capital at risk.";
++  if (spec && spec.kind === "company") return "Filing flags, attention and delayed market data for one company on the Capital Sustainability Monitor. Not a recommendation. Capital at risk.";
++  return "A ranking of what is drawing attention and what filings show about how capital spending is funded. Not a recommendation. Capital at risk.";
++}
++function fe88_neighbors(list, ticker) {
++  var rows = list && Array.isArray(list.ranking) ? list.ranking : [];
++  var i, at = -1;
++  for (i = 0; i < rows.length; i++) if (rows[i] && rows[i].ticker === ticker) { at = i; break; }
++  if (at < 0) return null;
++  return {
++    prev: at > 0 && rows[at - 1] ? rows[at - 1].ticker : "",
++    next: at + 1 < rows.length && rows[at + 1] ? rows[at + 1].ticker : ""
++  };
++}
++function fe88_failKind(status, body) {
++  var err = body && body.error;
++  if (status === 429 || err === "rate_limited") return "rate";
++  if (status === 503 || err === "monitor_unavailable") return "down";
++  if (status === 400 || err === "invalid_ticker") return "bad";
++  if (status === 404 || err === "unknown_ticker" || err === "not_found") return "uncovered";
++  if (status >= 400) return "down";
++  return "";
++}
++// fe88-pure-end
++
++var fe88_active = false;
++var fe88_spec = null;
++var fe88_seq = 0;
++var fe88_html = "";
++var fe88_for = "";
++var fe88_list = null;
++var fe88_timer = 0;
++var fe88_painting = false;
++var fe88_pickNote = "";
++
++function fe88_css() {
++  if (typeof document === "undefined" || document.getElementById("fe88-css")) return;
++  var st = document.createElement("style");
++  st.id = "fe88-css";
++  st.textContent = '.fe88{color:var(--t1,var(--ink,#e8e6df));font-family:var(--sf,Georgia,serif);max-width:100%;padding:8px 2px 28px;box-sizing:border-box}.fe88 *{box-sizing:border-box}.fe88-hd,.fe88-ft{margin:0 0 16px}.fe88-disc{font-family:var(--mn,ui-monospace,monospace);font-size:12px;letter-spacing:.04em;color:var(--t2,#A8ADB6);margin:0 0 8px}.fe88 h1{font-weight:560;font-size:clamp(28px,4vw,44px);line-height:1.05;letter-spacing:-.02em;margin:0 0 8px}.fe88 h2{font-size:22px;font-weight:560;margin:22px 0 8px}.fe88 h3{font-size:16px;margin:14px 0 6px}.fe88 p,.fe88 li{font-size:16px;line-height:1.45}.fe88-lede,.fe88-summary{font-size:18px;line-height:1.4;max-width:68ch}.fe88-mstamp,.fe88-fstamp,.fe88-asof,.fe88-quiet{font-family:var(--mn,ui-monospace,monospace);font-size:12px;line-height:1.4;color:var(--t2,#A8ADB6);margin:4px 0;overflow-wrap:anywhere}.fe88-quiet{font-style:italic}.fe88-table{width:100%;border-collapse:collapse;table-layout:fixed}.fe88-table caption{text-align:left;font-size:14px;color:var(--t2,#A8ADB6);caption-side:bottom;padding-top:8px}.fe88-table th,.fe88-table td{vertical-align:top;text-align:left;padding:8px 6px;border-bottom:1px solid var(--gb,rgba(255,255,255,.12));font-size:14px;overflow-wrap:anywhere}.fe88-table thead th{font-family:var(--mn,ui-monospace,monospace);font-size:11px;letter-spacing:.06em;font-weight:600}.fe88 a{color:inherit;text-underline-offset:2px}.fe88-co,.fe88-group,.fe88-tag,.fe88-score-k,.fe88-turn{display:block;color:var(--t2,#A8ADB6);font-size:12px}.fe88-flag{display:inline-block;min-width:1.6em;padding:1px 6px;border:1px solid currentColor;border-radius:999px;font-family:var(--mn,ui-monospace,monospace);font-size:12px;font-weight:700;text-align:center}.fe88-flag[data-flag=red]{color:#c4493a}.fe88-flag[data-flag=amber]{color:#b8882d}.fe88-flag[data-flag=green]{color:#3d8b62}.fe88-flag[data-flag="n/a"]{color:var(--t3,#8b9098)}.fe88-att{font-family:var(--mn,ui-monospace,monospace);font-size:12px;text-transform:capitalize}.fe88-spark{display:block;width:88px;max-width:100%;height:auto;color:var(--t2,#A8ADB6)}.fe88-pick{margin-top:18px;display:flex;flex-wrap:wrap;gap:8px;align-items:end}.fe88-pick h2{flex:1 0 100%;margin-top:0}.fe88-pick label{font-family:var(--mn,ui-monospace,monospace);font-size:12px}.fe88-pick input{font:500 16px/1.3 var(--mn,ui-monospace,monospace);padding:8px;min-width:0;flex:1 1 140px;background:transparent;color:inherit;border:1px solid var(--gb,rgba(255,255,255,.2));border-radius:6px}.fe88-pick button,.fe88-more,.fe88 button[data-fe88-retry]{font:600 14px/1 var(--sn,sans-serif);padding:10px 14px;border-radius:6px;border:1px solid var(--gb,rgba(255,255,255,.2));background:transparent;color:inherit;cursor:pointer}.fe88-help,.fe88-legend,.fe88-gloss{color:var(--t2,#A8ADB6);font-size:14px;max-width:70ch}.fe88-kv{width:100%;border-collapse:collapse}.fe88-kv th,.fe88-kv td{text-align:left;vertical-align:top;padding:4px 8px 4px 0;border-bottom:1px solid var(--gb,rgba(255,255,255,.08));font-size:14px;overflow-wrap:anywhere}.fe88-err{color:#c4493a}.fe88-card{display:block;text-decoration:none;padding:16px;margin:0 0 12px;border:1px solid var(--gb,rgba(255,255,255,.14));border-radius:10px;max-width:100%}.fe88-card-k{display:block;font-family:var(--mn,ui-monospace,monospace);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--gd,#c4a574)}.fe88-card-t{display:block;font-size:22px;margin-top:4px}.fe88-card-d{display:block;color:var(--t2,#A8ADB6);font-size:14px;margin-top:4px}.fe88-universe{display:flex;flex-wrap:wrap;gap:8px 12px;padding:0;list-style:none}.fe88-pager{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px}.fe88 a:focus,.fe88 button:focus,.fe88 input:focus{outline:2px solid var(--gd,#c4a574);outline-offset:2px}.fe88-skel{min-height:120px;border:1px dashed var(--gb,rgba(255,255,255,.2));padding:16px}@media(max-width:759px){.fe88-table,.fe88-table thead,.fe88-table tbody,.fe88-table tr,.fe88-table th,.fe88-table td{display:block;width:100%}.fe88-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}.fe88-table tr{border:1px solid var(--gb,rgba(255,255,255,.14));border-radius:10px;margin:0 0 10px;padding:8px}.fe88-table td,.fe88-table th[scope=row]{border:0;padding:4px 0}.fe88-table td::before,.fe88-table th[scope=row]::before{content:attr(data-label);display:block;font-family:var(--mn,ui-monospace,monospace);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--t3,#8b9098)}}.fe88-miss{color:var(--t3,#8b9098)}@media(prefers-reduced-motion:reduce){.fe88,.fe88 *{animation:none !important;transition:none !important}}';
++  document.head.appendChild(st);
++}
++function fe88_setMeta(spec, payload) {
++  if (typeof document === "undefined") return;
++  document.title = fe88_docTitle(spec, payload);
++  var desc = fe88_metaDesc(spec);
++  var node = document.querySelector('meta[name="description"]');
++  if (!node) {
++    node = document.createElement("meta");
++    node.setAttribute("name", "description");
++    document.head.appendChild(node);
++  }
++  node.setAttribute("content", desc);
++}
++function fe88_paint(html) {
++  if (typeof document === "undefined" || fe88_painting) return;
++  fe88_painting = true;
++  fe88_html = html;
++  try {
++    fe88_css();
++    fe88_setMeta(fe88_spec, fe88_payload || null);
++    var painted = false;
++    if (typeof IS_DESKTOP === "function" && IS_DESKTOP() && typeof _showOverlay === "function") {
++      try { _showOverlay("researchOv", "Capital Sustainability Monitor", html); painted = true; } catch (eOv) { painted = false; }
++    }
++    if (!painted) {
++      var main = document.getElementById("main");
++      if (main) main.innerHTML = html;
++      else {
++        var host = document.getElementById("fe88-root");
++        if (!host) {
++          host = document.createElement("div");
++          host.id = "fe88-root";
++          document.body.appendChild(host);
++        }
++        host.innerHTML = html;
++      }
++    }
++    var h = document.getElementById("fe88-h");
++    if (h && document.activeElement && document.activeElement.id !== "fe88-tk") {
++      if (!h.hasAttribute("tabindex")) h.setAttribute("tabindex", "-1");
++    }
++  } finally {
++    fe88_painting = false;
++  }
++}
++function fe88_leave() {
++  fe88_active = false;
++  fe88_spec = null;
++  fe88_for = "";
++  fe88_seq += 1;
++  if (fe88_timer) { clearTimeout(fe88_timer); fe88_timer = 0; }
++}
++function fe88_armHold(seq) {
++  if (fe88_timer) clearTimeout(fe88_timer);
++  fe88_timer = setTimeout(function () {
++    fe88_timer = 0;
++    if (seq !== fe88_seq) return;
++    var el = document.querySelector(".fe88-skel");
++    if (el) el.textContent = "Still loading the monitor.";
++  }, 20000);
++}
++function fe88_renderPayload(spec, payload) {
++  fe88_payload = payload;
++  if (spec.kind === "method") return fe88_methodHtml(payload);
++  if (spec.kind === "company") {
++    var tk = spec.ticker;
++    var neighbors = fe88_neighbors(fe88_list, tk);
++    if (payload && payload.total == null && fe88_list && fe88_list.total != null) payload.total = fe88_list.total;
++    return fe88_companyHtml(payload, neighbors);
++  }
++  fe88_list = payload;
++  return fe88_radarHtml(payload, spec, fe88_pickNote);
++}
++function fe88_load(spec) {
++  if (typeof fetch !== "function") return;
++  var seq = ++fe88_seq;
++  var key = fe88_key(spec);
++  fe88_for = key;
++  fe88_pickNote = "";
++  fe88_paint(fe88_skeletonHtml(spec));
++  fe88_armHold(seq);
++  var url = spec.kind === "company" ? "/api/monitor/" + encodeURIComponent(spec.ticker) : "/api/monitor?limit=" + (spec.kind === "radar" && spec.more ? "25" : "10");
++  if (spec.kind === "method") url = "/api/monitor?limit=1";
++  fetch(url, { headers: { accept: "application/json" } }).then(function (res) {
++    return res.json().then(function (body) { return { status: res.status, body: body }; }, function () { return { status: res.status, body: null }; });
++  }).then(function (res) {
++    if (seq !== fe88_seq) return;
++    if (fe88_timer) { clearTimeout(fe88_timer); fe88_timer = 0; }
++    var kind = fe88_failKind(res.status, res.body);
++    if (kind) { fe88_paint(fe88_errorHtml(kind)); return; }
++    if (!res.body || res.body.ok === false) { fe88_paint(fe88_errorHtml("down")); return; }
++    fe88_paint(fe88_renderPayload(spec, res.body));
++  }).catch(function () {
++    if (seq !== fe88_seq) return;
++    if (fe88_timer) { clearTimeout(fe88_timer); fe88_timer = 0; }
++    fe88_paint(fe88_errorHtml("network"));
++  });
++}
++function fe88_open(spec, mode) {
++  if (!spec) return;
++  if (spec.kind === "bad") {
++    fe88_active = true;
++    fe88_spec = spec;
++    fe88_paint(fe88_errorHtml("bad"));
++    return;
++  }
++  fe88_active = true;
++  fe88_spec = spec;
++  var path = fe88_path(spec);
++  try {
++    if (mode === "push") history.pushState({ fe88: 1 }, "", path);
++    else if (mode === "replace") history.replaceState({ fe88: 1 }, "", path);
++    else if (spec.kind === "company" && location.pathname.toUpperCase() !== path && location.pathname !== path) {
++      history.replaceState({ fe88: 1 }, "", path);
++    }
++  } catch (eHist) {}
++  if (spec.kind === "company" && !fe88_known(spec.ticker) && fe88_tickerOk(spec.ticker)) {
++    fe88_load(spec);
++    return;
++  }
++  if (spec.kind === "company" && !fe88_known(spec.ticker)) {
++    fe88_paint(fe88_errorHtml("uncovered"));
++    return;
++  }
++  fe88_load(spec);
++}
++function fe88_pick(raw) {
++  var tk = String(raw || "").trim().toUpperCase();
++  if (!tk) return;
++  if (!fe88_tickerOk(tk)) {
++    fe88_pickNote = "bad";
++    if (fe88_active && fe88_spec && fe88_spec.kind === "radar" && fe88_list) {
++      fe88_paint(fe88_radarHtml(fe88_list, fe88_spec, "bad"));
++      var input = document.getElementById("fe88-tk");
++      if (input) input.focus();
++      return;
++    }
++    fe88_paint(fe88_errorHtml("bad"));
++    return;
++  }
++  fe88_open({ kind: "company", ticker: tk }, "push");
++}
++function fe88_boot() {
++  if (typeof document === "undefined") return;
++  fe88_css();
++  try {
++    if (typeof renderResearch === "function" && !renderResearch.fe88) {
++      var research0 = renderResearch;
++      var wrappedResearch = function () {
++        if (fe88_active && fe88_html) return fe88_html;
++        var html = "";
++        try { html = research0.apply(this, arguments) || ""; } catch (eR) { html = ""; }
++        if (String(html).indexOf("fe88-card") >= 0) return html;
++        return fe88_cardHtml() + html;
++      };
++      wrappedResearch.fe88 = true;
++      renderResearch = wrappedResearch;
++    }
++  } catch (eWrapR) {}
++  try {
++    if (typeof _publicPageFromPath === "function" && !_publicPageFromPath.fe88) {
++      var path0 = _publicPageFromPath;
++      var wrappedPath = function (pathname) {
++        if (fe88_parse(pathname)) return "research";
++        return path0.apply(this, arguments);
++      };
++      wrappedPath.fe88 = true;
++      _publicPageFromPath = wrappedPath;
++    }
++  } catch (eWrapP) {}
++  try {
++    if (typeof nav === "function" && !nav.fe88) {
++      var nav0 = nav;
++      var wrappedNav = function (p) {
++        var spec = null;
++        try { spec = fe88_parse(location.pathname); } catch (ePath) { spec = null; }
++        var out;
++        try { out = nav0.apply(this, arguments); } catch (eNav) { out = undefined; }
++        if (spec && (p === "research" || p === "home" || fe88_active)) {
++          fe88_active = true;
++          if (!fe88_spec) fe88_spec = spec;
++          if (fe88_html) fe88_paint(fe88_html);
++        } else if (!spec && p !== "research") {
++          fe88_leave();
++        }
++        return out;
++      };
++      wrappedNav.fe88 = true;
++      nav = wrappedNav;
++    }
++  } catch (eWrapN) {}
++  document.addEventListener("click", function (e) {
++    var t = e.target;
++    if (!t || !t.closest) return;
++    var more = t.closest("[data-fe88-more]");
++    if (more && fe88_active) {
++      e.preventDefault();
++      fe88_open({ kind: "radar", more: true }, "replace");
++      return;
++    }
++    var retry = t.closest("[data-fe88-retry]");
++    if (retry && fe88_spec) {
++      e.preventDefault();
++      fe88_load(fe88_spec);
++      return;
++    }
++    var a = t.closest("a[href]");
++    if (!a) return;
++    var href = a.getAttribute("href") || "";
++    if (href.indexOf(FE88_BASE) !== 0) return;
++    var spec = fe88_parse(href);
++    if (!spec) return;
++    e.preventDefault();
++    fe88_open(spec, "push");
++  }, true);
++  document.addEventListener("submit", function (e) {
++    var form = e.target;
++    if (!form || !form.getAttribute || form.getAttribute("data-fe88-pick") == null) return;
++    e.preventDefault();
++    var input = form.querySelector("input");
++    fe88_pick(input ? input.value : "");
++  }, true);
++  window.addEventListener("popstate", function () {
++    var spec = fe88_parse(location.pathname);
++    if (spec) fe88_open(spec, "none");
++    else if (fe88_active) {
++      fe88_leave();
++      try { if (typeof renderMain === "function") renderMain(); } catch (eMain) {}
++    }
++  });
++  var initial = fe88_parse(location.pathname);
++  if (initial) fe88_open(initial, "none");
++}
++var fe88_payload = null;
++if (typeof document !== "undefined") {
++  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fe88_boot);
++  else fe88_boot();
++}
+--- index.html
++++ index.html
+@@ -11,5 +11,5 @@
+ </style>
+ </head><body>
+ <div id="main"></div>
+-<script src="/app.js?v=chat86"></script>
++<script src="/app.js?v=chat87"></script>
+ </body></html>
