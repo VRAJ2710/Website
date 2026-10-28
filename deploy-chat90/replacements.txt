@@ -1,0 +1,287 @@
+server.js:89
+  -     title: "The Dispatch Markets | Gold & Macro Research",
+  +     title: "The Dispatch Market | Gold & Macro Research",
+
+server.js:90
+  -     description: "The Dispatch Markets is a gold and macro research house for independent traders. Read conditional weekly playbooks, daily briefs, and honest market context.",
+  +     description: "The Dispatch Market is a gold and macro research house for independent traders. Read conditional weekly playbooks, daily briefs, and honest market context.",
+
+server.js:113
+  -     title: "Dispatch Brief | Daily Market View | The Dispatch Markets",
+  +     title: "Dispatch Brief | Daily Market View | The Dispatch Market",
+
+server.js:162
+  -     description: "Explore market context across US equities, global indices, crypto, sectors, and watchlists with price-aware research from The Dispatch Markets.",
+  +     description: "Explore market context across US equities, global indices, crypto, sectors, and watchlists with price-aware research from The Dispatch Market.",
+
+server.js:193
+  -     title: "Research Desk | Market Explainers & Analysis | The Dispatch Markets",
+  +     title: "Research Desk | Market Explainers & Analysis | The Dispatch Market",
+
+server.js:194
+  -     description: "Research explainers from The Dispatch Markets covering macro regimes, market structure, sector dispersion, and the reasoning behind a thesis.",
+  +     description: "Research explainers from The Dispatch Market covering macro regimes, market structure, sector dispersion, and the reasoning behind a thesis.",
+
+server.js:228
+  -     title: "Dashboard | The Dispatch Markets",
+  +     title: "Dashboard | The Dispatch Market",
+
+server.js:229
+  -     description: "The free Dispatch Markets dashboard for market regime, quotes, news, and research context.",
+  +     description: "The free Dispatch Market dashboard for market regime, quotes, news, and research context.",
+
+server.js:237
+  -     title: "Learn | Beginner Guides, Glossary & Frameworks | The Dispatch Markets",
+  +     title: "Learn | Beginner Guides, Glossary & Frameworks | The Dispatch Market",
+
+server.js:246
+  -     title: "Portfolio | Local Position Tracking | The Dispatch Markets",
+  +     title: "Portfolio | Local Position Tracking | The Dispatch Market",
+
+server.js:255
+  -     title: "Watchlist | Market Names in Context | The Dispatch Markets",
+  +     title: "Watchlist | Market Names in Context | The Dispatch Market",
+
+server.js:256
+  -     description: "Follow a local watchlist with honest quote status, market context, and research links from The Dispatch Markets.",
+  +     description: "Follow a local watchlist with honest quote status, market context, and research links from The Dispatch Market.",
+
+server.js:264
+  -     title: "Market Lab | Free Scenario Analysis | The Dispatch Markets",
+  +     title: "Market Lab | Free Scenario Analysis | The Dispatch Market",
+
+server.js:273
+  -     title: "Screener | Free Market Screens | The Dispatch Markets",
+  +     title: "Screener | Free Market Screens | The Dispatch Market",
+
+server.js:282
+  -     title: "Sectors | Rotation and Relative Strength | The Dispatch Markets",
+  +     title: "Sectors | Rotation and Relative Strength | The Dispatch Market",
+
+server.js:291
+  -     title: "Heatmap | Market Breadth at a Glance | The Dispatch Markets",
+  +     title: "Heatmap | Market Breadth at a Glance | The Dispatch Market",
+
+server.js:300
+  -     title: "Crypto Markets | Free Market Context | The Dispatch Markets",
+  +     title: "Crypto Markets | Free Market Context | The Dispatch Market",
+
+server.js:309
+  -     title: "Paper | The Dispatch Markets",
+  +     title: "Paper | The Dispatch Market",
+
+server.js:318
+  -     title: "Geo Risk | Market and Chokepoint Context | The Dispatch Markets",
+  +     title: "Geo Risk | Market and Chokepoint Context | The Dispatch Market",
+
+server.js:2508
+  - const RT52_ADMIN_ONLY = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Administrators only | The Dispatch Markets</title>
+  + const RT52_ADMIN_ONLY = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Administrators only | The Dispatch Market</title>
+
+server.js:2512
+  - <body><main class="c"><div class="k">THE DISPATCH · MARKETS</div><h1>Administrators only</h1><p>This page is for The Dispatch team. If that's you, sign in on the main site with your administrator account, then come back here.</p><a class="b" href="/">Go to The Dispatch</a><div class="s">Looking for 
+  + <body><main class="c"><div class="k">THE DISPATCH · MARKET</div><h1>Administrators only</h1><p>This page is for The Dispatch team. If that's you, sign in on the main site with your administrator account, then come back here.</p><a class="b" href="/">Go to The Dispatch</a><div class="s">Looking for y
+
+server.js:5309
+  -   const body = '<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Page not found | The Dispatch Markets</title><style>body{margin:0;background:#0b1018;color:#e8edf3;font:16px system-ui;display:grid;pla
+  +   const body = '<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Page not found | The Dispatch Market</title><style>body{margin:0;background:#0b1018;color:#e8edf3;font:16px system-ui;display:grid;plac
+
+server.js:5469
+  -       <p>The Dispatch Markets is for educational and research purposes only. Market data may be delayed, incomplete, or inaccurate, and nothing on this site is financial advice or a recommendation to buy or sell an instrument.</p>
+  +       <p>The Dispatch Market is for educational and research purposes only. Market data may be delayed, incomplete, or inaccurate, and nothing on this site is financial advice or a recommendation to buy or sell an instrument.</p>
+
+server.js:5506
+  -     isPartOf: { "@type": "WebSite", name: "The Dispatch Markets", url: `${PUBLIC_ORIGIN}/` },
+  +     isPartOf: { "@type": "WebSite", name: "The Dispatch Market", url: `${PUBLIC_ORIGIN}/` },
+
+server.js:5517
+  -       { "@type": "ListItem", position: 1, name: "The Dispatch Markets", item: `${PUBLIC_ORIGIN}/` },
+  +       { "@type": "ListItem", position: 1, name: "The Dispatch Market", item: `${PUBLIC_ORIGIN}/` },
+
+server.js:5528
+  - <meta property="og:site_name" content="The Dispatch Markets">
+  + <meta property="og:site_name" content="The Dispatch Market">
+
+server.js:5533
+  - <meta property="og:image:alt" content="The Dispatch Markets — gold and macro research house">
+  + <meta property="og:image:alt" content="The Dispatch Market — gold and macro research house">
+
+server.js:5568
+  -     isPartOf: { "@type": "WebSite", name: "The Dispatch Markets", url: `${PUBLIC_ORIGIN}/` },
+  +     isPartOf: { "@type": "WebSite", name: "The Dispatch Market", url: `${PUBLIC_ORIGIN}/` },
+
+server.js:5575
+  -       { "@type": "ListItem", position: 1, name: "The Dispatch Markets", item: `${PUBLIC_ORIGIN}/` },
+  +       { "@type": "ListItem", position: 1, name: "The Dispatch Market", item: `${PUBLIC_ORIGIN}/` },
+
+server.js:5586
+  - <meta property="og:site_name" content="The Dispatch Markets">
+  + <meta property="og:site_name" content="The Dispatch Market">
+
+server.js:5591
+  - <meta property="og:image:alt" content="The Dispatch Markets — gold and macro research house">
+  + <meta property="og:image:alt" content="The Dispatch Market — gold and macro research house">
+
+server.js:5635
+  -     <nav class="seo-public-nav" aria-label="Research sections"><a href="/research/">Research Desk</a><a href="/brief/">Dispatch Brief</a><a href="/">The Dispatch Markets</a></nav>
+  +     <nav class="seo-public-nav" aria-label="Research sections"><a href="/research/">Research Desk</a><a href="/brief/">Dispatch Brief</a><a href="/">The Dispatch Market</a></nav>
+
+server.js:5639
+  -     <aside class="seo-public-note"><h2>Research with appropriate context</h2><p>The Dispatch Markets is for educational and research purposes only. Market data may be delayed, incomplete, or inaccurate, and nothing on this site is financial advice or a recommendation to buy or sell an instrument.</p
+  +     <aside class="seo-public-note"><h2>Research with appropriate context</h2><p>The Dispatch Market is for educational and research purposes only. Market data may be delayed, incomplete, or inaccurate, and nothing on this site is financial advice or a recommendation to buy or sell an instrument.</p>
+
+server.js:5651
+  -   const title = `${payload.headline} | The Dispatch Markets`;
+  +   const title = `${payload.headline} | The Dispatch Market`;
+
+server.js:5661
+  -     publisher: { "@type": "Organization", name: "The Dispatch Markets", url: `${PUBLIC_ORIGIN}/` },
+  +     publisher: { "@type": "Organization", name: "The Dispatch Market", url: `${PUBLIC_ORIGIN}/` },
+
+server.js:5673
+  - <meta property="og:site_name" content="The Dispatch Markets">
+  + <meta property="og:site_name" content="The Dispatch Market">
+
+server.js:5697
+  -   return `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Page not found | The Dispatch Markets</title><style>body{margin:0;background:#0b1018;color:#e8edf3;font:16px system-ui;display:grid;place-ite
+  +   return `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Page not found | The Dispatch Market</title><style>body{margin:0;background:#0b1018;color:#e8edf3;font:16px system-ui;display:grid;place-item
+
+server.js:5704
+  -   return `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin · The Dispatch Markets</title>
+  +   return `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin · The Dispatch Market</title>
+
+server.js:7422
+  -     console.log(`Dispatch Markets preview listening on ${PORT}`);
+  +     console.log(`Dispatch Market preview listening on ${PORT}`);
+
+server.js:7771
+  -     ? "<p>The Dispatch Markets (thedispatch.uk) publishes market research and data for information only. Nothing on this site is investment advice or a recommendation to buy or sell any security. Prices come from free third-party feeds and may be delayed or incomplete.</p><p>Premium costs £15 per mo
+  +     ? "<p>The Dispatch Market (thedispatch.uk) publishes market research and data for information only. Nothing on this site is investment advice or a recommendation to buy or sell any security. Prices come from free third-party feeds and may be delayed or incomplete.</p><p>Premium costs £15 per mon
+
+server.js:7773
+  -   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} | The Dispatch Markets</title><link rel="canonical" href="https://thedispatch.uk${terms ? "/terms" : "/privacy"}"><style>body{margin:0;backgro
+  +   const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} | The Dispatch Market</title><link rel="canonical" href="https://thedispatch.uk${terms ? "/terms" : "/privacy"}"><style>body{margin:0;backgrou
+
+server.js:7916
+  - <meta name="description" content="The Dispatch Markets: Free and Premium (£15/month) plans.">
+  + <meta name="description" content="The Dispatch Market: Free and Premium (£15/month) plans.">
+
+app.js:11168
+  -       <div class="htec-boot-txt">The Dispatch · Markets</div>
+  +       <div class="htec-boot-txt">The Dispatch · Market</div>
+
+app.js:11656
+  -     isPartOf: { "@type": "WebSite", name: "The Dispatch Markets", url: origin + "/" },
+  +     isPartOf: { "@type": "WebSite", name: "The Dispatch Market", url: origin + "/" },
+
+app.js:11669
+  -       { "@type": "ListItem", position: 1, name: "The Dispatch Markets", item: origin + "/" },
+  +       { "@type": "ListItem", position: 1, name: "The Dispatch Market", item: origin + "/" },
+
+app.js:12881
+  -       <button type="button" class="front-door-brand" onclick="openAbout()" aria-label="About The Dispatch Markets">
+  +       <button type="button" class="front-door-brand" onclick="openAbout()" aria-label="About The Dispatch Market">
+
+app.js:12883
+  -         <span>THE DISPATCH <b>·</b> MARKETS</span>
+  +         <span>THE DISPATCH <b>·</b> MARKET</span>
+
+app.js:16341
+  -   h += `<div style="margin-top:24px;padding:14px;background:var(--b1);border-radius:10px;border-top:3px solid var(--gd);font-family:var(--mn);font-size:9px;color:var(--t3);text-align:center">Research purposes only · Not investment advice · The Dispatch Markets</div>`;
+  +   h += `<div style="margin-top:24px;padding:14px;background:var(--b1);border-radius:10px;border-top:3px solid var(--gd);font-family:var(--mn);font-size:9px;color:var(--t3);text-align:center">Research purposes only · Not investment advice · The Dispatch Market</div>`;
+
+app.js:19027
+  -   try { if (tk && (tk === (typeof termSelTk !== "undefined" ? termSelTk : null) || tk === (typeof selTk !== "undefined" ? selTk : null))) document.title = `${tk} · ${(A.find(a => a.tk === tk) || {}).nm || "Markets"} | The Dispatch Markets`; } catch (e) {}
+  +   try { if (tk && (tk === (typeof termSelTk !== "undefined" ? termSelTk : null) || tk === (typeof selTk !== "undefined" ? selTk : null))) document.title = `${tk} · ${(A.find(a => a.tk === tk) || {}).nm || "Markets"} | The Dispatch Market`; } catch (e) {}
+
+app.js:19644
+  -   const a = A.find(x => x.tk === k); const want = `${k} · ${a ? a.nm : "Markets"} | The Dispatch Markets`;
+  +   const a = A.find(x => x.tk === k); const want = `${k} · ${a ? a.nm : "Markets"} | The Dispatch Market`;
+
+app.js:19680
+  -   if (_dynTk) { const want = `${_dynTk} · Lookup | The Dispatch Markets`; if (document.title !== want) document.title = want; }
+  +   if (_dynTk) { const want = `${_dynTk} · Lookup | The Dispatch Market`; if (document.title !== want) document.title = want; }
+
+app.js:22184
+  -   if (m) { document.title = `${m.title} | Learn | The Dispatch Markets`; const md = document.querySelector('meta[name="description"]'); if (md) md.setAttribute('content', m.summary); }
+  +   if (m) { document.title = `${m.title} | Learn | The Dispatch Market`; const md = document.querySelector('meta[name="description"]'); if (md) md.setAttribute('content', m.summary); }
+
+app.js:22185
+  -   else if (/\| Learn \| The Dispatch Markets$/.test(document.title) || /^Learn \| Market Analysis Frameworks/.test(document.title)) { document.title = 'Learn | Beginner Guides, Glossary & Frameworks | The Dispatch Markets'; }
+  +   else if (/\| Learn \| The Dispatch Market$/.test(document.title) || /^Learn \| Market Analysis Frameworks/.test(document.title)) { document.title = 'Learn | Beginner Guides, Glossary & Frameworks | The Dispatch Market'; }
+
+app.js:23557
+  -   _rt45SyncUrl = function () { try { if (_rt47L.id && /^\/learn\/?$/.test(location.pathname) && !_learnSub && _learnTab === 'start') { const q = '?lesson=' + encodeURIComponent(_rt47L.id); if (location.search !== q) history.replaceState(history.state, '', '/learn/' + q); const m = _rt47Meta(_rt47L.i
+  +   _rt45SyncUrl = function () { try { if (_rt47L.id && /^\/learn\/?$/.test(location.pathname) && !_learnSub && _learnTab === 'start') { const q = '?lesson=' + encodeURIComponent(_rt47L.id); if (location.search !== q) history.replaceState(history.state, '', '/learn/' + q); const m = _rt47Meta(_rt47L.i
+
+app.js:23916
+  -       <h2 class="rt49-ttl" id="about-dialog-title" tabindex="-1">The <em>Dispatch</em> Markets</h2>
+  +       <h2 class="rt49-ttl" id="about-dialog-title" tabindex="-1">The <em>Dispatch</em> Market</h2>
+
+app.js:23926
+  -         <div class="rt49-ph rt49-nophoto"><img alt="Vraj Patel, founder of The Dispatch Markets" width="88" height="88" decoding="async" hidden><span class="rt49-mono" aria-hidden="true">VP</span></div>
+  +         <div class="rt49-ph rt49-nophoto"><img alt="Vraj Patel, founder of The Dispatch Market" width="88" height="88" decoding="async" hidden><span class="rt49-mono" aria-hidden="true">VP</span></div>
+
+app.js:24661
+  -   document.title = `${RT48_ACTS[_rt48A.id].t} | Dispatch Academy | The Dispatch Markets`; return; } } catch (e) {} return _su8.apply(this, arguments); }; }
+  +   document.title = `${RT48_ACTS[_rt48A.id].t} | Dispatch Academy | The Dispatch Market`; return; } } catch (e) {} return _su8.apply(this, arguments); }; }
+
+index.html:42
+  - <meta name="description" content="The Dispatch Markets is a gold and macro research house for independent traders. Read conditional weekly playbooks, daily briefs, and honest market context.">
+  + <meta name="description" content="The Dispatch Market is a gold and macro research house for independent traders. Read conditional weekly playbooks, daily briefs, and honest market context.">
+
+index.html:46
+  - <title>The Dispatch Markets | Gold &amp; Macro Research</title>
+  + <title>The Dispatch Market | Gold &amp; Macro Research</title>
+
+index.html:48
+  - <meta property="og:site_name" content="The Dispatch Markets">
+  + <meta property="og:site_name" content="The Dispatch Market">
+
+index.html:49
+  - <meta property="og:title" content="The Dispatch Markets | Gold &amp; Macro Research">
+  + <meta property="og:title" content="The Dispatch Market | Gold &amp; Macro Research">
+
+index.html:53
+  - <meta property="og:image:alt" content="The Dispatch Markets — gold and macro research house">
+  + <meta property="og:image:alt" content="The Dispatch Market — gold and macro research house">
+
+index.html:57
+  - <meta name="twitter:title" content="The Dispatch Markets | Gold &amp; Macro Research">
+  + <meta name="twitter:title" content="The Dispatch Market | Gold &amp; Macro Research">
+
+index.html:61
+  - {"@context":"https://schema.org","@type":"WebSite","name":"The Dispatch Markets","url":"https://thedispatch.uk/","description":"A gold and macro research house for independent traders, with conditional playbooks and daily market context.","publisher":{"@type":"Person","name":"Vraj Patel","url":"http
+  + {"@context":"https://schema.org","@type":"WebSite","name":"The Dispatch Market","url":"https://thedispatch.uk/","description":"A gold and macro research house for independent traders, with conditional playbooks and daily market context.","publisher":{"@type":"Person","name":"Vraj Patel","url":"https
+
+index.html:141
+  -   <div class="cmd-logo" aria-label="The Dispatch Markets" role="button" tabindex="0" onclick="openAbout()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAbout();}">
+  +   <div class="cmd-logo" aria-label="The Dispatch Market" role="button" tabindex="0" onclick="openAbout()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAbout();}">
+
+index.html:146
+  -       <span class="cmd-logo-market">MARKETS</span>
+  +       <span class="cmd-logo-market">MARKET</span>
+
+index.html:214
+  -     <div class="logo" onclick="openAbout()" aria-label="The Dispatch Markets" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAbout();}">
+  +     <div class="logo" onclick="openAbout()" aria-label="The Dispatch Market" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openAbout();}">
+
+index.html:218
+  -         <span class="logo-markets">Markets</span>
+  +         <span class="logo-markets">Market</span>
+
+index.html:234
+  -         <p class="seo-public-eyebrow">THE DISPATCH MARKETS · PUBLIC MARKET DESK</p>
+  +         <p class="seo-public-eyebrow">THE DISPATCH MARKET · PUBLIC MARKET DESK</p>
+
+index.html:246
+  -       <aside class="seo-public-note"><h2>Research with appropriate context</h2><p>The Dispatch Markets is for educational and research purposes only. Market data may be delayed, incomplete, or inaccurate, and nothing on this site is financial advice or a recommendation to buy or sell an instrument.<
+  +       <aside class="seo-public-note"><h2>Research with appropriate context</h2><p>The Dispatch Market is for educational and research purposes only. Market data may be delayed, incomplete, or inaccurate, and nothing on this site is financial advice or a recommendation to buy or sell an instrument.</
+
+index.html:284
+  -        <h2 class="about-mast" id="about-dialog-title" tabindex="-1">The <em>Dispatch</em> Markets</h2>
+  +        <h2 class="about-mast" id="about-dialog-title" tabindex="-1">The <em>Dispatch</em> Market</h2>
+
+index.html:339
+  - <script defer src="/app.js?v=chat89"></script>
+  + <script defer src="/app.js?v=chat90"></script>
