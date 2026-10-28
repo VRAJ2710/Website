@@ -1,0 +1,2 @@
+base_server.js: seed routes 8; rows with 'Dispatch Markets' before 6; boot updates [6,6]; after: 0 'Dispatch Markets', all 9 page titles carry 'The Dispatch Market' (suffix, or home prefix) and none end '| The Dispatch'; 2nd run [0,0]; metadata unchanged: OK
+c90out/server.js: seed routes 8; rows with 'Dispatch Markets' before 2; boot updates [2,6]; after: 0 'Dispatch Markets', all 9 page titles carry 'The Dispatch Market' (suffix, or home prefix) and none end '| The Dispatch'; 2nd run [0,0]; metadata unchanged: OK

@@ -1,0 +1,14 @@
+chat91 title suffix changes ("| The Dispatch" / "· The Dispatch" -> "... The Dispatch Market")
+server.js (PUBLIC_ROUTE_DEFINITIONS titles, lines 129,145,161,177,209):
+  Weekly Playbook | Conditional Gold & Macro Scenarios | The Dispatch Market
+  Gold Desk | Gold Price Structure & Macro Context | The Dispatch Market
+  Markets | Equities, Crypto, Sectors & Indices | The Dispatch Market
+  Newsroom | Financial News with Market Context | The Dispatch Market
+  Market Signals | Conviction-Weighted Macro Signals | The Dispatch Market
+server.js line 5702 (RT50_CONSOLE_HTML <title>): Admin dashboard · The Dispatch Market
+server.js 6728/6729/6873/6874/6875 (auth/premium page titles): Sign in · / Create free account · / Premium active · / Premium · (x2) ... The Dispatch Market
+server.js 7915 (/pricing <title>): Pricing · The Dispatch Market
+app.js fe88_docTitle (lines 40335,40336,40340,40342): "... Capital Sustainability Monitor | The Dispatch Market" (radar, method, company "Name (TICKER) · ...", fallback)
+index.html: token app.js?v=chat90 -> chat91
+Total: server.js 12 title strings + 1 boot block; app.js 4; index.html 1.
+Left alone on purpose: prose uses of "The Dispatch", apple-mobile-web-app-title "The Dispatch", maintenance page title "The Dispatch — Under maintenance", UA/source labels.
