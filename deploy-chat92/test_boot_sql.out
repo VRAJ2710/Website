@@ -1,0 +1,3 @@
+synthetic: 11 positive variants fixed (case kept), 8 negatives untouched; updates [1,0,11]; 2nd run [0,0,0]; metadata unchanged: OK
+/workspace/c90/base_server.js: 8 seed pages; updates [4,5,1]; after: 0 matches of /dispatch\W+markets/i, home eyebrow 'THE DISPATCH MARKET · GOLD & MACRO RESEARCH'; 2nd run [0,0,0]: OK
+/workspace/c92/base/server.js: 8 seed pages; updates [0,0,1]; after: 0 matches of /dispatch\W+markets/i, home eyebrow 'THE DISPATCH MARKET · GOLD & MACRO RESEARCH'; 2nd run [0,0,0]: OK
