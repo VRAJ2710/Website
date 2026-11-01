@@ -13,9 +13,9 @@ html.c93:root,html.c93:root[data-theme],html.c93:root:not([data-theme="light"]){
   --tx:#1b1b1b;--t2:#45443f;--t3:#66655f;
   --gd:#1f3a5f;--gdG:rgba(31,58,95,.07);--gn:#2f6b47;--rd:#a23b2a;--cy:#1f3a5f;--bl:#1f3a5f;--pu:#4a3f6b;
   --gnG:rgba(47,107,71,.09);--rdG:rgba(162,59,42,.09);--blG:rgba(31,58,95,.07);--cyG:rgba(31,58,95,.07);
-  --display:"Fraunces",Georgia,"Times New Roman",serif;
-  --ui:"Public Sans",system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
-  --data:"Public Sans",system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
+  --display:"Source Serif 4",Georgia,"Times New Roman",serif;
+  --ui:Inter,system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
+  --data:Inter,system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
   --mn:var(--data);--sn:var(--ui);--sf:var(--display);
   --on-accent:#fff;--sidebar-w:0px;
   --shadow-1:0 1px 2px rgba(27,27,27,.06);--shadow-2:0 2px 10px rgba(27,27,27,.08);
@@ -76,7 +76,8 @@ html.c93 .hdr .logo-text>span{font:inherit!important;color:inherit!important;let
 html.c93 .hdr .logo-text>span+span::before{content:" "}
 html.c93 body .hdr .logo .logo-text>span{font-size:19px!important;font-weight:600!important;font-family:var(--display)!important}
 html.c93 .c93-menu-btn{font:500 13px/1 var(--ui);color:var(--ink);background:var(--paper);border:1px solid var(--rule-2);border-radius:4px;padding:8px 10px;cursor:pointer;flex:0 0 auto;white-space:nowrap}
-html.c93 .hdr #hdrAuthBtn{order:8;flex:1 0 100%!important;width:100%!important;justify-content:flex-start;margin:2px 0 0}
+html.c93 .hdr #hdrAuthBtn{order:0;flex:0 0 auto!important;width:auto!important;margin:0!important;padding:0!important;min-height:0!important;display:flex;align-items:center;gap:6px}
+@media (max-width:767px){html.c93 .hdr #hdrAuthBtn .auth-btn--premium,html.c93 .hdr #hdrAuthBtn .auth-divider{display:none!important}html.c93 .hdr #hdrAuthBtn .auth-btn{padding:8px 4px!important;font-size:13px!important}}
 html.c93 .hdr .c93-strip{order:9;margin:8px -14px 0;padding:6px 14px;font-size:12px}
 @media (max-width:767px){html.c93 .c93-menu{top:56px;right:8px;left:8px;width:auto}html.c93 .c93-menu ul{grid-template-columns:1fr}}
 
@@ -112,3 +113,32 @@ html.c93 .fe88-word[data-flag="amber"]{color:#7a5a12;border-color:rgba(122,90,18
 html.c93 .fe88-word[data-flag="red"]{color:var(--neg);border-color:rgba(162,59,42,.45);background:var(--neg-wash)}
 
 @media print{html.c93 #cmdBar,html.c93 .hdr,html.c93 .c93-menu{display:none!important}}
+
+/* ── chat93 rework: calm tables, no placeholders ── */
+html.c93 .c93-hide{display:none!important}
+html.c93 .c93-na:empty{display:inline}
+html.c93 .c93-note{font:400 13px/1.5 var(--ui);color:var(--ink-3);margin:8px 0 0}
+/* chat93 v2: signed-in desk in the calm style */
+html.c93 body:not(.c93-x):not(.c93-y) .tape.tape,html.c93 body.fe70-home:not(.app-booting) .tape.tape{display:none!important}
+html.c93{--desk-shell:0px!important}
+html.c93 body.fe70-home .terminal-right{visibility:visible!important}
+html.c93 .term-overlay-hdr{background:#fbfaf7!important;color:#1b1b1b!important;border-bottom:1px solid #e4e1d8!important;box-shadow:none!important}
+html.c93 .term-overlay-title{color:#1b1b1b!important;font-family:"Source Serif 4",Georgia,serif!important;font-weight:600!important}
+html.c93 .term-overlay-close{background:transparent!important;color:#1b1b1b!important;border:1px solid #d9d5ca!important;box-shadow:none!important}
+html.c93 .home-tape,html.c93 .cmd-live-label,html.c93 .cmd-status .rt51-cnt{display:none!important}
+html.c93 table.tt{width:100%!important;max-width:100%;border-collapse:collapse!important;font-family:Inter,system-ui,sans-serif!important;background:transparent!important}
+html.c93 table.tt thead,html.c93 table.tt thead tr,html.c93 table.tt thead th{background:transparent!important;color:#5b5b5b!important;box-shadow:none!important}
+html.c93 table.tt thead th{border-bottom:1px solid #1b1b1b!important;font:600 11px/1.4 Inter,system-ui,sans-serif!important;letter-spacing:.04em;text-transform:uppercase;padding:8px 10px!important;text-align:left}
+html.c93 table.tt td{border-bottom:1px solid #ebe8e0!important;background:transparent!important;font-family:Inter,system-ui,sans-serif!important;font-variant-numeric:tabular-nums;white-space:normal!important;padding:9px 10px!important;color:#1b1b1b}
+html.c93 table.tt tr:hover td{background:#f4f2ec!important}
+html.c93 .trust-stat{background:transparent!important;color:#6b6b6b!important;border:0!important;font-size:11px!important;padding:0!important;letter-spacing:0!important;text-transform:none!important;font-family:Inter,system-ui,sans-serif!important}
+html.c93 .panel-body{overflow-x:auto}
+html.c93 .asof-tag{color:#6b6b6b!important;font-family:Inter,system-ui,sans-serif!important;font-size:11px!important}
+html.c93 #p1sub{display:none!important}
+html.c93 .gc,html.c93 .si-card{background:#fff!important;background-image:none!important;border:1px solid #e4e1d8!important;box-shadow:none!important;color:#1b1b1b!important;backdrop-filter:none!important}
+html.c93 .news-toolbar{background:#fff!important;border:1px solid #e4e1d8!important;box-shadow:none!important;backdrop-filter:none!important}
+html.c93 .news-toolbar button,html.c93 .news-toolbar .nf-chip{color:#1b1b1b!important;background:#fbfaf7!important;border-color:#d9d5ca!important}
+html.c93 .terminal-wrap{background-image:none!important}
+/* v2b: readable primary buttons; no badge chrome on signed-in cards */
+html.c93 .btn.btn-primary,html.c93 a.btn-primary{color:#fff!important}
+html.c93 .si-badge,html.c93 .htec-chip.rt51-cnt{display:none!important}

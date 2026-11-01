@@ -95,7 +95,7 @@ window.addEventListener("popstate", function () { setTimeout(c93_markNav, 50); }
 var C93_TEXT = [
   [/NO LIVE SYNC/g, "No current price"],
   [/\bNo live sync\b/g, "No current price"],
-  [/\bUNAVAILABLE\b/g, "Not available"],
+  [/\bUNAVAILABLE\b/g, "Delayed"],
   [/Run Lens Engine on /g, "Open the research view for "],
   [/\bLens Engine\b/g, "research view"],
   [/\bDesk Run\b/g, "Daily check"],
@@ -112,7 +112,10 @@ var C93_TEXT = [
   [/Top desk score: [A-Z0-9.^-]+ \d+\/100 \(Dispatch desk score\)\.\s*/g, ""],
   [/\bMarkets closed\b/g, "Outside US stock hours"],
   [/\bmarkets closed\b/g, "outside US stock hours"],
-  [/\bMARKETS CLOSED\b/g, "OUTSIDE US STOCK HOURS"]
+  [/\bMARKETS CLOSED\b/g, "OUTSIDE US STOCK HOURS"],
+  [/\d+ of \d+ markets trading now(?:, \d+ closed)?(?: \([^)]*\))?/g, ""],
+  [/\bDesk score\b/g, "Score"],
+  [/\bDESK SCORE\b/g, "SCORE"]
 ];
 var C93_DASH = /^\s*(?:[\u2014\u2013\-]{1,2}|\u2026|\$\u2014|\u2014%|[\u2014\u2013]\s*%|n\/a\u2014)\s*$/;
 var C93_SKIP = { SCRIPT: 1, STYLE: 1, TEXTAREA: 1, INPUT: 1, SELECT: 1, OPTION: 1, CODE: 1, PRE: 1, NOSCRIPT: 1, svg: 1, SVG: 1 };
@@ -135,9 +138,17 @@ function c93_fixLeaf(el) {
   var t = el.textContent;
   if (!t || t.length > 6 || !C93_DASH.test(t)) return;
   if (/^(?:BUTTON|A|OPTION|LABEL)$/.test(el.nodeName)) return;
-  el.textContent = "n/a";
+  el.textContent = "";
   el.classList.add("c93-na");
-  if (!el.title) el.title = "Not available from our free data feed right now";
+  c93_pruneRow(el);
+}
+// A table row whose figures are all missing is removed rather than shown as a row of blanks.
+function c93_pruneRow(el) {
+  var row = el.closest ? el.closest("tr") : null;
+  if (!row || !row.parentNode || row.parentNode.nodeName === "THEAD") return;
+  var cells = row.children, nums = 0;
+  for (var i = 1; i < cells.length; i++) if (/\d/.test(cells[i].textContent || "")) nums++;
+  if (!nums) row.classList.add("c93-hide");
 }
 function c93_walk(root) {
   if (!root) return;
@@ -172,6 +183,15 @@ function c93_observe() {
     }).observe(document.body, { childList: true, subtree: true, characterData: true });
   } catch (e) {}
 }
+// The monitor pages are server-rendered: open them with a full page load.
+(function c93_fe88Nav() {
+  if (typeof fe88_open !== "function" || typeof fe88_path !== "function") return;
+  var orig = fe88_open;
+  fe88_open = function (spec, mode) {
+    try { if (spec && spec.kind !== "bad" && mode === "push") { var p = fe88_path(spec); if (p && p !== location.pathname) { location.assign(p); return; } } } catch (e) {}
+    return orig.apply(this, arguments);
+  };
+})();
 (function c93_boot() {
   var go = function () {
     c93_markNav();

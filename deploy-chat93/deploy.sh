@@ -4,6 +4,8 @@
 #  B paper theme (c93.css), text wordmark + plain nav + disclaimer strip, trust footer, paper 404/auth/pricing/legal pages
 #  C no dash or "NO LIVE SYNC" values, per-asset session labels, plain-English Brief card, desk-score lines removed
 #  D capital-sustainability company page rewritten (correct "Rank N of 19", four figures, source line, plain flags)
+#  G v2: server-rendered guest Home, Markets, Gold, Brief, Signals, News, Research and monitor pages (mockup layout);
+#    no placeholder rows (last official figure with its date, else the row is left out); calm signed-in desk
 #  E SEC daily download count also kept in dispatch_openbb_research_cache (existing table, no DDL)
 #  F background polling pauses when the tab is hidden; duplicate GETs within 60 s share one request; charts lib loads on first chart
 # Does NOT: run the server, npm, git, .replit, package.json, env vars, Stripe, DB schema. Maintenance line 1 stays true.
@@ -15,19 +17,20 @@ BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/${REF}/deploy-chat9
 LIVE_SERVER_MD5=df10e32fb82311423f475c62833d0763   # chat92
 LIVE_APP_MD5=1640cc0d0be7f933ed5a54613c2157ba      # chat91/92
 LIVE_INDEX_MD5=ad60345de46342a6242a3791391c02cb    # chat91/92
-NEW_SERVER_MD5=0d1a85ebd38e361e98ecd0bdda0af581
-NEW_APP_MD5=6e06dddeb1127f703b963c2a8142a548
-NEW_INDEX_MD5=abb7ee5960628ef8fb34e8b435f4cec2
-NEW_CSS_MD5=b261befe64742949f70d7d5dc2b7d8c6
-NEW_SERVER_SHA256=9dc37f3bd1e434c721f7bfa71d65815fa6762a08b461c975c71c0dd8a7f48e94
-NEW_APP_SHA256=204fadbabedc12e66d06fd68dba402a00f36b213e1ca3ac3d502fd5fdbd51ead
-NEW_INDEX_SHA256=fb4161d94023e0c19be1df8dc9ea300dd46eed9047fe6d18835146077cad0fc2
-SHA_PATCH=9056b1e569cb3c93c0ba55b9498883b64ee4edf0ff3f9ccd092f5a825960352e
+NEW_SERVER_MD5=360b7a180faea428882826aad5a8b440
+NEW_APP_MD5=3b19083ada923e33b767c0ae476f068f
+NEW_INDEX_MD5=1411a118530e30f20b53e77761fe50bf
+NEW_CSS_MD5=9d6a86a64135b1cc58e6af7b12973550
+NEW_SERVER_SHA256=51f2b155eca662be8917d49c135a77e4218f283b97561cd4d85ef033fa810cb6
+NEW_APP_SHA256=eb0e7f7977607585c812d5f297c6dbf52b36cdcef715da0ed53324fbb607a766
+NEW_INDEX_SHA256=eeb2fc9804c7c672e54c2d03979c60642dd6a442391d345667c1f6ff1ef02f44
+SHA_PATCH=36b0d14e243a60297ab8bc957f881634d54f62616caf80c88a6644b2ff133686
 SHA_PRE=9461fdf0ef72ea5606a4973ed47214dc5d590609e02469729f559207fd0e3f81
-SHA_POST=bf64337400a478729fa2a59bd2719648834b20d104d04aaca856d2620b9e326c
-SHA_PAGES=003b63f0370da410bef8bd4d495be211646966acbb5bd81bcc88c46ae2dcba1d
+SHA_POST=76671face82b127468cf805a32d2e1821f031f7adb93d6be74b2ac128575680f
+SHA_PAGES=cca42647a814a3b57d8522406a1d22c911efeb4fa2a10df48b492342bf902f4d
 SHA_FE88=61bc6b12ff5f24bf74aa9bf8494266149546088cab7e8c3e5845e79273add9e6
-SHA_CSS=09a350ede9c069a4398e568606b7fb388d6deaa0402174b5d0b9695e08b88208
+SHA_LIVE=45edfa6bca6d807ba401fa4bab4910eefc50a71638a0ac6487cb280e5a309460
+SHA_CSS=f45cbad74b055f94f6598b968a15552a3ea39dd0ec9ef0adc7de688ae1fc7bd0
 
 DRY=0; DIR=""
 while [ $# -gt 0 ]; do case "$1" in --dry-run) DRY=1;; --dir) shift; DIR="${1:-}";; *) echo "unknown arg $1"; exit 2;; esac; shift; done
@@ -72,7 +75,7 @@ getp(){ if [ -n "$HERE" ] && [ -f "$HERE/$1" ] && [ "$(sha256of "$HERE/$1")" = "
   else curl -fsSL --retry 2 "$BASE_URL/$1" -o "$P/$1" || die "download failed: $BASE_URL/$1"; fi
   [ "$(sha256of "$P/$1")" = "$2" ] || die "sha256 mismatch for $1"; say "patch file ok: $1 ${2:0:16}…"; }
 getp patch_chat93.py "$SHA_PATCH"; getp c93_pre.js "$SHA_PRE"; getp c93_post.js "$SHA_POST"
-getp c93_server_pages.js "$SHA_PAGES"; getp c93_fe88_company.js "$SHA_FE88"; getp c93.css "$SHA_CSS"
+getp c93_server_pages.js "$SHA_PAGES"; getp c93_fe88_company.js "$SHA_FE88"; getp c93_live.js "$SHA_LIVE"; getp c93.css "$SHA_CSS"
 
 # ---- 4. build in scratch and verify ----
 cp "$SERVER" "$S/server.js"; cp "$APP" "$S/app.js"; cp "$INDEX" "$S/index.html"

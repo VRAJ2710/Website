@@ -7,6 +7,9 @@ def rd(p): return open(p, encoding="utf-8").read()
 S, A, I = rd(srv_p), rd(app_p), rd(idx_p)
 PRE, POST = rd(os.path.join(pdir, "c93_pre.js")), rd(os.path.join(pdir, "c93_post.js"))
 PAGES, FE88 = rd(os.path.join(pdir, "c93_server_pages.js")), rd(os.path.join(pdir, "c93_fe88_company.js"))
+import json
+PAGES = PAGES.replace('/*C93_LIVE_JS*/""', json.dumps(rd(os.path.join(pdir, "c93_live.js")).strip()).replace("</", "<\\/"), 1)
+assert "/*C93_LIVE_JS*/" not in PAGES
 fails = []
 def edit(src, label, old, new, count=1):
     n = src.count(old)
@@ -50,7 +53,7 @@ S = between(S, "s.legal.html", '  const html = `<!doctype html><html lang="en"><
   '  const html = c93Page(title, terms ? "/terms" : "/privacy", terms ? "Terms of use for The Dispatch Market." : "How The Dispatch Market handles your data.", `<h1>${title}</h1>${body}`);')
 # 404 pages
 OLD404 = '<style>body{margin:0;background:#0b1018;color:#e8edf3;font:16px system-ui;display:grid;place-items:center;min-height:100vh}main{width:min(620px,calc(100% - 40px));background:#111a26;border:1px solid #293849;border-radius:14px;padding:28px;box-sizing:border-box}h1{font-size:28px;margin:0 0 8px;color:#f5a623}p,li{color:#9baabb;line-height:1.6}a{color:#f5a623}ul{padding-left:22px}</style>'
-NEW404 = '<meta name="theme-color" content="#fbfaf7"><style>body{margin:0;background:#fbfaf7;color:#1b1b1b;font:17px/1.6 Public Sans,system-ui,-apple-system,Segoe UI,Arial,sans-serif}main{max-width:680px;margin:0 auto;padding:48px 20px;box-sizing:border-box}.k{font-size:14px;color:#66655f;margin:0 0 6px}h1{font:600 32px/1.2 Fraunces,Georgia,serif;margin:0 0 10px}p,li{color:#2b2a26}a{color:#1f3a5f}ul{padding-left:22px}li{margin:4px 0}.d{margin-top:28px;padding-top:14px;border-top:1px solid rgba(27,27,27,.2);font-size:14px;color:#45443f}</style>'
+NEW404 = '<meta name="theme-color" content="#fbfaf7"><style>body{margin:0;background:#fbfaf7;color:#1b1b1b;font:17px/1.6 Inter,system-ui,-apple-system,Segoe UI,Arial,sans-serif}main{max-width:680px;margin:0 auto;padding:48px 20px;box-sizing:border-box}.k{font-size:14px;color:#66655f;margin:0 0 6px}h1{font:600 32px/1.2 "Source Serif 4",Georgia,serif;margin:0 0 10px}p,li{color:#2b2a26}a{color:#1f3a5f}ul{padding-left:22px}li{margin:4px 0}.d{margin-top:28px;padding-top:14px;border-top:1px solid rgba(27,27,27,.2);font-size:14px;color:#45443f}</style>'
 S = edit(S, "s.404.style", OLD404, NEW404, 2)
 S = edit(S, "s.404.k", '<p>THE DISPATCH MARKET · 404</p>', '<p class="k">The Dispatch Market · Page not found</p>', 2)
 S = edit(S, "s.404.disc", '</ul></main></body></html>', '</ul><p class="d"><strong>Not investment advice. Capital at risk.</strong> <a href="/about">About</a> · <a href="/methodology">Methodology</a> · <a href="/contact">Contact</a></p></main></body></html>', 2)
@@ -62,9 +65,9 @@ S = edit(S, "s.page.style",
   '  input{width:100%;box-sizing:border-box;padding:11px;background:#0b1018;color:#fff;border:1px solid #3a4a5d;border-radius:7px}\n'
   '  button,a{display:inline-block;margin-top:20px;padding:11px 16px;border:0;border-radius:7px;background:#f5a623;color:#111;font-weight:700;text-decoration:none;cursor:pointer}\n'
   '  .muted{font-size:12px;color:#718096}</style>',
-  '  <meta name="theme-color" content="#fbfaf7"><style>body{margin:0;background:#fbfaf7;color:#1b1b1b;font:16px/1.55 "Public Sans",system-ui,-apple-system,"Segoe UI",Arial,sans-serif;display:grid;place-items:center;min-height:100vh}\n'
+  '  <meta name="theme-color" content="#fbfaf7"><style>body{margin:0;background:#fbfaf7;color:#1b1b1b;font:16px/1.55 Inter,system-ui,-apple-system,"Segoe UI",Arial,sans-serif;display:grid;place-items:center;min-height:100vh}\n'
   '  main{width:min(420px,calc(100% - 40px));background:#fff;border:1px solid rgba(27,27,27,.16);border-radius:6px;padding:28px;box-sizing:border-box}\n'
-  '  h1{font:600 22px/1.25 Fraunces,Georgia,serif;margin:0 0 8px;color:#1b1b1b;letter-spacing:0}p{color:#45443f;line-height:1.5}label{display:block;color:#2b2a26;font-size:13px;font-weight:600;margin:16px 0 6px}\n'
+  '  h1{font:600 22px/1.25 "Source Serif 4",Georgia,serif;margin:0 0 8px;color:#1b1b1b;letter-spacing:0}p{color:#45443f;line-height:1.5}label{display:block;color:#2b2a26;font-size:13px;font-weight:600;margin:16px 0 6px}\n'
   '  input{width:100%;box-sizing:border-box;padding:11px;background:#fff;color:#1b1b1b;border:1px solid rgba(27,27,27,.3);border-radius:4px;font:inherit}\n'
   '  button,a{display:inline-block;margin-top:20px;padding:11px 16px;border:0;border-radius:4px;background:#1f3a5f;color:#fff;font-weight:600;text-decoration:none;cursor:pointer;font-family:inherit}\n'
   '  .muted{font-size:12px;color:#66655f}.muted a{display:inline;margin:0;padding:0;background:none;color:#1f3a5f;font-weight:400;text-decoration:underline}</style>')
@@ -74,6 +77,7 @@ S = edit(S, "s.login.brand", '<h1>THE DISPATCH</h1><p>Sign in to your market int
 # sitemap
 S = edit(S, "s.sitemap", '  const publishedCandidates = databaseReady\n',
   '  for (const c93u of ["/about", "/methodology", "/editorial-standards", "/corrections", "/contact"]) staticUrls.push(`  <url><loc>${PUBLIC_ORIGIN}${c93u}</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>`); // chat93\n'
+  '  for (const c93u of ["/research/capital-sustainability", "/research/capital-sustainability/method"].concat(typeof BB11_TICKERS !== "undefined" ? BB11_TICKERS.map(t => "/research/capital-sustainability/" + t) : [])) staticUrls.push(`  <url><loc>${PUBLIC_ORIGIN}${c93u}</loc><changefreq>daily</changefreq><priority>0.6</priority></url>`); // chat93 monitor\n'
   '  const publishedCandidates = databaseReady\n')
 # signals wording (no "conviction")
 S = edit(S, "s.sig.title", 'title: "Market Signals | Conviction-Weighted Macro Signals | The Dispatch Market",', 'title: "Market Signals | Macro Signals Explained | The Dispatch Market",')
@@ -98,18 +102,22 @@ S = edit(S, "s.bb11.ensure",
   '    } catch (e) { /* no row or no DB: keep the file value */ } }\n'
   '    bb11St = st; return st;\n')
 
+S = edit(S, "s.c93route", "// BB11_JS_END", "// BB11_JS_END\n// chat93: guest Home and the Capital Sustainability Monitor pages, server-rendered (inside the maintenance wrapper)\nvar c93Prev = bb10iHandle0;\nbb10iHandle0 = async function c93Handle(req, res) {\n  try { if (await c93Route(req, res)) return; } catch (e) { if (res.headersSent || res.writableEnded) return; }\n  return c93Prev.apply(this, arguments);\n};\n// C93_JS_END")
 # ───────────────────────── app.js ─────────────────────────
 A = edit(A, "a.kicker", '<div class="pg-hdr-kicker">THE DISPATCH · RESEARCH TERMINAL</div>', '<div class="pg-hdr-kicker">THE DISPATCH MARKET</div>')
-A = edit(A, "a.nls.geo", '<span style="color:var(--t3)">NO LIVE SYNC${context.status', '<span style="color:var(--t3)">No current reading from the free feed${context.status')
-A = edit(A, "a.nls.tbl", "'<span style=\"color:var(--t3);opacity:0.55\">NO LIVE SYNC</span>'", "'<span class=\"c93-na\" title=\"Our free feed has not returned a price yet; it refreshes automatically\">No price yet</span>'")
+A = edit(A, "a.nls.geo", '<span style="color:var(--t3)">NO LIVE SYNC${context.status', '<span style="color:var(--t3)">Delayed${context.status')
+A = edit(A, "a.nls.tbl", "'<span style=\"color:var(--t3);opacity:0.55\">NO LIVE SYNC</span>'", "''")
+A = edit(A, "a.tape", "function fe73_keepTape() {\n  var t = document.querySelector(\".tape\");", "function fe73_keepTape() {\n  if (document.documentElement.classList.contains(\"c93\")) return; // chat93: calm desk, no ticker tape\n  var t = document.querySelector(\".tape\");")
+A = edit(A, "a.mkt.skip", "    const na = !hasSyncedQuote(a.tk);\n    const ch = liveChg(a.tk);\n    const col = na || ch == null ?", "    const na = !hasSyncedQuote(a.tk);\n    if (na && a.cat !== 'Crypto') return; // chat93: no placeholder rows\n    const ch = liveChg(a.tk);\n    const col = na || ch == null ?")
 A = edit(A, "a.nls.status", '(d.status || "NO LIVE SYNC").toUpperCase()', 'String(d.status || "No current price")')
-A = edit(A, "a.nls.dyn", ":'NO LIVE SYNC'}", ":'No price yet'}")
+A = edit(A, "a.nls.dyn", ":'NO LIVE SYNC'}", ":'Price delayed'}")
 A = edit(A, "a.nls.tk", "`${tk} NO LIVE SYNC`", "`${tk}: no current price`")
 A = edit(A, "a.sess.1", "`${c.priced} prices · markets closed`", "`${c.priced} prices · US stocks closed`")
 A = edit(A, "a.sess.2", "`${priced} prices · markets closed`", "`${priced} prices · US stocks closed`")
 A = edit(A, "a.sess.3", "return `Markets closed${lc ?", "return `US stocks closed${lc ?")
-A = edit(A, "a.rt53.value", 'var value = "\\u2014", change = "", cls = "", meta = "";', 'var value = "Not available", change = "", cls = "", meta = "";')
-A = edit(A, "a.rt53.meta", 'if (!row) meta = "Awaiting a price \\u00b7 " + _rt53Src(tk);', 'if (!row) meta = "Our free " + _rt53Src(tk) + " feed has not returned a price yet; it refreshes automatically";')
+A = edit(A, "a.rt53.omit", "  return '<article class=\"bb1-tile\" data-bb1-tile=\"' + id", "  if (value === \"\\u2014\") return \"\"; // chat93: no figure, no tile\n  return '<article class=\"bb1-tile\" data-bb1-tile=\"' + id")
+A = edit(A, "a.rt53.inner", "function _rt53Inner() { return '<div class=\"bb1-h\">Macro</div><div class=\"bb1-grid\">' + _rt53TileList().map(_rt53One).join(\"\") + '</div>'; }",
+  "function _rt53Inner() { var l = _rt53TileList(), t = l.map(_rt53One).filter(Boolean); if (!t.length) return \"\"; return '<div class=\"bb1-h\">Macro</div><div class=\"bb1-grid\">' + t.join(\"\") + '</div>' + (t.length < l.length ? '<p class=\"c93-note\">Some prices are delayed; we show the last official figure with its date.</p>' : ''); }")
 A = edit(A, "a.onaccent", "color:#14151A", "color:var(--on-accent,#14151A)", 10)
 A = edit(A, "a.chart.lazy", "    if (candles.length < 3) throw new Error('insufficient data');\n",
   '    if (typeof LightweightCharts === "undefined" && typeof c93_loadCharts === "function") { await c93_loadCharts(); if (_chartLoad.tk !== tk || _chartLoad.cid !== containerId) return; }\n'
@@ -153,10 +161,10 @@ A = between(A, "a.footer", 'function _siteFooter(){\n', '(function _uiCss14() {'
   '  </footer>`;\n'
   '}\n')
 # monitor (fe88)
-A = edit(A, "a.fe88.miss", "return '<span class=\"fe88-miss\" aria-label=\"' + fe88_esc(label) + '\">\\u2014</span>';", "return '<span class=\"fe88-miss\" title=\"' + fe88_esc(label) + '\">Not disclosed</span>';")
+A = edit(A, "a.fe88.miss", "return '<span class=\"fe88-miss\" aria-label=\"' + fe88_esc(label) + '\">\\u2014</span>';", "return '<span class=\"fe88-miss\" title=\"' + fe88_esc(label) + '\"></span>';")
 A = edit(A, "a.fe88.mark", '  if (s === "red") return "R";\n  if (s === "amber") return "A";\n  if (s === "green") return "G";\n  if (s === "n/a" || s === "n-a" || s === "na") return "n/a";',
   '  if (s === "red") return "Red";\n  if (s === "amber") return "Amber";\n  if (s === "green") return "Green";\n  if (s === "n/a" || s === "n-a" || s === "na") return "Not disclosed";')
-A = edit(A, "a.fe88.flagbadge", '  var mark = fe88_flagMark(overall) || "n/a";\n  var flags = (flag && flag.flags) || {};', '  var mark = fe88_flagMark(overall) || "Not disclosed";\n  var flags = (flag && flag.flags) || {};')
+A = edit(A, "a.fe88.flagbadge", '  var mark = fe88_flagMark(overall) || "n/a";\n  var flags = (flag && flag.flags) || {};', '  var mark = fe88_flagMark(overall) || "Not in filing";\n  var flags = (flag && flag.flags) || {};')
 A = edit(A, "a.fe88.label", '  if (!obj.label) return "";\n  return obj.label;\n',
   '  if (!obj.label) return "";\n  return obj.label.replace(/(\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}) UTC/g, function (m0, t0) { return fe88_uk(t0 + " UTC") || m0; });\n')
 A = edit(A, "a.fe88.legend", "'<p class=\"fe88-legend\">R red, A amber, G green, n/a not disclosed. The five flags",
@@ -171,7 +179,7 @@ I = edit(I, "i.theme", "  document.documentElement.classList.add('fe64-js');\n",
 I = edit(I, "i.apple", '<meta name="apple-mobile-web-app-title" content="The Dispatch">', '<meta name="apple-mobile-web-app-title" content="The Dispatch Market">')
 I = edit(I, "i.themecolor", '<meta name="theme-color" content="#14151A">', '<meta name="theme-color" content="#fbfaf7">')
 I = edit(I, "i.statusbar", '<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">', '<meta name="apple-mobile-web-app-status-bar-style" content="default">')
-I = edit(I, "i.fonts", "&family=IBM+Plex+Mono:wght@400;500;600&display=optional", "&display=optional")
+I = edit(I, "i.fonts", "family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=optional", "family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Inter:wght@400;500;600&display=swap")
 I = edit(I, "i.css", '<link rel="stylesheet" href="/styles.css?v=chat1">', '<link rel="stylesheet" href="/styles.css?v=chat1"><link rel="stylesheet" href="/c93.css?v=chat93">')
 I = edit(I, "i.charts", '<script defer src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>\n', '')
 I = edit(I, "i.appjs", '<script defer src="/app.js?v=chat91"></script>', '<script defer src="/app.js?v=chat93"></script>')
