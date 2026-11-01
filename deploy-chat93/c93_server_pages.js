@@ -101,7 +101,7 @@ const C93_PAGES = {
   "/corrections": ["Corrections", "Errors we have found and fixed on The Dispatch Market.", () =>
     `<div class="kicker">How we work</div><h1>Corrections</h1><p class="lede">When we get something wrong, we fix it and record it here.</p>` +
     `<h2>Log</h2><table><thead><tr><th>Date</th><th>Page</th><th>What was wrong and what we changed</th></tr></thead><tbody>` +
-    `<tr><td>October 2026</td><td>Capital Sustainability Monitor, company pages</td><td>Company pages showed the number of companies covered in place of each company's rank (Microsoft showed "Rank 19" when it was 14th of 19). Each page now shows "Ranked N of 19".</td></tr></tbody></table>` +
+    `<tr><td>October 2026</td><td>Capital Sustainability Monitor, company pages</td><td>Company pages showed the total number of companies ("Rank 19") instead of each company's own rank. Fixed; each page now shows "Ranked N of 19".</td></tr></tbody></table>` +
     `<h2>Report an error</h2><p>Email <a href="mailto:${C93_CONTACT}">${C93_CONTACT}</a> with the page and the figure.</p>`],
 };
 const c93PageCache = new Map();
@@ -254,7 +254,7 @@ async function c93Home(req, res) {
   const monHtml = top.length ? `<section><div class="kicker">Research</div><h2 style="margin-top:8px">Capital Sustainability Monitor</h2><p style="max-width:720px;margin:0 0 14px">Is AI spending outrunning the cash that pays for it? We rank ${mon.total || 19} US-listed companies on capital spending against operating cash flow, debt and margins, using their SEC filings.</p><table><thead><tr><th>Company</th><th>What stands out</th><th class="n">Filing flag</th></tr></thead><tbody>${c93MonitorRows(top, false)}</tbody></table><p class="src" style="margin-top:12px">${c93Esc(c93CsmSource(mon))} <a href="${C93_CSM}/method">Method</a> \u00b7 <a href="${C93_CSM}">All ${mon.total || 19} companies</a></p></section>` : "";
   const body = `<section><div class="kicker">Independent gold and macro research</div><h1>Know what matters before gold moves.</h1><p class="dek">${C93_MISSION} A daily read on the dollar, real yields, oil and risk appetite, and what they mean for gold.</p><p class="byline">${C93_EDITOR} \u00b7 <a href="/about">About the desk</a> \u00b7 <a href="/methodology">How we work</a></p></section>` +
     `<section id="c93top"><div class="grid" data-auto><div data-need hidden><h2>Market context</h2><p class="note" style="margin:0 0 12px">Latest levels from free public feeds. Where a market is shut we show its last close.</p>${c93CtxTable("gold,dxy,tnx,ry,btc,wti")}</div>` +
-    `<div class="card" id="c93brief" hidden><div class="kicker">Today's brief</div><h3 style="margin-top:8px" id="c93bh"></h3><p style="margin:0 0 8px" id="c93bp"></p><p class="src"><span id="c93bt"></span> \u00b7 <a href="/brief/">Read the brief</a></p></div></div></section>` + monHtml;
+    `<div class="card" id="c93brief" hidden><div class="kicker" id="c93bk">Today's brief</div><h3 style="margin-top:8px" id="c93bh"></h3><p style="margin:0 0 8px" id="c93bp"></p><p class="src"><span id="c93bt"></span> \u00b7 <a href="/brief/">Read the brief</a></p></div></div></section>` + monHtml;
   const html = c93Shell({ title: "The Dispatch Market | Independent gold and macro research", path: "/", desc: C93_MISSION + " " + C93_EDITOR + ".", body, tail: `<script>${C93_LIVE_JS}</script>` }).replace("<body>", `<body data-wk="${ses.weekend ? 1 : 0}">`);
   return c93Html(req, res, html, "private, max-age=60");
 }
