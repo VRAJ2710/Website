@@ -13,4 +13,12 @@
   - It needs DISPATCH_SEC_UA. Without it, downloads are switched off and nothing is counted.
 - Ask with charts, for both BYOK and the site AI: when a question names gold or a ticker, the answer gets a six-month
   Yahoo (delayed) chart. It shows a plain name, the source, the UK as-of time, and "Not investment advice. Capital at risk."
+- Extras:
+  - `/markets/yields/` Gilt and Treasury yields: US Treasury daily par yield curve CSV (home.treasury.gov) and the
+    Bank of England par gilt yields (IADB). Curve chart (latest and a month earlier), week and month changes,
+    plain-English gaps (US 10y vs 2y, UK 20y vs 5y, UK vs US 10y), end-of-day date and "Checked <UK time>". Cached 3h / 6h.
+  - `/gold/positioning/` Gold positioning: CFTC disaggregated Commitments of Traders (Socrata, free), money managers'
+    net position, ten-year percentile and range, chart, report date and checked UK time. Cached 12h. No buy/sell wording.
+  - Both are free official sources, no keys. If a source does not answer, the page says so and shows no figures.
+  - Both are gated by maintenance like every other page, and are added to the menu.
 - No DDL. It reuses dispatch_openbb_research_cache.

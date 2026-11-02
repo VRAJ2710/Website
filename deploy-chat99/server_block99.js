@@ -279,3 +279,122 @@ async function c99Chart(k) {
     }
   };
 }
+// ── chat99 extras: gilt and Treasury yield monitor (/markets/yields/) and CFTC gold positioning (/gold/positioning/) ──
+// Free official sources only, end-of-day or weekly; every figure shows its source, its date and the UK time we checked.
+const C99X_UST_SRC = "US Treasury daily par yield curve rates (home.treasury.gov)";
+const C99X_BOE_SRC = "Bank of England nominal par gilt yields (Bank of England database)";
+const C99X_COT_SRC = "CFTC Commitments of Traders, disaggregated futures only, gold on COMEX (publicreporting.cftc.gov)";
+const C99X_US = [["3 Mo", "3 months", 0.25], ["2 Yr", "2 years", 2], ["5 Yr", "5 years", 5], ["10 Yr", "10 years", 10], ["20 Yr", "20 years", 20], ["30 Yr", "30 years", 30]];
+const C99X_UK = [["5 Yr", "5 years", 5], ["10 Yr", "10 years", 10], ["20 Yr", "20 years", 20]];
+const C99X_CSS = ".c99x line.z{stroke:currentColor;opacity:.35}.c99x polyline{fill:none;stroke-width:2.2}.c99x .us{stroke:#1f3a5f}.c99x .uk{stroke:#9a3b1f}.c99x .ago{stroke-dasharray:4 3;opacity:.55}.c99x .net{stroke:#1f6f5c}.c99x circle.us{fill:#1f3a5f}.c99x circle.uk{fill:#9a3b1f}.c99key{font-size:14px;margin:4px 0}.c99key b.us{color:#1f3a5f}.c99key b.uk{color:#9a3b1f}" +
+  "html.c97-dark .c99x .us{stroke:#9cc0ea}html.c97-dark .c99x .uk{stroke:#f0a07e}html.c97-dark .c99x .net{stroke:#4fb59a}html.c97-dark .c99x circle.us{fill:#9cc0ea}html.c97-dark .c99x circle.uk{fill:#f0a07e}html.c97-dark .c99key b.us{color:#9cc0ea}html.c97-dark .c99key b.uk{color:#f0a07e}" +
+  "@media (prefers-color-scheme:dark){html.c97-system .c99x .us{stroke:#9cc0ea}html.c97-system .c99x .uk{stroke:#f0a07e}html.c97-system .c99x .net{stroke:#4fb59a}html.c97-system .c99x circle.us{fill:#9cc0ea}html.c97-system .c99x circle.uk{fill:#f0a07e}html.c97-system .c99key b.us{color:#9cc0ea}html.c97-system .c99key b.uk{color:#f0a07e}}";
+function c99xDay(iso) { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ""); if (!m) return String(iso || ""); const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])); return ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][d.getUTCDay()] + " " + (+m[3]) + " " + C97_MON[+m[2] - 1] + " " + m[1]; }
+function c99xCsv(t) {
+  const L = String(t || "").trim().split(/\r?\n/); if (L.length < 2) return { h: [], rows: [] };
+  return { h: L[0].split(",").map(x => x.replace(/"/g, "").trim()), rows: L.slice(1).map(l => l.split(",").map(x => x.replace(/"/g, "").trim())) };
+}
+async function c99xUst() {
+  return c97Cached("c99x:ust", 3 * 3600e3, async () => {
+    const get = async yr => c99xCsv(await (await c97Get("https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/" + yr + "/all?type=daily_treasury_yield_curve&field_tdr_date_value=" + yr + "&page&_format=csv", "text/csv,*/*")).text());
+    const parse = c => c.rows.map(r => { const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(r[0] || ""); if (!m) return null; const o = { d: m[3] + "-" + m[1] + "-" + m[2] }; c.h.forEach((k, i) => { if (i && r[i] !== "" && r[i] != null && isFinite(Number(r[i]))) o[k] = Number(r[i]); }); return o; }).filter(Boolean);
+    const y = new Date().getUTCFullYear(); let rows = parse(await get(y));
+    if (rows.length < 30) { try { rows = rows.concat(parse(await get(y - 1))); } catch (e) {} }
+    rows = rows.filter(r => r["10 Yr"] != null).sort((a, b) => a.d < b.d ? -1 : 1);
+    if (!rows.length) throw new Error("empty"); return rows;
+  });
+}
+async function c99xGilts() {
+  return c97Cached("c99x:gilts", 6 * 3600e3, async () => {
+    const d0 = new Date(Date.now() - 400 * 864e5), from = ("0" + d0.getUTCDate()).slice(-2) + "/" + C97_MON[d0.getUTCMonth()] + "/" + d0.getUTCFullYear();
+    const c = c99xCsv(await (await c97Get("https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp?csv.x=yes&Datefrom=" + from + "&Dateto=now&SeriesCodes=IUDSNPY,IUDMNPY,IUDLNPY&CSVF=TN&UsingCodes=Y", "text/csv,*/*")).text());
+    const col = { IUDSNPY: "5 Yr", IUDMNPY: "10 Yr", IUDLNPY: "20 Yr" }, rows = [];
+    c.rows.forEach(r => { const m = /^(\d{1,2}) (\w{3}) (\d{4})$/.exec(r[0] || ""); if (!m || C97_MON.indexOf(m[2]) < 0) return; const o = { d: m[3] + "-" + ("0" + (C97_MON.indexOf(m[2]) + 1)).slice(-2) + "-" + ("0" + m[1]).slice(-2) }; c.h.forEach((k, i) => { if (col[k] && r[i] !== "" && isFinite(Number(r[i]))) o[col[k]] = Number(r[i]); }); if (o["10 Yr"] != null) rows.push(o); });
+    rows.sort((a, b) => a.d < b.d ? -1 : 1); if (!rows.length) throw new Error("empty"); return rows;
+  });
+}
+function c99xBack(rows, days) { const L = rows[rows.length - 1], cut = new Date(Date.parse(L.d + "T00:00:00Z") - days * 864e5).toISOString().slice(0, 10); let r = null; for (const x of rows) { if (x.d <= cut) r = x; else break; } return r; }
+function c99xPts(a, b) { if (a == null || b == null) return "–"; const v = a - b; return (v > 0 ? "+" : v < 0 ? "\u2212" : "") + Math.abs(v).toFixed(2) + " pts"; }
+function c99xPct(v) { return v == null ? "–" : v.toFixed(2) + "%"; }
+function c99xCurve(us, uk, usAgo, ukAgo) {
+  const W = 600, H = 240, L = 40, R = 14, T = 14, B = 34, mx = Math.sqrt(30), X = m => L + Math.sqrt(m) / mx * (W - L - R);
+  const all = []; [[us, C99X_US], [uk, C99X_UK], [usAgo, C99X_US], [ukAgo, C99X_UK]].forEach(([r, M]) => { if (r) M.forEach(m => { if (r[m[0]] != null) all.push(r[m[0]]); }); });
+  if (!all.length) return "";
+  let lo = Math.floor(Math.min(...all) * 4) / 4 - 0.25, hi = Math.ceil(Math.max(...all) * 4) / 4 + 0.25; const Y = v => T + (hi - v) / (hi - lo) * (H - T - B);
+  const line = (r, M, cls) => r ? `<polyline class="${cls}" points="${M.filter(m => r[m[0]] != null).map(m => X(m[2]).toFixed(1) + "," + Y(r[m[0]]).toFixed(1)).join(" ")}"/>` : "";
+  const dots = (r, M, cls) => r ? M.filter(m => r[m[0]] != null).map(m => `<circle class="${cls}" cx="${X(m[2]).toFixed(1)}" cy="${Y(r[m[0]]).toFixed(1)}" r="3"/>`).join("") : "";
+  const ticks = C99X_US.map(m => `<text x="${X(m[2]).toFixed(1)}" y="${H - 14}" text-anchor="middle">${m[0].replace(" Mo", "m").replace(" Yr", "y")}</text>`).join("");
+  const ys = []; for (let v = Math.ceil(lo * 2) / 2; v <= hi; v += 0.5) ys.push(`<line class="z" x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke-dasharray="2 4"/><text x="${L - 4}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end">${v.toFixed(1)}%</text>`);
+  return `<figure class="c99fig c99x"><figcaption>Yield curves: what each government pays to borrow, by length of loan</figcaption><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="US Treasury and UK gilt yield curves, latest and one month earlier">${ys.join("")}${line(usAgo, C99X_US, "us ago")}${line(ukAgo, C99X_UK, "uk ago")}${line(us, C99X_US, "us")}${line(uk, C99X_UK, "uk")}${dots(us, C99X_US, "us")}${dots(uk, C99X_UK, "uk")}${ticks}<text x="${W - R}" y="${H - 2}" text-anchor="end">Length of loan (years, squeezed scale)</text></svg>` +
+    `<p class="c99key"><b class="us">US Treasuries</b> · <b class="uk">UK gilts</b> · solid line latest, dashed line about one month earlier</p></figure>`;
+}
+async function c99xYieldsPage(req, res, user) {
+  const [u, g] = await Promise.all([c99xUst().catch(() => ({ v: null })), c99xGilts().catch(() => ({ v: null }))]);
+  const us = u.v && u.v.length ? u.v[u.v.length - 1] : null, uk = g.v && g.v.length ? g.v[g.v.length - 1] : null;
+  const usW = us ? c99xBack(u.v, 7) : null, usM = us ? c99xBack(u.v, 30) : null, ukW = uk ? c99xBack(g.v, 7) : null, ukM = uk ? c99xBack(g.v, 30) : null;
+  const tbl = (r, w, mth, M) => `<div class="c99wrap"><table class="c97t c99t"><thead><tr><th>Length of loan</th><th class="v">Yield</th><th class="v">Change over a week</th><th class="v">Change over a month</th></tr></thead><tbody>${M.filter(m => r[m[0]] != null).map(m => `<tr><td>${m[1]}</td><td class="v">${c99xPct(r[m[0]])}</td><td class="v">${c99xPts(r[m[0]], w && w[m[0]])}</td><td class="v">${c99xPts(r[m[0]], mth && mth[m[0]])}</td></tr>`).join("")}</tbody></table></div>`;
+  const stale = x => x.stale ? " Last known figures: the feed did not answer at our latest check." : "";
+  let usHtml, ukHtml, plain = [];
+  if (us) {
+    usHtml = tbl(us, usW, usM, C99X_US) + `<p class="c97s">Source: ${C99X_UST_SRC}. End of day, US trading on ${c99xDay(us.d)}. Checked ${c93Esc(c97UkWhen(u.at))}.${stale(u)}</p>`;
+    const s = us["10 Yr"] - us["2 Yr"]; if (isFinite(s)) plain.push(`In the US the 10-year yield is ${Math.abs(s).toFixed(2)} percentage points ${s >= 0 ? "above" : "below"} the 2-year. ${s >= 0 ? "Longer loans paying more is the usual shape." : "When short loans pay more than long ones the curve is called inverted, which has often come before slower growth."}`);
+  } else usHtml = `<p class="c97note">The Treasury feed did not answer, so we leave these figures out rather than guess.</p>`;
+  if (uk) {
+    ukHtml = tbl(uk, ukW, ukM, C99X_UK) + `<p class="c97s">Source: ${C99X_BOE_SRC}. End of day, ${c99xDay(uk.d)} (the Bank publishes with a lag of a day or two). Checked ${c93Esc(c97UkWhen(g.at))}.${stale(g)}</p>`;
+    const s = uk["20 Yr"] - uk["5 Yr"]; if (isFinite(s)) plain.push(`In the UK the 20-year gilt yield is ${Math.abs(s).toFixed(2)} percentage points ${s >= 0 ? "above" : "below"} the 5-year.`);
+  } else ukHtml = `<p class="c97note">The Bank of England feed did not answer, so we leave these figures out rather than guess.</p>`;
+  if (us && uk && us["10 Yr"] != null && uk["10 Yr"] != null) { const d = uk["10 Yr"] - us["10 Yr"]; plain.push(`The UK government pays ${Math.abs(d).toFixed(2)} percentage points ${d >= 0 ? "more" : "less"} than the US to borrow for 10 years (latest dates may differ by a day or two).`); }
+  const body = `<style>${C97_CSS}${C99_CSS}${C99X_CSS}</style><section><div class="kicker"><a href="/markets/">Markets</a></div><h1>Gilt and Treasury yields</h1><p class="dek">What the UK and US governments pay to borrow, from official end-of-day figures. A yield is the yearly return a lender gets for holding the bond to the end.</p><p class="byline">${C93_EDITOR}</p>` +
+    (plain.length ? `<p>${plain.map(c93Esc).join(" ")}</p>` : "") + c99xCurve(us, uk, usM, ukM) + `</section>` +
+    `<section><h2>US Treasuries</h2>${usHtml}</section><section><h2>UK gilts</h2>${ukHtml}</section>` +
+    `<section><p class="c97s">A change of +0.10 pts means the yield rose by a tenth of a percentage point. Rising yields usually mean falling bond prices. Gold pays no interest, so higher yields can make it less attractive to hold, though the link is loose. Information only. <strong>Not investment advice. Capital at risk.</strong></p></section>`;
+  return c98Send(req, res, c93Shell({ title: "Gilt and Treasury yields | The Dispatch Market", path: "/markets/yields/", desc: "UK gilt and US Treasury yields and curves from official end-of-day figures, with plain English.", user, body }));
+}
+// ── CFTC gold positioning: money managers' net position and where it sits in the last ten years ──
+async function c99xCot() {
+  return c97Cached("c99x:cot", 12 * 3600e3, async () => {
+    const q = new URLSearchParams({ "$select": "report_date_as_yyyy_mm_dd,m_money_positions_long_all,m_money_positions_short_all,open_interest_all", "$where": "cftc_contract_market_code='088691'", "$order": "report_date_as_yyyy_mm_dd DESC", "$limit": "600" });
+    const j = await (await c97Get("https://publicreporting.cftc.gov/resource/72hh-3qpy.json?" + q.toString(), "application/json")).json();
+    const seen = new Set(), rows = [];
+    (Array.isArray(j) ? j : []).forEach(x => { const d = String(x && x.report_date_as_yyyy_mm_dd || "").slice(0, 10), l = Number(x.m_money_positions_long_all), s = Number(x.m_money_positions_short_all), oi = Number(x.open_interest_all); if (/^\d{4}-\d{2}-\d{2}$/.test(d) && isFinite(l) && isFinite(s) && !seen.has(d)) { seen.add(d); rows.push({ d, l, s, oi: isFinite(oi) ? oi : null, n: l - s }); } });
+    rows.sort((a, b) => a.d < b.d ? -1 : 1); if (rows.length < 20) throw new Error("too few rows"); return rows;
+  });
+}
+function c99xCotStats(rows) {
+  const L = rows[rows.length - 1], cut = new Date(Date.parse(L.d + "T00:00:00Z") - 3652 * 864e5).toISOString().slice(0, 10), win = rows.filter(r => r.d >= cut);
+  const below = win.filter(r => r.n <= L.n).length, pct = Math.round(below / win.length * 100), prev = rows.length > 1 ? rows[rows.length - 2] : null;
+  return { L, prev, win, pct, lo: Math.min(...win.map(r => r.n)), hi: Math.max(...win.map(r => r.n)), from: win[0].d };
+}
+function c99xCotSvg(st) {
+  const W = 600, H = 200, Lp = 56, R = 10, T = 10, B = 26, n = st.win.length, lo = Math.min(0, st.lo), hi = Math.max(0, st.hi);
+  const X = i => Lp + i / Math.max(1, n - 1) * (W - Lp - R), Y = v => T + (hi - v) / ((hi - lo) || 1) * (H - T - B), k = v => (v < 0 ? "\u2212" : "") + Math.abs(v / 1000).toFixed(0) + "k";
+  return `<figure class="c99fig c99x"><figcaption>Money managers' net gold position, weekly, last ten years (contracts)</figcaption><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Net gold futures position of money managers over ten years, from ${k(st.lo)} to ${k(st.hi)} contracts">` +
+    `<line class="z" x1="${Lp}" x2="${W - R}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}"/><text x="${Lp - 4}" y="${(Y(hi) + 8).toFixed(1)}" text-anchor="end">${k(hi)}</text><text x="${Lp - 4}" y="${(Y(0) + 4).toFixed(1)}" text-anchor="end">0</text>${lo < 0 ? `<text x="${Lp - 4}" y="${Y(lo).toFixed(1)}" text-anchor="end">${k(lo)}</text>` : ""}` +
+    `<polyline class="net" points="${st.win.map((r, i) => X(i).toFixed(1) + "," + Y(r.n).toFixed(1)).join(" ")}"/><text x="${Lp}" y="${H - 6}">${c97Period(st.from)}</text><text x="${W - R}" y="${H - 6}" text-anchor="end">${c97Period(st.L.d)}</text></svg></figure>`;
+}
+async function c99xCotPage(req, res, user) {
+  const c = await c99xCot().catch(() => ({ v: null })); let main;
+  if (!c.v) main = `<p class="c97note">The CFTC feed did not answer, so we leave these figures out rather than guess.</p>`;
+  else {
+    const st = c99xCotStats(c.v), L = st.L, f = v => Math.round(Math.abs(v)).toLocaleString("en-GB"), wk = st.prev ? L.n - st.prev.n : null;
+    const lead = L.n >= 0 ? `Money managers, mostly hedge funds, held ${f(L.n)} more gold futures contracts that gain if the price rises than contracts that gain if it falls.` : `Money managers, mostly hedge funds, held ${f(L.n)} more gold futures contracts that gain if the price falls than contracts that gain if it rises.`;
+    main = `<p>${lead} That net figure is higher than in ${st.pct}% of weeks over the past ten years${st.pct >= 90 ? ", near the top of its range" : st.pct <= 10 ? ", near the bottom of its range" : ""}.${wk != null ? ` It ${wk >= 0 ? "rose" : "fell"} by ${f(wk)} contracts compared with the week before.` : ""}</p>` + c99xCotSvg(st) +
+      `<div class="c99wrap"><table class="c97t c99t"><tbody><tr><td>Net position (gain-if-rises minus gain-if-falls)</td><td class="v">${L.n < 0 ? "\u2212" : ""}${f(L.n)}</td></tr><tr><td>Contracts that gain if gold rises</td><td class="v">${f(L.l)}</td></tr><tr><td>Contracts that gain if gold falls</td><td class="v">${f(L.s)}</td></tr>${L.oi ? `<tr><td>All open gold futures contracts</td><td class="v">${f(L.oi)}</td></tr><tr><td>Net position as a share of all open contracts</td><td class="v">${(L.n / L.oi * 100).toFixed(1)}%</td></tr>` : ""}<tr><td>Ten-year percentile (share of weeks at or below today)</td><td class="v">${st.pct}%</td></tr><tr><td>Ten-year range of the net position</td><td class="v">${st.lo < 0 ? "\u2212" : ""}${f(st.lo)} to ${f(st.hi)}</td></tr></tbody></table></div>` +
+      `<p class="c97s">Source: ${C99X_COT_SRC}. Positions as of ${c99xDay(L.d)}; the CFTC usually publishes them the following Friday. Checked ${c93Esc(c97UkWhen(c.at))}.${c.stale ? " Last known figures: the feed did not answer at our latest check." : ""} One contract is 100 troy ounces. Ten years here means ${st.win.length} weekly reports since ${c99xDay(st.from)}.</p>`;
+  }
+  const body = `<style>${C97_CSS}${C99_CSS}${C99X_CSS}</style><section><div class="kicker"><a href="/gold/">Gold</a></div><h1>Gold positioning</h1><p class="dek">How large speculative traders are placed in gold futures, from the weekly US regulator report, and how that compares with the last ten years.</p><p class="byline">${C93_EDITOR}</p>${main}</section>` +
+    `<section><p class="c97s">Positioning shows what large traders hold, not where the price will go. Information only. <strong>Not investment advice. Capital at risk.</strong></p></section>`;
+  return c98Send(req, res, c93Shell({ title: "Gold positioning (CFTC) | The Dispatch Market", path: "/gold/positioning/", desc: "Money managers' net gold futures position from the CFTC, with its ten-year percentile in plain English.", user, body }));
+}
+{
+  const c99xR0 = c93Route;
+  c93Route = async function (req, res) {
+    let p = ""; try { p = new URL(req.url || "/", "http://localhost").pathname; } catch (e) {}
+    if ((req.method === "GET" || req.method === "HEAD") && (p === "/markets/yields/" || p === "/markets/yields" || p === "/gold/positioning/" || p === "/gold/positioning")) {
+      if (!p.endsWith("/")) { res.writeHead(301, { Location: p + "/" }); return res.end(); }
+      let user = null; try { user = await c96UserOf(req); if (user && req.c96PreviewOn) user = null; } catch (e) {}
+      try { return p === "/markets/yields/" ? await c99xYieldsPage(req, res, user) : await c99xCotPage(req, res, user); } catch (e) { console.error("[c99x]", p, e && e.message); }
+    }
+    return c99xR0.apply(this, arguments);
+  };
+}
