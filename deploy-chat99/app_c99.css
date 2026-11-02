@@ -1,0 +1,8 @@
+.c99ask{margin:4px 0 12px;padding:10px 12px;border:1px solid var(--line,#d5d9e0);border-radius:10px;max-width:560px}
+.c99ask figcaption{font-weight:600;font-size:14px;margin-bottom:6px}
+.c99ask svg{width:100%;height:auto;display:block}
+.c99ask polyline.up{stroke:#1f6f5c}.c99ask polyline.dn{stroke:#b4483c}
+.c99ax{display:flex;justify-content:space-between;font-size:12px;opacity:.8}
+.c99p{margin:6px 0 2px;font-size:14px}.c99s{margin:2px 0;font-size:12px;opacity:.85}
+html.c97-dark .c99ask polyline.up{stroke:#4fb59a}html.c97-dark .c99ask polyline.dn{stroke:#e07b6f}
+@media (prefers-color-scheme:dark){html.c97-system .c99ask polyline.up{stroke:#4fb59a}html.c97-system .c99ask polyline.dn{stroke:#e07b6f}}
