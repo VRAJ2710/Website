@@ -65,12 +65,12 @@ No DDL, no new tables, no Stripe, no env, no package changes. deploy.sh never st
 
 ## Files
 patch_c100.py, server_block_c100.js, app_block_c100.js (chat100, identical to deploy-chat100),
-patch_c100d.py, server_block_c100b.js (chat100c spot-only gold change + About), app_block_c100b.js (identical to chat100b),
+patch_c100d.py, server_block_c100b.js (chat100c spot-only gold change + About, chat100d bio and LinkedIn), app_block_c100b.js (chat100b block; founder LinkedIn fallback now /in/vraj2710),
 founder.webp, t_c100_b.js / t_c100d.js (harness tests), t_c100c_unit.js (snapshot day-rollover test, runs standalone:
 `node t_c100c_unit.js`), deploy.sh (sha256-pinned; also writes assets/founder.webp from an embedded, sha256-checked copy).
 
 ## Deploy (only after Vraj approves; Republish is done by others)
 `bash deploy.sh --dry-run` first, then `bash deploy.sh`. It checks the live md5s, refuses a second run
-(or if any `.bak-chat100c` backup exists), builds in scratch, runs `node --check`, a DDL grep and the line-1 check,
-makes timestamped `.bak-chat100c` backups, installs, and verifies the final md5s. It does NOT start the server.
-Undo: restore each file from its `.<timestamp>.bak-chat100c` copy (and delete assets/founder.webp if it was new).
+(or if any `.bak-chat100d` backup exists), builds in scratch, runs `node --check`, a DDL grep and the line-1 check,
+makes timestamped `.bak-chat100d` backups, installs, and verifies the final md5s. It does NOT start the server.
+Undo: restore each file from its `.<timestamp>.bak-chat100d` copy (and delete assets/founder.webp if it was new).
