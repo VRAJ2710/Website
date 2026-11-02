@@ -355,7 +355,7 @@ async function c99xYieldsPage(req, res, user) {
   const body = `<style>${C97_CSS}${C99_CSS}${C99X_CSS}</style><section><div class="kicker"><a href="/markets/">Markets</a></div><h1>Gilt and Treasury yields</h1><p class="dek">What the UK and US governments pay to borrow, from official end-of-day figures. A yield is the yearly return a lender gets for holding the bond to the end.</p><p class="byline">${C93_EDITOR}</p>` +
     (plain.length ? `<p>${plain.map(c93Esc).join(" ")}</p>` : "") + c99xCurve(us, uk, usM, ukM) + `</section>` +
     `<section><h2>US Treasuries</h2>${usHtml}</section><section><h2>UK gilts</h2>${ukHtml}</section>` +
-    `<section><p class="c97s">A change of +0.10 pts means the yield rose by a tenth of a percentage point. Rising yields usually mean falling bond prices. Gold pays no interest, so higher yields can make it less attractive to hold, though the link is loose. Information only. <strong>Not investment advice. Capital at risk.</strong></p></section>`;
+    `<section><p class="c97s">A change of +0.10 pts means the yield rose by a tenth of a percentage point. Rising yields usually mean falling bond prices. Gold pays no interest, so higher yields can make it less attractive to hold, though the link is loose. <a href="/data-status/">Data status</a> shows how fresh each source is. Information only. <strong>Not investment advice. Capital at risk.</strong></p></section>`;
   return c98Send(req, res, c93Shell({ title: "Gilt and Treasury yields | The Dispatch Market", path: "/markets/yields/", desc: "UK gilt and US Treasury yields and curves from official end-of-day figures, with plain English.", user, body }));
 }
 // ── CFTC gold positioning: money managers' net position and where it sits in the last ten years ──
@@ -391,7 +391,7 @@ async function c99xCotPage(req, res, user) {
       `<p class="c97s">Source: ${C99X_COT_SRC}. Positions as of ${c99xDay(L.d)}; the CFTC usually publishes them the following Friday. Checked ${c93Esc(c97UkWhen(c.at))}.${c.stale ? " Last known figures: the feed did not answer at our latest check." : ""} One contract is 100 troy ounces. Ten years here means ${st.win.length} weekly reports since ${c99xDay(st.from)}.</p>`;
   }
   const body = `<style>${C97_CSS}${C99_CSS}${C99X_CSS}</style><section><div class="kicker"><a href="/gold/">Gold</a></div><h1>Gold positioning</h1><p class="dek">How large speculative traders are placed in gold futures, from the weekly US regulator report, and how that compares with the last ten years.</p><p class="byline">${C93_EDITOR}</p>${main}</section>` +
-    `<section><p class="c97s">Positioning shows what large traders hold, not where the price will go. Information only. <strong>Not investment advice. Capital at risk.</strong></p></section>`;
+    `<section><p class="c97s">Positioning shows what large traders hold, not where the price will go. <a href="/data-status/">Data status</a> shows how fresh each source is. Information only. <strong>Not investment advice. Capital at risk.</strong></p></section>`;
   return c98Send(req, res, c93Shell({ title: "Gold positioning (CFTC) | The Dispatch Market", path: "/gold/positioning/", desc: "Money managers' net gold futures position from the CFTC, with its ten-year percentile in plain English.", user, body }));
 }
 {
@@ -404,5 +404,60 @@ async function c99xCotPage(req, res, user) {
       try { return p === "/markets/yields/" ? await c99xYieldsPage(req, res, user) : await c99xCotPage(req, res, user); } catch (e) { console.error("[c99x]", p, e && e.message); }
     }
     return c99xR0.apply(this, arguments);
+  };
+}
+// chat99 extra: /data-status/ - read-only view of each free feed's freshness (from the in-memory cache, no outbound calls).
+const C99S_FEEDS = [
+  ["c97:gold", false, "Gold dashboard: gold and silver spot, dollar, currencies and yields", "gold-api.com; Yahoo Finance (delayed); Frankfurter (European Central Bank rates); US Treasury and Federal Reserve data", 2 * 60e3],
+  ["c97:today", false, "Today summary (built from the calendar and the gold dashboard)", "The feeds listed on this page", 5 * 60e3],
+  ["c97:calendar", false, "Economic calendar (built from the agency schedules below)", "The agency schedules listed on this page", 30 * 60e3],
+  ["bls:ics", false, "US jobs and inflation release dates", "US Bureau of Labor Statistics (bls.gov)", 12 * 3600e3],
+  ["bea:schedule", false, "US growth and spending release dates", "US Bureau of Economic Analysis (bea.gov)", 12 * 3600e3],
+  ["ons:upcoming", false, "UK release dates", "Office for National Statistics (ons.gov.uk)", 12 * 3600e3],
+  ["ons:", true, "UK economic figures", "Office for National Statistics (ons.gov.uk)", 3 * 3600e3],
+  ["fred:", true, "US economic figures", "Federal Reserve Bank of St. Louis (FRED)", 3 * 3600e3],
+  ["boe:bank-rate", false, "Bank of England Bank Rate", "Bank of England database", 6 * 3600e3],
+  ["c99x:ust", false, "US Treasury yields", "US Treasury daily par yield curve (home.treasury.gov)", 3 * 3600e3],
+  ["c99x:gilts", false, "UK gilt yields", "Bank of England nominal par gilt yields", 6 * 3600e3],
+  ["c99x:cot", false, "Gold positioning (weekly)", "CFTC Commitments of Traders (publicreporting.cftc.gov)", 12 * 3600e3]
+];
+const C99S_BOOT = Date.now();
+function c99sEvery(ms) { return ms < 3600e3 ? `every ${Math.round(ms / 60e3)} minutes` : `every ${Math.round(ms / 3600e3)} hours`; }
+function c99sRows() {
+  const now = Date.now();
+  return C99S_FEEDS.map(([key, prefix, name, src, ttl]) => {
+    const es = []; c97Mem.forEach((e, k) => { if (prefix ? (k.indexOf(key) === 0 && k !== "ons:upcoming") : k === key) es.push(e); });
+    const good = es.filter(e => e.v != null), at = good.reduce((m, e) => Math.max(m, e.at || 0), 0);
+    const failing = es.filter(e => e.v == null && e.err).length, stale = good.filter(e => now - e.at >= ttl).length;
+    let state, cls;
+    if (!good.length && es.some(e => e.p)) { state = "Being fetched now."; cls = "idle"; }
+    else if (!es.length || (!good.length && !failing)) { state = "Not checked since the last restart. It is fetched when a reader first opens a page that uses it."; cls = "idle"; }
+    else if (!good.length) { state = "Not answering at our last try. Pages leave these figures out rather than guess."; cls = "down"; }
+    else if (stale || failing) { state = "Showing the last good copy" + (failing ? `; ${failing} of ${es.length} not answering` : "") + "."; cls = "stale"; }
+    else { state = "Up to date."; cls = "ok"; }
+    return { name: name + (prefix && es.length ? ` (${es.length} series)` : ""), src, every: c99sEvery(ttl), last: at ? c97UkWhen(at) : "", state, cls };
+  });
+}
+const C99S_CSS = "@media (max-width:640px){.c99s thead{display:none}.c99s tr{display:block;border-bottom:1px solid var(--rule);padding:8px 0}.c99s td{display:block;border:0;padding:2px 0}.c99s td:first-child{font-weight:600}.c99s td:nth-child(2)::before{content:\"Source: \"}.c99s td:nth-child(3)::before{content:\"We check \"}.c99s td:nth-child(4)::before{content:\"Last good copy: \"}}.c99s td.st{font-weight:600}.c99s tr.down td.st{color:#9b2c1f}.c99s tr.stale td.st{color:#7a5a00}.c99s tr.ok td.st{color:#1f6f5c}html.c97-dark .c99s tr.down td.st{color:#f2998a}html.c97-dark .c99s tr.stale td.st{color:#e6c372}html.c97-dark .c99s tr.ok td.st{color:#86d1a1}@media (prefers-color-scheme:dark){html.c97-system .c99s tr.down td.st{color:#f2998a}html.c97-system .c99s tr.stale td.st{color:#e6c372}html.c97-system .c99s tr.ok td.st{color:#86d1a1}}";
+async function c99sPage(req, res, user) {
+  const rows = c99sRows();
+  const body = `<style>${C97_CSS}${C99_CSS}${C99S_CSS}</style><section><div class="kicker">Methodology</div><h1>Data status</h1><p class="dek">Every figure on the site comes from a free public source. This page shows when we last got a good copy of each one.</p><p class="byline">${C93_EDITOR}</p>` +
+    `<p>Prices are delayed, not live. Official figures are end of day or as published. If a source stops answering, its page says so and shows the last good copy, or nothing, rather than a guess. Mistakes we have fixed are listed on the <a href="/corrections">corrections page</a>.</p></section>` +
+    `<section><div class="c99wrap"><table class="c97t c99s"><thead><tr><th>Feed</th><th>Source</th><th>We check</th><th>Last good copy</th><th>Status</th></tr></thead><tbody>` +
+    rows.map(r => `<tr class="${r.cls}"><td>${c93Esc(r.name)}</td><td>${c93Esc(r.src)}</td><td>${r.every}</td><td>${r.last ? c93Esc(r.last) : "None yet"}</td><td class="st">${c93Esc(r.state)}</td></tr>`).join("") +
+    `</tbody></table></div><p class="c97s">Read from this server's memory at ${c93Esc(c97UkWhen(Date.now()))}; last restart ${c93Esc(c97UkWhen(C99S_BOOT))}. Opening this page does not contact any source. Company filings are fetched on request and listed on each company page with their download time. Some things need a paid source and are not shown at all: analyst consensus forecasts, rate-cut odds and earnings-call transcripts.</p></section>` +
+    `<section><p class="c97s">Information only. <strong>Not investment advice. Capital at risk.</strong></p></section>`;
+  return c98Send(req, res, c93Shell({ title: "Data status | The Dispatch Market", path: "/data-status/", desc: "When The Dispatch Market last got a good copy of each free data source.", user, body }));
+}
+{
+  const c99sR0 = c93Route;
+  c93Route = async function (req, res) {
+    let p = ""; try { p = new URL(req.url || "/", "http://localhost").pathname; } catch (e) {}
+    if ((req.method === "GET" || req.method === "HEAD") && (p === "/data-status/" || p === "/data-status")) {
+      if (p === "/data-status") { res.writeHead(301, { Location: "/data-status/" }); return res.end(); }
+      let user = null; try { user = await c96UserOf(req); if (user && req.c96PreviewOn) user = null; } catch (e) {}
+      try { return await c99sPage(req, res, user); } catch (e) { console.error("[c99s]", e && e.message); }
+    }
+    return c99sR0.apply(this, arguments);
   };
 }

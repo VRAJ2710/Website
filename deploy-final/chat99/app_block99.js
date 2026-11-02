@@ -3,7 +3,7 @@
   try {
     if (typeof C93_MENU !== "undefined") {
       var g = C93_MENU.filter(function (x) { return x[0] === "Markets and data"; })[0];
-      if (g && !g[1].some(function (x) { return x[0] === "/research/sec/"; })) g[1].push(["/research/sec/", "Company filings", "Five years of SEC figures for any US company"], ["/research/sec/screener/", "Filings screener", "Revenue, growth and margins from 10-Ks"], ["/markets/yields/", "Gilt and Treasury yields", "UK and US yield curves, end of day"], ["/gold/positioning/", "Gold positioning", "CFTC weekly report, ten-year percentile"]);
+      if (g && !g[1].some(function (x) { return x[0] === "/research/sec/"; })) g[1].push(["/research/sec/", "Company filings", "Five years of SEC figures for any US company"], ["/research/sec/screener/", "Filings screener", "Revenue, growth and margins from 10-Ks"], ["/markets/yields/", "Gilt and Treasury yields", "UK and US yield curves, end of day"], ["/gold/positioning/", "Gold positioning", "CFTC weekly report, ten-year percentile"], ["/data-status/", "Data status", "When each free source last answered"]);
     }
   } catch (e) {}
 })();

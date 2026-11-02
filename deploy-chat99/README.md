@@ -21,4 +21,8 @@
     net position, ten-year percentile and range, chart, report date and checked UK time. Cached 12h. No buy/sell wording.
   - Both are free official sources, no keys. If a source does not answer, the page says so and shows no figures.
   - Both are gated by maintenance like every other page, and are added to the menu.
+  - `/data-status/` Data status: each free feed's source, how often we check, last good copy (UK time) and status
+    (up to date / last good copy / not answering / not checked since restart). Read from memory only, no outbound calls.
+    Links to /corrections and repeats the "needs a paid source" note. Linked from the menu and the two pages above.
+- Fix: the guest brief "for members" box (chat96) had a white background in dark mode; chat99 adds a dark override.
 - No DDL. It reuses dispatch_openbb_research_cache.
