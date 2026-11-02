@@ -12,7 +12,7 @@
 # Does NOT: start the server, npm, git, .replit, package.json, env vars, Stripe, routes, data, DB schema (no DDL), c93.css, the photo.
 # Usage: bash deploy.sh [--dry-run] [--dir /path/to/project]
 set -u
-BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/PENDING/deploy-chat101c"
+BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/9ec9dc4ea507ed3b4d4d084b2e07dcc3c54020d9/deploy-chat101c"
 
 LIVE_SERVER_MD5=27269b06f2e6962a5d5cb56020ca7527   # chat101b (deploy/jack-chat101b 8c12ad79), maintenance OFF
 LIVE_APP_MD5=29b6f804376fcf50a9cfb262b5f37a30
