@@ -279,6 +279,14 @@ async function c99Chart(k) {
     }
   };
 }
+// chat99 fix: the guest brief "for members" box (chat96 .c96wall) kept a white background in dark mode.
+const C99_WALL_CSS = `html.c97-dark .c96wall{background:${C97_DARK.paper2};border-color:${C97_DARK.rule}}@media (prefers-color-scheme:dark){html.c97-system .c96wall{background:${C97_DARK.paper2};border-color:${C97_DARK.rule}}}`;
+const c99TransformPrev = c97Transform;
+c97Transform = function (html, req) {
+  const out = c99TransformPrev(html, req);
+  if (typeof out === "string" && out.indexOf('class="c96wall"') >= 0 && out.indexOf('id="c99-wall"') < 0) return out.replace(/<\/head>/i, `<style id="c99-wall">${C99_WALL_CSS}</style></head>`);
+  return out;
+};
 // ── chat99 extras: gilt and Treasury yield monitor (/markets/yields/) and CFTC gold positioning (/gold/positioning/) ──
 // Free official sources only, end-of-day or weekly; every figure shows its source, its date and the UK time we checked.
 const C99X_UST_SRC = "US Treasury daily par yield curve rates (home.treasury.gov)";

@@ -5,10 +5,10 @@
 # Does NOT start or restart the server, publish, or touch app.js/index.html/env/Stripe/DB. Republish only when Vraj says so.
 # Usage: bash deploy.sh [--dry-run] [--dir /path/to/project]
 set -u
-BASE_SERVER_MD5=16c8ecf81ba6c8da0c17a9b99e2b5ae4
-BASE_SERVER_SHA256=cab6f2835ecef2b8c9f50a4269a620eb5d75e556967578b0dad3afd91dee1184
-OPEN_SERVER_MD5=b051076834e77649a44ce04135bf66e4
-OPEN_SERVER_SHA256=965c2b86fedc7f1a05071396518c5920589e5ca8e65c4a8119ca67c66d9cf9a0
+BASE_SERVER_MD5=7015a56c4a533f02ae92dbceca30b210
+BASE_SERVER_SHA256=edb5574aae29c191ae884fa0655a3ef7abc56b3e03d1aba1f8c49aa32eb83e6f
+OPEN_SERVER_MD5=cd4ecab656091ee20b5510fd7dab652d
+OPEN_SERVER_SHA256=54f241237b6b1e545eaf3b20c3fd48e541160e908618fefa9db3adb1cc5a74ac
 OLD_L1='const BB10I_MAINTENANCE_ON = true; // set false to turn maintenance off (restart to apply)'
 NEW_L1='const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)'
 DRY=0; DIR=""
