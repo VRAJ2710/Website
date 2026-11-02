@@ -28,7 +28,7 @@ function r2NoByok() { try { return document.documentElement.classList.contains("
       "html:not(.c97-dark) .dash-details{background:transparent!important}" +
       ".latency-strip{background:var(--paper-2,transparent)!important}" +
       ".spine-cell.spine-nosync{opacity:1!important}.spine-nosync{opacity:1!important}" +
-      ".book-price-row{background:transparent!important}";
+      ".book-price-row{background:transparent!important}.c97-pvbar a{color:#fff!important;text-decoration:underline}";
     (document.head || document.documentElement).appendChild(st);
   } catch (e) {}
 })();

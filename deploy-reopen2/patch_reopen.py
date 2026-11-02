@@ -33,6 +33,7 @@ app = edit(app, '].filter(Boolean).join(" · ") || "awaiting feed";', '].filter(
 app = edit(app, ': "awaiting feed"}</span>', ': "Updating…"}</span>', tag="app-spine")
 app = edit(app, 'const feedNote=incomplete?"awaiting feed":', 'const feedNote=incomplete?"Updating…":', tag="app-fg")
 app = edit(app, '_rt17Sec("c96keys", "Your AI keys", ', '_rt17Sec("c96keys", (typeof r2NoByok === "function" && r2NoByok()) ? "Your own AI key" : "Your AI keys", ', tag="app-keys-title")
+app = edit(app, 'score>=60?"#86efac":', 'score>=60?(document.documentElement.classList.contains("c97-dark")?"#86efac":"#166534"):', tag="app-fg-green")
 app = "// reopen2\n" + app + ablk
 idx = edit(idx, '<script defer src="/app.js?v=chat99"></script>', '<script defer src="/app.js?v=chat99r2"></script>', tag="idx-token")
 for nm, s in ((S, srv), (A, app), (I, idx)):
