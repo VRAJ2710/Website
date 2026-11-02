@@ -421,7 +421,7 @@ async function c97GoldDash() {
   return (await c97Cached("c97:gold", 2 * 60e3, async () => {
     const at = Date.now(), rows = {};
     const [xau, xag, yq, fx, ry, ty] = await Promise.all([
-      (async () => { try { return await fetchGoldProxy(); } catch (e) { return null; } })(),
+      (async () => { let q = null; try { q = await fetchGoldProxy(); } catch (e) {} if (q && Number(q.p) > 0) return q; try { const j = await (await c97Get("https://api.gold-api.com/price/XAU", "application/json")).json(); return Number(j.price) > 0 ? { p: Number(j.price), ts: Date.parse(j.updatedAt || "") || at } : null; } catch (e) { return null; } })(),
       (async () => { try { const j = await (await c97Get("https://api.gold-api.com/price/XAG", "application/json")).json(); return Number(j.price) > 0 ? { p: Number(j.price), ts: Date.parse(j.updatedAt || "") || at } : null; } catch (e) { return null; } })(),
       (async () => { try { return await yahooQuote(["DX-Y.NYB", "GBPUSD=X", "EURUSD=X"]); } catch (e) { return null; } })(),
       (async () => { try { const j = await (await c97Get("https://api.frankfurter.dev/v1/latest?base=USD&symbols=GBP,EUR", "application/json")).json(); return j && j.rates ? j : null; } catch (e) { return null; } })(),
