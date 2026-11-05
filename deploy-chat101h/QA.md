@@ -26,7 +26,8 @@ Existing routes such as `/research/capital-sustainability`, `/research/sec/`, `/
 - Hub still contains the monitor, Check and plan, and Also from the desk.
 - Existing fixture routes are not rewritten.
 - Admin guest preview still renders the article as a guest.
-- Downloaded live `app.js` matched md5 `0b4c442a055584920d9539fb50c9a7f1`. After the append, `node --check` passed. A second patch is refused.
+- Downloaded live `app.js` matched md5 `0b4c442a055584920d9539fb50c9a7f1`. After the append, `node --check` passed. A second patch is refused. The append hash is unchanged by the London scrub: md5 `6c8ddd1be4db078df1de146163f99b11`, sha256 `80954f1cfde5add82ee75d9b783e3740c799e1fb8237bc8f01881a5514fbf989`.
+- The dry-run London guard matches no line in the patch files. `patch_c101h.py` sha256 `958fd7f71273c37ca532afca283e58c70610755e8542e4bb2ae85ef9dc768b07`. Server and app blocks are unchanged: `f8d60e6d7814374ba60c174ac07b179fa7808da0e5937c204838ceaf2a043db6` and `d3ea0f5453b9dfa38d93da83de4395c82d5f0bb5225c008532e51c7fe651805b`.
 - `bash deploy.sh --dry-run --dir` on this git checkout aborted because `server.js` is not the live file (md5 `2954f8b7`). It did not modify `server.js`, `app.js` or `index.html`.
 
 Chrome (headless) on the fixture, 320 / 390 / 1280, light and dark: no horizontal overflow, disclaimer visible, article cards navigate, back link returns to Research, Federal Reserve source is an absolute link. Screenshots are in the run artifacts.

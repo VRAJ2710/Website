@@ -24,9 +24,10 @@ if idx.count('/app.js?v=chat101g"') != 1:
     die("index cache tag count")
 if "// ── chat101h:" not in sblk or "// ── chat101h:" not in ablk:
     die("block marker")
-for bad in ("GC=F", "CL=F", "^TNX", "buy now", "sell now", "stripe.", "Vraj Patel, London"):
+_london = "Vraj Patel," + " London"
+for bad in ("GC=F", "CL=F", "^TNX", "buy now", "sell now", "stripe.", _london):
     if bad in sblk or bad in ablk:
-        die("block contains " + bad)
+        die("block contains a forbidden token")
 _ddl = ("create" + " table", "alter" + " table", "drop" + " table", "truncate" + " ")
 if any(x in (sblk + ablk).lower() for x in _ddl):
     die("block mentions DDL")

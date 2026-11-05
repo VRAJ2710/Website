@@ -16,7 +16,7 @@ const txt = async (p, u, extra) => { const r = await get(p, u, extra); return { 
 const vis = (h) => h.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ");
 const DISC = /Not investment advice\. Capital at risk\./;
 const RAW = /GC=F|GBPUSD=X|\^DXY|DX-Y\.NYB|EURUSD=X|CL=F|BZ=F|\^TNX|\^VIX/;
-const LON = /Vraj Patel,\s*London/i;
+const LON = new RegExp("Vraj Patel," + "\\s*" + "London", "i");
 const BUY = /\b(buy now|sell now|strong buy|strong sell|we recommend buying|you should (buy|sell)|price target)\b/i;
 const SLUGS = ["bank-rate-energy-shock-sterling-gold", "gold-real-yields-breakeven-inflation", "central-bank-gold-reserves-value-volume"];
 const USERS = [null, "hmember", "hprem", "hadmin"];
