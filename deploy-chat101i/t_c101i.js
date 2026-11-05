@@ -61,6 +61,12 @@ const vis = (h) => h.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style
     ok(/suggests that risk premia continue to contribute to the upward slope/.test(v) && !/because of risk premia/.test(v), "risk premia wording follows the Report");
     ok(/around 4\.9% at the end of 2027/.test(v) && /around 4\.7% by late 2029/.test(v) && /17 December 2026/.test(v), "curve levels are dated, and the next decision is named");
     ok(/2\.50%/.test(v) && /3\.75%/.test(v) && /Box E/.test(v) && /2021/.test(v), "September foreign policy rates and Box E");
+    ok(/does not link Box E to the September ECB and Fed decisions in section 1\.3/.test(v) && !/illustration of that point/.test(v), "Box E is not credited as the Report's link to the September decisions");
+    ok(/The UK rise came after both the ECB and the Fed had raised rates/.test(v) && !/still had unchanged/.test(v), "foreign-rate sentence states the sequence");
+    ok(/The next published decision is 17 December 2026; Box A says an initial estimate of 2027 pay settlements should be available in time for that meeting/.test(v) && !/which is also when Box A/.test(v), "December availability matches Box A");
+    ok(/In each pair, the first figure is Brent and the second UK gas/.test(v), "respectively sentence names Brent then gas");
+    ok(/Three of the 0\.25 percentage point entries/.test(v) && /clear evidence of a recovery in firms. pricing power and households. purchasing power/.test(v) && !/who also voted/.test(v), "three cautious entries and Dhingra's evidence line");
+    ok(/Mann voted for 4\.25% at this meeting/.test(v) && /cross-refers that point to Box A/.test(v), "Mann's vote tense and the Chart 1.3 cross-reference");
     ok(/Neither sets the sterling price of gold/.test(v) && /slope downward/.test(v) && /late-October averages/.test(v), "table cells match the futures path, not a spot rule");
     ok(/not on a pre-set path/.test(v) && /minutes entries disagree about the next move/.test(v), "deck is the Committee line plus the split");
     const prose = bank.b.split("<h2>The scale is a futures average")[1] || "";
