@@ -18,6 +18,13 @@ Checked at 21:46 UK (GMT) on 5 November 2026 against the November 2026 Monetary 
 
 Byline remains “Edited by Vraj Patel”. The page still ends with “Not investment advice. Capital at risk.”
 
+Patch files are pinned to commit `005e319f98263d73fc1bef2c93595955bf8ba0eb`:
+https://github.com/VRAJ2710/Website/commit/005e319f98263d73fc1bef2c93595955bf8ba0eb
+
+`patch_c101i.py` `fbfb4fba80118706f66d2f799624f74fc6a4cd7ef28c2b4e8d05aa710c22a9b6`
+`old_bank.frag` `333170c1957dbfde1be7f45b57cc45b58c0cced520de8faab927e4811f044f52`
+`new_bank.frag` `5ecf0575f85dbf1a5df34706875ff60a1f08848902d60e740ef172db9f6016d4`
+
 ## Deploy (coordinator, Replit Shell)
 
 Do not git pull. Do not run `node server.js`. Do not republish until the dry run passes.
