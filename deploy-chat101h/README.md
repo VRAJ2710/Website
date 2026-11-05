@@ -27,8 +27,8 @@ Patch sha256: `patch_c101h.py` `958fd7f71273c37ca532afca283e58c70610755e8542e4bb
 
 `server.js` and `index.html` are not given a single precomputed hash in this script. The scratch check requires `server.js` to be the live bytes plus the pinned block, and `index.html` to be the one swap of `app.js?v=chat101g` to `app.js?v=chat101h`. The script prints the resulting sha256.
 
-Patch files are pinned to commit `c4b804e8c722b258887c165f0fb142bd0a1af4e9`:
-https://github.com/VRAJ2710/Website/commit/c4b804e8c722b258887c165f0fb142bd0a1af4e9
+Patch files are pinned to commit `6aabadbe023549a8cb9eeb181ff9bc9bb01fca71`:
+https://github.com/VRAJ2710/Website/commit/6aabadbe023549a8cb9eeb181ff9bc9bb01fca71
 
 ## Deploy (coordinator, Replit Shell)
 

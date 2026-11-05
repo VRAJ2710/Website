@@ -10,7 +10,7 @@
 # (no DDL), c93.css, the service worker, or the photo.
 # Usage: bash deploy.sh [--dry-run] [--dir /path/to/project]
 set -u
-BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/c4b804e8c722b258887c165f0fb142bd0a1af4e9/deploy-chat101h"
+BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/6aabadbe023549a8cb9eeb181ff9bc9bb01fca71/deploy-chat101h"
 
 LIVE_SERVER_MD5=6f4266e5439b000710b218785b1007bc
 LIVE_SERVER_SHA256=2507caad03ec81b57436de8c4a7610cdcf2c82a5e7d613d95f203f079c18a57e
@@ -25,7 +25,7 @@ PHOTO_REL="assets/founder.webp"
 PHOTO_SHA256=fe56cbdeba4feb5aee61a1dc175aa1e67df85f3807cd3276e1aff0d501eee08f
 NEW_L1='const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)'
 MANIFEST=(
-  "patch_c101h.py aa506110ccf391414b7672bc0dedba5538013857b03832c6a66ab51e14035522"
+  "patch_c101h.py 958fd7f71273c37ca532afca283e58c70610755e8542e4bb2ae85ef9dc768b07"
   "server_block_c101h.js f8d60e6d7814374ba60c174ac07b179fa7808da0e5937c204838ceaf2a043db6"
   "app_block_c101h.js d3ea0f5453b9dfa38d93da83de4395c82d5f0bb5225c008532e51c7fe651805b"
 )
@@ -101,7 +101,9 @@ PY
 grep -q '/app.js?v=chat101h"' "$S/index.html" && grep -q '/c93.css?v=chat93' "$S/index.html" || die "cache tokens (app chat101h, css chat93) missing"
 grep -q "chat101h: three sourced research articles" "$S/server.js" && grep -q "Capital Sustainability Monitor" "$S/server.js" && grep -q "chat101f: market quotes first" "$S/server.js" || die "article block or existing research marker missing"
 grep -q "chat101h: sourced research articles" "$S/app.js" && grep -q "chat101g: phone Account drawer" "$S/app.js" || die "app block or chat101g drawer missing"
-grep -qiE 'Vraj Patel,[[:space:]]*London' "$P"/* && die "patch contains 'Vraj Patel, London'"
+LON_RE='Vraj Patel,'
+LON_RE="${LON_RE}[[:space:]]*London"
+grep -qiE "$LON_RE" "$P"/* && die "patch contains a London byline"
 grep -qF 'GC=F' "$P/server_block_c101h.js" "$P/app_block_c101h.js" && die "a new block contains GC=F"
 grep -qF 'Not investment advice. Capital at risk.' "$S/server.js" && grep -qF 'Edited by Vraj Patel' "$S/server.js" || die "byline or disclaimer missing"
 say "scratch build: exact append, app hash pinned, line 1 false, existing research text kept"
