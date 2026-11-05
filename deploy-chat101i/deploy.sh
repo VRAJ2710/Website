@@ -5,7 +5,7 @@
 # Does NOT: start the server, npm, git, Stripe, the database, or CI.
 # Usage: bash deploy.sh [--dry-run] [--dir /path/to/project]
 set -u
-BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/005e319f98263d73fc1bef2c93595955bf8ba0eb/deploy-chat101i"
+BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/6650acf4ddf0fe3d3d69fad72ef49038cd1ba523/deploy-chat101i"
 
 LIVE_SERVER_MD5=6077bef9728ffe5b26d8d6fcb887294b
 LIVE_APP_MD5=6c8ddd1be4db078df1de146163f99b11
@@ -16,9 +16,11 @@ PHOTO_REL="assets/founder.webp"
 PHOTO_SHA256=fe56cbdeba4feb5aee61a1dc175aa1e67df85f3807cd3276e1aff0d501eee08f
 NEW_L1='const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)'
 MANIFEST=(
-  "patch_c101i.py fbfb4fba80118706f66d2f799624f74fc6a4cd7ef28c2b4e8d05aa710c22a9b6"
+  "patch_c101i.py 938beb5f3d7ee0b967f9ed657bee85a2a108d6bbbd036eb09db54686a5ff21fa"
   "old_bank.frag 333170c1957dbfde1be7f45b57cc45b58c0cced520de8faab927e4811f044f52"
-  "new_bank.frag 5ecf0575f85dbf1a5df34706875ff60a1f08848902d60e740ef172db9f6016d4"
+  "new_bank.frag e66ac2bcfc44ab311a18eb62b127b04d9d7411c6ea1abc0540c0cd7a0c6c0ec1"
+  "css_old.frag d373b97494ffead9612421305e351f57eafd31629d272c4b04e8e91a09491b5b"
+  "css_new.frag bb8afbbdd66ca2b3fe56c1a8f9c5652f418b6343879bb0eb261cc461f4c97a22"
 )
 DRY=0; DIR=""
 while [ $# -gt 0 ]; do case "$1" in --dry-run) DRY=1;; --dir) shift; DIR="${1:-}";; *) echo "unknown arg $1"; exit 2;; esac; shift; done
@@ -52,6 +54,8 @@ if ls "$SERVER".*.bak-chat101i >/dev/null 2>&1 || grep -q "chat101i: bank-rate a
 [ -f "$CSS" ] && [ "$(md5of "$CSS")" = "$LIVE_CSS_MD5" ] || die "c93.css missing or changed ($CSS)"
 [ "$(head -n 1 "$SERVER")" = "$NEW_L1" ] || die "server.js line 1 is not the maintenance=false line"
 [ -f "$PHOTO" ] && [ "$(sha256of "$PHOTO")" = "$PHOTO_SHA256" ] || die "$PHOTO missing or changed"
+SW="$SDIR/sw.js"; SW_BEFORE=""
+if [ -f "$SW" ]; then SW_BEFORE=$(md5of "$SW"); say "sw.js md5 $SW_BEFORE (must stay unchanged)"; fi
 say "live md5s match the chat101h build: ok"
 
 W=$(mktemp -d /tmp/deploy-chat101i.XXXXXX) || die "mktemp failed"; P="$W/patches"; S="$W/scratch"; mkdir -p "$P" "$S"
@@ -68,22 +72,9 @@ grep -qiE "$LON_RE" "$P"/* && die "patch contains a London byline"
 say "London byline grep: none"
 
 cp "$SERVER" "$S/server.js"; cp "$S/server.js" "$S/server.js.base"
-python3 "$P/patch_c101i.py" "$S/server.js" "$P/old_bank.frag" "$P/new_bank.frag" || die "patch_c101i failed (live files untouched)"
+python3 "$P/patch_c101i.py" "$S/server.js" "$P/old_bank.frag" "$P/new_bank.frag" "$P/css_old.frag" "$P/css_new.frag" || die "patch_c101i failed (live files untouched)"
 node --check "$S/server.js" || die "node --check server.js failed (scratch)"
-python3 - "$S/server.js.base" "$S/server.js" "$P/old_bank.frag" "$P/new_bank.frag" << 'PY' || die "scratch server.js is not the exact article replacement"
-import pathlib, sys
-base, new, oldp, newp = sys.argv[1:]
-old = pathlib.Path(base).read_text(encoding="utf-8")
-got = pathlib.Path(new).read_text(encoding="utf-8")
-frag_old = pathlib.Path(oldp).read_text(encoding="utf-8")
-frag_new = pathlib.Path(newp).read_text(encoding="utf-8")
-paras_old = '  function paras(list) { return list.map((p) => `<p>${p}</p>`).join(""); }\n'
-paras_new = '  function paras(list) { return list.map((p) => (p.indexOf(\'<div class="c101h-watch"\') === 0 ? p : `<p>${p}</p>`)).join(""); } // chat101i: bank-rate article\n'
-expect = old.replace(paras_old, paras_new, 1).replace(frag_old, frag_new, 1)
-if got != expect: sys.exit("server.js changed outside the Bank Rate article and the paragraph helper")
-if got.split("\n", 1)[0] != old.split("\n", 1)[0]: sys.exit("line 1")
-print("exact article replacement")
-PY
+python3 "$P/patch_c101i.py" --check "$S/server.js.base" "$S/server.js" "$P/old_bank.frag" "$P/new_bank.frag" "$P/css_old.frag" "$P/css_new.frag" || die "replacement check failed (live files untouched)"
 grep -q '\$108 per barrel' "$S/server.js" && grep -q '216 pence per therm' "$S/server.js" && grep -q 'one-for-now' "$S/server.js" && grep -q '21 May 2019' "$S/server.js" || die "checked facts or the other articles are missing"
 grep -q "chat101i: bank-rate article" "$S/server.js" && grep -q "Capital Sustainability Monitor" "$S/server.js" || die "marker or monitor text missing"
 [ "$(md5of "$APP")" = "$LIVE_APP_MD5" ] && [ "$(md5of "$INDEX")" = "$LIVE_INDEX_MD5" ] || die "app.js or index.html changed before install"
@@ -102,6 +93,7 @@ mv -f "$SERVER.new-chat101i" "$SERVER" || { echo "[deploy-chat101i] ERROR during
 node --check "$SERVER" || { echo "[deploy-chat101i] ERROR: node --check failed after install; $RB" >&2; exit 1; }
 [ "$(head -n 1 "$SERVER")" = "$NEW_L1" ] || { echo "[deploy-chat101i] ERROR: line 1 changed; $RB" >&2; exit 1; }
 [ "$(md5of "$APP")" = "$LIVE_APP_MD5" ] && [ "$(md5of "$INDEX")" = "$LIVE_INDEX_MD5" ] && [ "$(md5of "$CSS")" = "$LIVE_CSS_MD5" ] || { echo "[deploy-chat101i] ERROR: a file that must stay unchanged was modified; $RB" >&2; exit 1; }
+if [ -n "$SW_BEFORE" ] && [ "$(md5of "$SW")" != "$SW_BEFORE" ]; then echo "[deploy-chat101i] ERROR: sw.js changed; $RB" >&2; exit 1; fi
 echo "server.js md5 $(md5of "$SERVER")"
 echo "server.js sha256 $(sha256of "$SERVER")"
 echo "app.js md5 $(md5of "$APP") (unchanged)"
