@@ -1,37 +1,30 @@
 # Editorial self-audit — Bank Rate and sterling gold
 
-Checked 5 November 2026, 21:46 UK (GMT), from the Bank of England HTML for the November 2026 Monetary Policy Summary and minutes and the November 2026 Monetary Policy Report. This is not a score. Nothing here is a guarantee that a later reader will mark the piece 10/10.
+Re-read from the Bank of England HTML on 5 November 2026 at 21:57 UK (GMT): the November 2026 Monetary Policy Summary and minutes, and the November 2026 Monetary Policy Report. This note does not give the article a grade.
 
-## What the previous note got wrong or left thin
+## Correction to the previous audit
 
-- It said the dissenter wanted a larger increase, and stopped there. The summary says that vote was 0.5 percentage points, to 4.25%, and paragraph 20 names Catherine L Mann.
-- It described the energy shock without the only scale the minutes actually publish. Paragraph 3 gives front-month futures averages over 15 UK working days ending 27 October, not a spot price on decision day.
-- It treated “limited evidence of knock-on effects” as if that closed the question. Box A says the lack of evidence does not rule out stronger second-round effects later, and that the risk has increased.
-- It attributed fixed-price contracts, hedging and compressed margins to Box A. Those words are in the Report’s indirect-effects discussion around Chart 1.3 and in Andrew Bailey’s minutes entry. They are not in Box A. The new note says so.
-- It flattened the Committee into one implication for gold. Paragraph 19 says the eight who voted for 0.25 percentage points still differed on disinflation, slack and how restrictive policy was. Huw Pill writes that one 25-basis-point step is unlikely to be sufficient. Alan Taylor writes that this is not the start of a hiking cycle, calls it a risk-management “one-for-now” insurance hike, and says the next move could be up, down, or sideways. Those are his words. The note does not replace them with “conditional and precautionary”.
-- Market usefulness was a paragraph of “what would change this reading” with no instruments. The table now follows the three cases paragraph 16 already names, and names what to watch. It does not rank the cases or quote a gold price, a gilt yield or a sterling rate.
+The previous audit said Box A does not discuss fixed-price contracts, hedging or margins. The hedging point was right to move. The margins point was not. Box A says: “Lower margins continue to be the most commonly cited response by firms to the energy shock.” The Chart 1.3 passage says contacts of the Bank’s Agents suggest firms’ electricity and gas costs may be partly explained by greater use of fixed-price contracts and hedging arrangements, and then points the lower-margins clause to Box A. The article no longer says Box A is silent on margins. A dated correction at the end of the note records the earlier mis-attribution of the contracts and hedging point only.
 
-## What is a recorded fact, and where
+## Vote versus the next step
 
-| Statement in the note | Where it is in the Bank’s pages |
-| --- | --- |
-| Vote 8–1, Bank Rate to 4%, dissenter to 4.25% | Summary; minutes paragraphs 19–22 |
-| Front-month Brent and UK front-month gas averages, the 15-day window, 38% and 81%, 5% and 27% | Minutes paragraph 3 |
-| CPI 3.5% in September 2026 | Summary, and Chart 1.1’s footnote dating the outturn to September 2026 |
-| Projected average 4.9% in 2027 Q2, and “around 5%” | Report text on the 2027 Q2 projection; Chart 1.1; the summary’s “around 5% by the middle of next year” |
-| Little evidence of second-round effects, which does not rule out later effects | Box A |
-| Fixed-price contracts, hedging, lower margins | Report discussion of indirect effects around Chart 1.3; Bailey’s minutes entry |
-| Three cases: central, adverse, weaker demand | Minutes paragraph 16 |
-| Market curve mixes expected Bank Rate and risk premia; survey medians of 4%, 4.25% and 3.5% | Report section 1.3; Bailey’s entry on risk premia |
-| Taylor’s three sentences and Pill’s “unlikely to be sufficient” | Their minutes entries |
-| Mann’s 4.9% projection is conditioned on energy prices falling | Her minutes entry |
+The 8–1 vote, in the summary and paragraphs 19–22, is the vote on raising Bank Rate by 0.25 percentage points, to 4%. Mann’s vote was 0.5 percentage points, to 4.25%. The summary says policy is not on a pre-set path. The entries under the 0.25 percentage point vote are not one view:
 
-## What is still our reading
+- Bailey: without softer news, he can see the argument for a further increase.
+- Greene: additional hikes will likely be required.
+- Lombardelli: absent weaker inflation pressures, there is likely to be a case for a further increase in the near term.
+- Pill: one 25-basis-point step is unlikely to be sufficient.
+- Breeden: for now, the restrictiveness of financial conditions is sufficient.
+- Dhingra: the rise provides additional insurance; holding Bank Rate higher for longer would need clearer evidence.
+- Taylor: this is not the start of a hiking cycle; a risk-management “one-for-now” insurance hike; the next move could be up, down, or sideways.
+- Ramsden: the increase is necessary now, and he will judge the evidence at each meeting.
 
-The division of dollar gold, sterling and gilt yields into channels is an explanation of how those variables would bear on a sterling gold holding. The November documents do not publish that holding’s price, and they do not say which channel will dominate. The table is our arrangement of paragraph 16’s cases. It is not a Bank table. “Higher energy costs can change the real-return comparison” is a mechanism, not a measured move on 5 November.
+That is a reading of those entries. It is not a Committee ranking, and the 8–1 tally is not a count of who expects another increase.
 
-No gold price, gilt yield or sterling exchange rate is stated. The futures figures are not presented as 5 November spot prices. The 2027 inflation figures are labelled as the Bank’s November projections. The as-of time is when those documents were read. The note says it is not a live price feed.
+## Figures, with their windows
 
-## What this pass did not do
+Minutes paragraph 3: front-month Brent and UK front-month gas futures, 15 UK working days ending 27 October, $108 and 216 pence, 38% and 81% above the July Report. Paragraph 4: the direct-energy path uses futures curves that were downward sloping. Section 1.3: on the 15-day average to 27 October the market curve is around 4.9% at the end of 2027 and around 4.7% by late 2029. The difference between that curve and the Market Participants Survey path suggests risk premia continue to contribute to the upward slope. The curve is not a commitment. Section 1.3 also records the September ECB deposit-facility rate of 2.50% and the September federal funds range of 3.75%–4.00%. Box E states the sterling-and-imports channel and says other central banks’ tightening limited the exchange-rate channel in 2021–23. The next minutes are due on 17 December 2026. Box A says an initial estimate of average 2027 pay settlements should be available for that meeting.
 
-The IMF guide and the other two Research notes were not reopened. The service worker, Stripe, the database and the rest of the site were not changed. A numeric grade is not offered.
+## What is still our arrangement
+
+The table follows paragraph 16’s three cases and says what would count against each. It is not Table 3.A. Section 3 and Table 3.A are the Bank’s own alternatives. The sentence on whether the real return on cash rises or falls is an explanation of the comparison, not a result from 5 November. No gold price, gilt yield or sterling rate is quoted.

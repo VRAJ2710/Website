@@ -14,7 +14,9 @@ The chat101h handoff gave server and index as md5 only. This script checks those
 
 ## What the article now says
 
-Checked at 21:46 UK (GMT) on 5 November 2026 against the November 2026 Monetary Policy Summary, minutes and Monetary Policy Report. The futures averages are the front-month Brent and UK front-month gas contracts over the 15 UK working days ending 27 October: $108 a barrel and 216 pence a therm, 38% and 81% above the July Report. September CPI at 3.5% is an outturn. The 4.9% figure for 2027 Q2 is the Bank’s projection. Alan Taylor’s minutes entry is quoted for the next step. Catherine L Mann’s vote for 4.25% is the summary’s vote, not a forecast. The table follows the three cases in minutes paragraph 16. It is not a forecast.
+Checked at 21:57 UK (GMT) on 5 November 2026 against the November 2026 Monetary Policy Summary, minutes and Monetary Policy Report. The futures averages are the front-month Brent and UK front-month gas contracts over the 15 UK working days ending 27 October: $108 a barrel and 216 pence a therm, on curves the minutes describe as downward sloping. September CPI at 3.5% is an outturn. The 4.9% average for 2027 Q2, and the curve levels of around 4.9% at end-2027 and around 4.7% by late 2029, are the Bank’s November descriptions, not outcomes and not a promise. The minutes entries are set out one by one. Box A is cited for margins and for the December pay-settlement estimate. Fixed-price contracts and hedging stay with the Chart 1.3 passage. A dated correction at the end of the note records the earlier mis-attribution. The table follows minutes paragraph 16. It is not a forecast.
+
+`sw.js` is not edited. If it is present, the script records its md5 and stops if that md5 changes. After Republish, confirm in the browser that the service worker request is still the existing file.
 
 Byline remains “Edited by Vraj Patel”. The page still ends with “Not investment advice. Capital at risk.”
 
