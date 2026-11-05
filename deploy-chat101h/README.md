@@ -25,6 +25,9 @@ Resulting `app.js` md5 `6c8ddd1be4db078df1de146163f99b11`, sha256 `80954f1cfde5a
 
 `server.js` and `index.html` are not given a single precomputed hash in this script. The scratch check requires `server.js` to be the live bytes plus the pinned block, and `index.html` to be the one swap of `app.js?v=chat101g` to `app.js?v=chat101h`. The script prints the resulting sha256.
 
+Patch files are pinned to commit `c4b804e8c722b258887c165f0fb142bd0a1af4e9`:
+https://github.com/VRAJ2710/Website/commit/c4b804e8c722b258887c165f0fb142bd0a1af4e9
+
 ## Deploy (coordinator, Replit Shell)
 
 Do not `git pull` or merge on the production Replit. Do not run `node server.js` or press Run. Do not republish until the dry run passes.
