@@ -29,7 +29,7 @@
     ".sector-tile .sector-tile-rank,.sector-tile .sector-tile-etf,.sector-tile .sector-tile-pct,.sector-tile .sector-tile-rel{color:var(--ink,#1b1b1b)!important}" +
     ".heat-tile>div{color:var(--ink,#1b1b1b)!important}.heat-tile{overflow:hidden}.heat-tile>div{overflow:hidden;text-overflow:ellipsis}" +
     "span[style*=\"background:rgba(0,200,150\"],span[style*=\"background:rgba(255,71,87\"]{color:var(--ink,#1b1b1b)!important}" +
-    "small[style=\"opacity:.6\"]{opacity:1!important}" +
+    "small[style=\"opacity:.6\"],.rt52-sig-c small,.regime-score-label>span[style*=\"opacity:.55\"]{opacity:1!important}" +
     "button[onclick=\"_runIntel()\"]{background:var(--gold,#1f3a5f)!important;color:var(--paper,#fbfaf7)!important}" +
     ".chat-send{background:var(--gold,#1f3a5f)!important;color:var(--paper,#fbfaf7)!important}";
   document.head.appendChild(st);
