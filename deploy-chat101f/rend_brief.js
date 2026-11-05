@@ -1,0 +1,4 @@
+if(rows.ry&&TIP&&rows.ry[0].indexOf("TIPS")>=0)p.push("The US 10-year real yield (inflation-protected Treasury market quote) is "+n(TIP.value,2)+"%"+(TIP.change!=null&&Number(TIP.change)!==0?", "+(TIP.change<0?"down ":"up ")+Math.abs(TIP.change).toFixed(2)+" points on the previous close":"")+".");
+else if(rows.ry&&ryOk)p.push("The US 10-year real yield was "+n(ry.value,2)+"% at the "+d8(ry.date)+" Treasury print"+(ry.change!=null&&Number(ry.change)!==0?", "+(ry.change<0?"down ":"up ")+Math.abs(ry.change).toFixed(2)+" points":"")+".");
+if(wOk&&rows.wti&&rows.wti!==rows.wtif)p.push("The last official WTI crude price was $"+n(w.p,2)+" a barrel ("+d8(w.date)+").");
+else if(rows.wtif&&dq.WTI)p.push("WTI crude futures are at $"+n(dq.WTI.price,2)+" a barrel (delayed)"+(dq.WTI.changePct!=null?", "+sg(dq.WTI.changePct,1,"%")+" on the previous close":"")+".");
