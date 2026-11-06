@@ -4,7 +4,11 @@
 # Does NOT start the server, npm, git, or republish. Does not change EXPECT_TAG.
 # Usage: bash deploy.sh [--dry-run] [--dir /path/to/project]
 set -u
-BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/d9a2d72cd7da97fa073d57f4625ef1d74695da3c/deploy-chat102"
+# Payload commit is c39ede5, which already contains these exact blobs.
+# Do not point this at the commit that only changes deploy.sh, and do not
+# read server_block/patch/app_block from the directory next to this script.
+PAYLOAD_COMMIT=c39ede5fb195ad3a1159182c71078799f426eff8
+BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/${PAYLOAD_COMMIT}/deploy-chat102"
 
 # Fresh base: audited chat101h. Replacement base: first chat102 (d10d6b9), whose
 # app.js hash is unchanged by later server/index corrections.
@@ -15,6 +19,10 @@ LIVE_INDEX_MD5=e5ab1af080974da456e086a1835d1e7b
 NEW_APP_MD5=b84058f6da16ad022640b06c9cdda72d
 NEW_APP_SHA256=b5dcd5fca7514f1d09a29d4e5c67c7a1c2d64d54bf92969cadf7244dd9073440
 PREV_SERVER_TAIL_SHA256=67f968ae1e22448999afa0f3579ae6132a9e1b0e54da72f97ed926ff976da665
+# Full-file md5s reported from the preview root after the first chat102 install.
+# They are not in git. App md5 b84058f6 is the known patch; these two identify that same install's server.js and index.html.
+PREV_SERVER_MD5=d43ddb5870f371a55f2eca3a9ef84ff9
+PREV_INDEX_MD5=b3e02b0c6e403133843a96adf45d219c
 NEW_L1='const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)'
 MARKER='// chat102 terminal. Built from lib_c102.js and client_c102.js. Edit those, then run node build_block.js.'
 MANIFEST=(
@@ -57,11 +65,12 @@ else die "root app.js md5 $am matches neither chat101h $LIVE_APP_MD5 nor first c
 say "mode: $MODE"
 
 W=$(mktemp -d /tmp/deploy-chat102.XXXXXX) || die "mktemp failed"; P="$W/patches"; S="$W/scratch"; mkdir -p "$P" "$S"
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+say "payload commit: $PAYLOAD_COMMIT"
 for e in "${MANIFEST[@]}"; do f="${e% *}"; h="${e#* }"
-  if [ -n "$HERE" ] && [ -f "$HERE/$f" ] && [ "$(sha256of "$HERE/$f")" = "$h" ]; then cp "$HERE/$f" "$P/$f"
-  else curl -fsSL --retry 2 "$BASE_URL/$f" -o "$P/$f" || die "download failed: $BASE_URL/$f"; fi
-  [ "$(sha256of "$P/$f")" = "$h" ] || die "sha256 mismatch for $f"; say "patch file ok: $f ${h:0:16}…"; done
+  curl -fsSL --retry 2 "$BASE_URL/$f" -o "$P/$f" || die "download failed: $BASE_URL/$f"
+  got=$(sha256of "$P/$f")
+  [ "$got" = "$h" ] || die "sha256 mismatch for $f from $PAYLOAD_COMMIT: got $got expected $h"
+  say "remote payload ok: $f $got"; done
 grep -inE 'create table|alter table|drop table|create index|drop index|truncate ' "$P"/* && die "a patch file mentions DDL"
 grep -q '/api/gold-desk' "$P"/* && die "a patch file calls /api/gold-desk"
 say "DDL grep: none. gold-desk: not called"
@@ -93,6 +102,11 @@ if new_s.split("\n", 1)[0] != old_s.split("\n", 1)[0]:
 print("exact prefix preserved")
 PY
 else
+  say "preview first-chat102 full-file md5 was server $PREV_SERVER_MD5 index $PREV_INDEX_MD5"
+  say "this root full-file md5 is server $sm index $im"
+  if [ "$sm" != "$PREV_SERVER_MD5" ] || [ "$im" != "$PREV_INDEX_MD5" ]; then
+    die "replace refused: root server.md5 $sm index.md5 $im is not the preview first-chat102 pair. App md5 $NEW_APP_MD5 only identifies the app patch. Inspect server.js and index.html before apply."
+  fi
   python3 - "$S" "$P/server_block_c102.js" "$MARKER" "$PREV_SERVER_TAIL_SHA256" << 'PY' || die "replacement of the first chat102 revision was refused (project-root files untouched)"
 import hashlib, pathlib, sys
 s, block_path, marker, prev = sys.argv[1:]

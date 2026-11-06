@@ -465,7 +465,7 @@ test("bad project root is refused and mockup plus old backups stay untouched", (
   assert.equal(fs.readFileSync(path.join(root, "server.js"), "utf8").includes("c102"), false);
 });
 
-test("first chat102 root is replaced even when a bak-chat102 file exists", () => {
+test("remote payload is fetched and a lookalike first-chat102 root is not applied", () => {
   const appSrc = "/tmp/c102hash/app.js";
   assert.equal(fs.existsSync(appSrc), true, "patched chat102 app.js fixture missing");
   const oldBlock = require("child_process").execFileSync("git", ["-C", path.join(dir, ".."), "show", "d10d6b9:deploy-chat102/server_block_c102.js"]);
@@ -486,27 +486,23 @@ test("first chat102 root is replaced even when a bak-chat102 file exists", () =>
     app: fs.readFileSync(path.join(root, "app.js")),
     index: fs.readFileSync(path.join(root, "index.html"))
   };
-  const dry = spawnSync("bash", [path.join(dir, "deploy.sh"), "--dry-run", "--dir", root], { encoding: "utf8" });
-  assert.equal(dry.status, 0, dry.stderr);
-  assert.ok(dry.stdout.length > 0);
-  assert.match(dry.stdout, /mode: replace/);
-  assert.match(dry.stdout, new RegExp("root server.js = " + root + "/server.js"));
-  assert.equal(dry.stdout.includes("mockup-sandbox"), false);
+  const alone = fs.mkdtempSync("/tmp/c102-script-");
+  fs.copyFileSync(path.join(dir, "deploy.sh"), path.join(alone, "deploy.sh"));
+  const dry = spawnSync("bash", [path.join(alone, "deploy.sh"), "--dry-run", "--dir", root], { encoding: "utf8" });
+  const out = dry.stdout + dry.stderr;
+  assert.notEqual(dry.status, 0);
+  assert.match(out, /remote payload ok: server_block_c102.js 7d229c3f63a61d31c43ed29c71a7a5bcc0627f9d4818e6bcc35556582dfcac61/);
+  assert.match(out, /c39ede5fb195ad3a1159182c71078799f426eff8/);
+  assert.match(out, /replace refused/);
+  assert.match(out, new RegExp("root server.js = " + root + "/server.js"));
+  assert.equal(out.includes("mockup-sandbox"), false);
+  assert.equal(out.includes("pre-bb8h"), false);
   assert.deepEqual(fs.readFileSync(path.join(root, "server.js")), before.server);
   assert.deepEqual(fs.readFileSync(path.join(root, "app.js")), before.app);
   assert.equal(fs.readFileSync(path.join(root, "index.html"), "utf8"), index);
-  const live = spawnSync("bash", [path.join(dir, "deploy.sh"), "--dir", root], { encoding: "utf8" });
-  assert.equal(live.status, 0, live.stderr);
-  const server = fs.readFileSync(path.join(root, "server.js"));
-  const block = fs.readFileSync(path.join(dir, "server_block_c102.js"));
-  assert.ok(server.includes(block));
-  assert.ok(server.indexOf("function handle(){}") >= 0);
-  assert.equal(require("crypto").createHash("md5").update(fs.readFileSync(path.join(root, "app.js"))).digest("hex"), "b84058f6da16ad022640b06c9cdda72d");
-  assert.equal(fs.readFileSync(path.join(root, "index.html"), "utf8"), index);
   assert.equal(fs.readFileSync(mock, "utf8"), "do-not-touch");
   assert.equal(fs.readFileSync(oldBak, "utf8"), "keep-me");
-  const names = fs.readdirSync(root).filter((n) => n.includes("bak-chat102r2"));
-  assert.equal(names.length, 3);
+  assert.equal(fs.readdirSync(root).some((n) => n.includes("bak-chat102r2")), false);
 });
 
 test("deploy dry-run aborts when the live snapshot hash does not match chat101h", () => {
