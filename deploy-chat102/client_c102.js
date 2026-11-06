@@ -233,18 +233,25 @@
     state._bars = bars;
     state._geom = { padL: padL, slot: slot };
   }
+  function barClock(bar) { return String(bar && bar.timeUtc || "").slice(11, 16); }
+  function barStamp(bar, chart) {
+    var tz = (chart && chart.exchangeTimezone) || "America/New_York";
+    var clock = barClock(bar);
+    return "Bar timestamp " + clock + " UTC. That is midnight at the start of session date " + bar.sessionDate + " in " + tz + " (04:00 UTC in US daylight time, 05:00 UTC in US standard time). Not a settlement time.";
+  }
   function readout(chart, bar) {
     if (!bar) return "No session selected.";
     var vol = bar.volume == null ? "Volume not returned for this session." : "Futures volume " + num(bar.volume, 0) + ".";
     var tz = (chart && chart.exchangeTimezone) || "America/New_York";
-    var clock = String(bar.timeUtc || "").slice(11, 16);
-    return "Session date " + bar.sessionDate + " (" + tz + "). Open " + num(bar.o, 2) + ", high " + num(bar.h, 2) + ", low " + num(bar.l, 2) + ", close " + num(bar.c, 2) + ". " + vol + " Bar timestamp " + clock + " UTC, midnight at the start of that session date in New York. Not a settlement time.";
+    return "Session date " + bar.sessionDate + " (" + tz + "). Open " + num(bar.o, 2) + ", high " + num(bar.h, 2) + ", low " + num(bar.l, 2) + ", close " + num(bar.c, 2) + ". " + vol + " " + barStamp(bar, chart);
   }
-  function tableHtml(bars) {
+  function tableHtml(bars, chart) {
     var view = (bars || []).slice(-12);
-    return "<div class=\"c102-sessions\">" + view.map(function (b) {
-      return "<article class=\"c102-session\"><h3>" + esc(b.sessionDate) + "</h3><p>Open " + esc(num(b.o, 2)) + "</p><p>High " + esc(num(b.h, 2)) + "</p><p>Low " + esc(num(b.l, 2)) + "</p><p>Close " + esc(num(b.c, 2)) + "</p><p>" + (b.volume == null ? "Volume not returned" : "Futures volume " + esc(num(b.volume, 0))) + "</p><p class=\"c102-k\">" + esc(uk(b.timeUtc)) + "</p></article>";
-    }).join("") + "<p class=\"c102-k\">Latest 12 completed sessions in this list. The chart uses the selected range.</p></div>";
+    var rows = view.map(function (b) {
+      var vol = b.volume == null ? "Not returned" : num(b.volume, 0);
+      return "<tr><th scope=\"row\">" + esc(b.sessionDate) + "</th><td>" + esc(num(b.o, 2)) + "</td><td>" + esc(num(b.h, 2)) + "</td><td>" + esc(num(b.l, 2)) + "</td><td>" + esc(num(b.c, 2)) + "</td><td>" + esc(vol) + "</td><td>" + esc(barStamp(b, chart)) + "</td></tr>";
+    }).join("");
+    return "<div class=\"c102-table-scroll\" tabindex=\"0\" role=\"region\" aria-label=\"Latest 12 completed sessions. This box scrolls sideways on a narrow screen. The rest of the page does not.\"><table class=\"c102-ohlc\"><caption>Latest 12 completed sessions in the selected range. The bar timestamp is midnight in New York, written in UTC. It is not a settlement time.</caption><thead><tr><th scope=\"col\">Session date</th><th scope=\"col\">Open</th><th scope=\"col\">High</th><th scope=\"col\">Low</th><th scope=\"col\">Close</th><th scope=\"col\">Futures volume</th><th scope=\"col\">Bar timestamp</th></tr></thead><tbody>" + rows + "</tbody></table></div>";
   }
   function bind(rootEl, chart) {
     var canvas = rootEl.querySelector("#c102-canvas");
@@ -300,7 +307,7 @@
     if (tableBtn && table) {
       tableBtn.addEventListener("click", function () {
         var open = table.hasAttribute("hidden");
-        if (open) { table.innerHTML = tableHtml(windowBars(chart && chart.bars, state.months)); table.removeAttribute("hidden"); }
+        if (open) { table.innerHTML = tableHtml(windowBars(chart && chart.bars, state.months), chart); table.removeAttribute("hidden"); }
         else table.setAttribute("hidden", "");
         tableBtn.setAttribute("aria-expanded", open ? "true" : "false");
       });
@@ -384,5 +391,5 @@
       fail("The readings did not load. No number was filled in.");
     });
   }
-  root.c102ui = { render: render, mount: mount, draw: draw, readout: readout, windowBars: windowBars };
+  root.c102ui = { render: render, mount: mount, draw: draw, readout: readout, windowBars: windowBars, tableHtml: tableHtml, barStamp: barStamp };
 })(typeof globalThis !== "undefined" ? globalThis : this);

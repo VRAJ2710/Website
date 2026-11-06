@@ -428,6 +428,57 @@ test("dark theme uses the site hook and the live readout is not a second visible
   });
 });
 
+test("session history is a labelled table and uses the UTC bar timestamp", () => {
+  const context = { console: console, Intl: Intl, Date: Date };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync(path.join(dir, "client_c102.js"), "utf8"), context);
+  const bars = [];
+  for (let i = 0; i < 15; i++) {
+    const day = String(i + 1).padStart(2, "0");
+    bars.push({ sessionDate: "2026-10-" + day, timeUtc: "2026-10-" + day + "T05:00:00.000Z", o: 1, h: 2, l: 0.5, c: 1.5, volume: 100 + i });
+  }
+  bars[10].timeUtc = "2026-10-26T04:00:00.000Z";
+  bars[10].sessionDate = "2026-10-26";
+  const html = context.c102ui.tableHtml(bars, { exchangeTimezone: "America/New_York" });
+  assert.match(html, /<table class="c102-ohlc">/);
+  assert.match(html, /<caption>Latest 12 completed sessions/);
+  assert.match(html, /<th scope="col">Open<\/th><th scope="col">High<\/th><th scope="col">Low<\/th><th scope="col">Close<\/th>/);
+  assert.match(html, /Futures volume/);
+  assert.match(html, /Not a settlement time/);
+  assert.match(html, /05:00 UTC/);
+  assert.match(html, /04:00 UTC/);
+  assert.match(html, /America\/New_York/);
+  assert.equal((html.match(/<tr>/g) || []).length, 13);
+  assert.equal(html.includes("<article"), false);
+  assert.equal(html.includes("October"), false);
+  const one = context.c102ui.barStamp({ sessionDate: "2026-10-21", timeUtc: "2026-10-21T05:00:00.000Z" }, { exchangeTimezone: "America/New_York" });
+  const read = context.c102ui.readout({ exchangeTimezone: "America/New_York" }, bars[0]);
+  assert.match(one, /05:00 UTC/);
+  assert.match(read, /05:00 UTC/);
+  assert.match(read, /Not a settlement time/);
+  const css = require("./lib_c102.js").C102_CSS;
+  assert.match(css, /\.c102-table-scroll\{[^}]*overflow-x:auto/);
+  assert.equal(css.includes("c101-inst"), false);
+});
+
+test("no stored theme preference stays on system and dark follows the OS media query", () => {
+  const src = fs.readFileSync(path.join(dir, "..", "deploy-chat97", "server_block97.js"), "utf8");
+  assert.match(src, /function c97SchemeOf\(req\) \{[\s\S]*return m \? m\[1\] : "system"/);
+  assert.match(src, /@media \(prefers-color-scheme:dark\)\{" \+ block\("html\.c97-system"\)/);
+  assert.match(src, /paper: "#151b23"/);
+  const css = src.slice(src.indexOf("const C97_SITE_CSS"), src.indexOf("const C97_AUTH_CSS"));
+  assert.match(css, /--paper:\$\{C97D\.paper\}/);
+  const hook = fs.readFileSync(path.join(dir, "lib_c102.js"), "utf8");
+  assert.match(hook, /if \(typeof c97Hook === "function"\) c97Hook\(req, res\)/);
+  function schemeOf(cookie) {
+    const m = /(?:^|;\s*)dispatch_theme=(light|dark|system)(?:;|$)/.exec(String(cookie || ""));
+    return m ? m[1] : "system";
+  }
+  assert.equal(schemeOf(""), "system");
+  assert.equal(schemeOf("dispatch_theme=dark"), "dark");
+  assert.equal(schemeOf("other=1"), "system");
+});
+
 test("deploy.sh bytes match EXPECTED_SHA256 on their own", () => {
   const spec = fs.readFileSync(path.join(dir, "EXPECTED_SHA256"), "utf8");
   const sha = (spec.match(/sha256 ([a-f0-9]{64})/) || [])[1];
@@ -489,10 +540,13 @@ test("remote payload is fetched and a lookalike first-chat102 root is not applie
   const alone = fs.mkdtempSync("/tmp/c102-script-");
   fs.copyFileSync(path.join(dir, "deploy.sh"), path.join(alone, "deploy.sh"));
   const dry = spawnSync("bash", [path.join(alone, "deploy.sh"), "--dry-run", "--dir", root], { encoding: "utf8" });
+  const spec = fs.readFileSync(path.join(alone, "deploy.sh"), "utf8");
+  const payload = (spec.match(/PAYLOAD_COMMIT=([a-f0-9]{40})/) || [])[1];
+  const blockHash = (spec.match(/server_block_c102\.js ([a-f0-9]{64})/) || [])[1];
   const out = dry.stdout + dry.stderr;
   assert.notEqual(dry.status, 0);
-  assert.match(out, /remote payload ok: server_block_c102.js 7d229c3f63a61d31c43ed29c71a7a5bcc0627f9d4818e6bcc35556582dfcac61/);
-  assert.match(out, /c39ede5fb195ad3a1159182c71078799f426eff8/);
+  assert.match(out, new RegExp("remote payload ok: server_block_c102.js " + blockHash));
+  assert.match(out, new RegExp(payload));
   assert.match(out, /replace refused/);
   assert.match(out, new RegExp("root server.js = " + root + "/server.js"));
   assert.equal(out.includes("mockup-sandbox"), false);
