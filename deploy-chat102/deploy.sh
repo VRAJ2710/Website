@@ -3,7 +3,7 @@
 # Does NOT start the server, npm, git, or republish. Does not change EXPECT_TAG.
 # Usage: bash deploy.sh [--dry-run] [--dir /path/to/project]
 set -u
-BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/REPLACE_COMMIT/deploy-chat102"
+BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/d9a2d72cd7da97fa073d57f4625ef1d74695da3c/deploy-chat102"
 
 # Audited live chat101h files. A mismatch aborts before anything is written.
 LIVE_SERVER_MD5=6077bef9728ffe5b26d8d6fcb887294b
