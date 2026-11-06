@@ -105,7 +105,8 @@
     var risk = "<ul class=\"c102-src\"><li>Gold and silver spot from gold-api.com, in US dollars per troy ounce, each with its own time. A futures percentage is not used as the spot change.</li><li>The chart is the COMEX front-month future on a continuous rolling series. It is not spot gold and the volume is not spot volume.</li><li>The dollar index is the ICE index via Yahoo Finance when the feed names ICE. A computed currency basket is not shown as that index.</li><li>The US 10-year yield is a delayed quote. The official daily Treasury print is a second figure with its own date.</li><li>The real yield keeps the delayed quote and the official daily print apart.</li><li>Volatility is the Cboe Volatility Index. A volatility note is not a substitute.</li><li>Positioning is the weekly CFTC report for COMEX gold only.</li><li>The calendar lists scheduled releases. It does not include a consensus forecast.</li></ul><p>Not investment advice. Capital at risk.</p><p><a href=\"/data-status/\">Data status</a> \u00b7 <a href=\"/methodology\">Methodology</a> \u00b7 <a href=\"/dashboard/\">Dashboard</a> \u00b7 <a href=\"/gold/\">Gold</a></p>";
     var label = (fut && fut.label) || "COMEX front-month gold future \u00b7 delayed";
     var note = (fut && fut.historyNote) || "Completed sessions only. The current session is left out when the feed includes it.";
-    var chartHtml = "<div id=\"c102-chart\" class=\"c102-chart\"><div class=\"c102-chart-h\"><h2 id=\"c102-chart-title\">" + esc(label) + "</h2><p id=\"c102-chart-note\" class=\"c102-k\">" + esc(note) + "</p><p class=\"c102-k\">" + esc((fut && fut.incompleteNote) || "") + "</p></div><div class=\"c102-tools\" role=\"group\" aria-label=\"Chart controls\"><button type=\"button\" data-c102-range=\"66\" aria-pressed=\"false\">3 months</button><button type=\"button\" data-c102-range=\"132\" aria-pressed=\"true\">6 months</button><button type=\"button\" data-c102-range=\"260\" aria-pressed=\"false\">1 year</button><button type=\"button\" data-c102-ma=\"20\" aria-pressed=\"true\">20-session average</button><button type=\"button\" data-c102-ma=\"50\" aria-pressed=\"true\">50-session average</button><button type=\"button\" id=\"c102-table-btn\" aria-expanded=\"false\" aria-controls=\"c102-table\">Table of sessions</button></div><p id=\"c102-readout\" class=\"c102-read\">Use the arrow keys on the chart to read a session.</p><div id=\"c102-live\" class=\"c102-live\" aria-live=\"polite\"></div><canvas id=\"c102-canvas\" width=\"800\" height=\"460\" tabindex=\"0\" role=\"img\" aria-label=\"" + esc(label) + "\" aria-describedby=\"c102-readout c102-chart-note\"></canvas><div id=\"c102-table\" hidden></div></div>";
+    var extra = [fut && fut.barTimeNote, fut && fut.volumeRepeatNote, fut && fut.incompleteNote].filter(Boolean).join(" ");
+    var chartHtml = "<div id=\"c102-chart\" class=\"c102-chart\"><div class=\"c102-chart-h\"><h2 id=\"c102-chart-title\">" + esc(label) + "</h2><p id=\"c102-chart-note\" class=\"c102-k\">" + esc(note) + "</p><p class=\"c102-k\">" + esc(extra) + "</p></div><div class=\"c102-tools\" role=\"group\" aria-label=\"Chart range\"><button type=\"button\" data-c102-months=\"3\" aria-pressed=\"false\">3 months</button><button type=\"button\" data-c102-months=\"6\" aria-pressed=\"true\">6 months</button><button type=\"button\" data-c102-months=\"12\" aria-pressed=\"false\">1 year</button><button type=\"button\" data-c102-ma=\"20\" aria-pressed=\"true\">20-session average</button><button type=\"button\" data-c102-ma=\"50\" aria-pressed=\"true\">50-session average</button><button type=\"button\" id=\"c102-table-btn\" aria-expanded=\"false\" aria-controls=\"c102-table\">Table of sessions</button></div><p id=\"c102-span\" class=\"c102-k\"></p><p id=\"c102-readout\" class=\"c102-read\">Use the arrow keys on the chart to read a session.</p><div id=\"c102-live\" class=\"c102-live\" aria-live=\"polite\"></div><canvas id=\"c102-canvas\" width=\"800\" height=\"460\" tabindex=\"0\" role=\"img\" aria-label=\"" + esc(label) + "\" aria-describedby=\"c102-readout c102-chart-note\"></canvas><div id=\"c102-table\" hidden></div></div>";
     return "<div class=\"c102\" id=\"c102\"><p class=\"c102-k\">Assembled " + esc(model.generatedAtUk || uk(model.generatedAtUtc) || "") + "</p><div class=\"c102-tiles\">" + tiles + "</div>" + chartHtml + "<div class=\"c102-grid\"><section aria-labelledby=\"c102-macro\"><h2 id=\"c102-macro\">Macro</h2>" + macro + "</section><section aria-labelledby=\"c102-pos\"><h2 id=\"c102-pos\">Positioning</h2>" + posHtml + "</section></div><section aria-labelledby=\"c102-ev\"><h2 id=\"c102-ev\">Events</h2>" + evHtml + "</section><section aria-labelledby=\"c102-risk\"><h2 id=\"c102-risk\">Risk and sources</h2>" + risk + "</section></div>";
   }
 
@@ -115,15 +116,25 @@
       return v || fallback;
     } catch (e) { return fallback; }
   }
-  function sliceBars(chart, n) {
-    var bars = (chart && chart.bars) || [];
-    if (bars.length <= n) return bars;
-    return bars.slice(bars.length - n);
+  function shiftMonth(iso, delta) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || ""));
+    if (!m) return "";
+    var d = new Date(Date.UTC(+m[1], +m[2] - 1 + delta, +m[3]));
+    return d.toISOString().slice(0, 10);
+  }
+  function windowBars(bars, months) {
+    var list = bars || [];
+    if (!list.length) return [];
+    var n = Number(months);
+    if (!isFinite(n) || n <= 0) n = 6;
+    var cut = shiftMonth(list[list.length - 1].sessionDate, -n);
+    var out = list.filter(function (b) { return b && b.sessionDate && b.sessionDate >= cut; });
+    return out.length ? out : list.slice(-1);
   }
   function draw(canvas, chart, state) {
     if (!canvas || !canvas.getContext) return;
     var ctx = canvas.getContext("2d");
-    var bars = sliceBars(chart, state.range);
+    var bars = windowBars(chart && chart.bars, state.months);
     var dpr = (root.devicePixelRatio || 1);
     var w = canvas.clientWidth || 320;
     var h = canvas.clientHeight || 300;
@@ -213,18 +224,24 @@
       ctx.setLineDash([]);
     }
     ctx.fillStyle = muted;
-    ctx.fillText(bars[0].sessionDate, padL, h - 8);
-    ctx.fillText(bars[bars.length - 1].sessionDate, w - padR - 78, h - 8);
+    ctx.font = "14px sans-serif";
+    var left = bars[0].sessionDate;
+    var right = bars[bars.length - 1].sessionDate;
+    ctx.fillText(left, padL, h - 8);
+    var rightW = ctx.measureText ? ctx.measureText(right).width : 88;
+    ctx.fillText(right, Math.max(padL + 96, w - padR - rightW), h - 8);
     state._bars = bars;
     state._geom = { padL: padL, slot: slot };
   }
   function readout(chart, bar) {
     if (!bar) return "No session selected.";
     var vol = bar.volume == null ? "Volume not returned for this session." : "Futures volume " + num(bar.volume, 0) + ".";
-    return bar.sessionDate + ". Open " + num(bar.o, 2) + ", high " + num(bar.h, 2) + ", low " + num(bar.l, 2) + ", close " + num(bar.c, 2) + ". " + vol + " " + uk(bar.timeUtc);
+    var tz = (chart && chart.exchangeTimezone) || "America/New_York";
+    var clock = String(bar.timeUtc || "").slice(11, 16);
+    return "Session date " + bar.sessionDate + " (" + tz + "). Open " + num(bar.o, 2) + ", high " + num(bar.h, 2) + ", low " + num(bar.l, 2) + ", close " + num(bar.c, 2) + ". " + vol + " Bar timestamp " + clock + " UTC, midnight at the start of that session date in New York. Not a settlement time.";
   }
   function tableHtml(bars) {
-    var view = bars.slice(-12);
+    var view = (bars || []).slice(-12);
     return "<div class=\"c102-sessions\">" + view.map(function (b) {
       return "<article class=\"c102-session\"><h3>" + esc(b.sessionDate) + "</h3><p>Open " + esc(num(b.o, 2)) + "</p><p>High " + esc(num(b.h, 2)) + "</p><p>Low " + esc(num(b.l, 2)) + "</p><p>Close " + esc(num(b.c, 2)) + "</p><p>" + (b.volume == null ? "Volume not returned" : "Futures volume " + esc(num(b.volume, 0))) + "</p><p class=\"c102-k\">" + esc(uk(b.timeUtc)) + "</p></article>";
     }).join("") + "<p class=\"c102-k\">Latest 12 completed sessions in this list. The chart uses the selected range.</p></div>";
@@ -234,9 +251,23 @@
     var live = rootEl.querySelector("#c102-live");
     var readoutEl = rootEl.querySelector("#c102-readout");
     var table = rootEl.querySelector("#c102-table");
-    var state = { range: 132, ma20: true, ma50: true, index: -1, user: false };
-    var ro;
-    function paint() { draw(canvas, chart, state); }
+    var state = { months: 6, ma20: true, ma50: true, index: -1, user: false };
+    var ro, mq;
+    function spanText() {
+      var bars = windowBars(chart && chart.bars, state.months);
+      if (!bars.length) return "No completed sessions in this range.";
+      var name = state.months === 12 ? "1 year" : state.months + " months";
+      return name + " \u00b7 " + bars[0].sessionDate + " to " + bars[bars.length - 1].sessionDate + " \u00b7 " + bars.length + " completed sessions";
+    }
+    function paint() {
+      draw(canvas, chart, state);
+      var span = rootEl.querySelector("#c102-span");
+      if (span) span.textContent = spanText();
+      if (canvas && state._bars && state._bars.length) {
+        canvas.setAttribute("data-c102-from", state._bars[0].sessionDate);
+        canvas.setAttribute("data-c102-to", state._bars[state._bars.length - 1].sessionDate);
+      }
+    }
     function select(i, fromUser) {
       var bars = state._bars || [];
       if (!bars.length) return;
@@ -248,12 +279,13 @@
       if (readoutEl) readoutEl.textContent = text;
       if (fromUser && live) live.textContent = text;
     }
-    rootEl.querySelectorAll("[data-c102-range]").forEach(function (btn) {
+    rootEl.querySelectorAll("[data-c102-months]").forEach(function (btn) {
       btn.addEventListener("click", function () {
-        state.range = Number(btn.getAttribute("data-c102-range")) || 132;
-        rootEl.querySelectorAll("[data-c102-range]").forEach(function (b) { b.setAttribute("aria-pressed", b === btn ? "true" : "false"); });
-        state.index = -1;
+        state.months = Number(btn.getAttribute("data-c102-months")) || 6;
+        rootEl.querySelectorAll("[data-c102-months]").forEach(function (b) { b.setAttribute("aria-pressed", b === btn ? "true" : "false"); });
         paint();
+        var bars = state._bars || [];
+        if (bars.length) select(bars.length - 1, false);
       });
     });
     rootEl.querySelectorAll("[data-c102-ma]").forEach(function (btn) {
@@ -268,7 +300,7 @@
     if (tableBtn && table) {
       tableBtn.addEventListener("click", function () {
         var open = table.hasAttribute("hidden");
-        if (open) { table.innerHTML = tableHtml((chart && chart.bars) || []); table.removeAttribute("hidden"); }
+        if (open) { table.innerHTML = tableHtml(windowBars(chart && chart.bars, state.months)); table.removeAttribute("hidden"); }
         else table.setAttribute("hidden", "");
         tableBtn.setAttribute("aria-expanded", open ? "true" : "false");
       });
@@ -301,10 +333,18 @@
     var mo;
     if (typeof MutationObserver === "function") {
       mo = new MutationObserver(function () { paint(); });
-      mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+      mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class", "data-theme"] });
+    }
+    if (window.matchMedia) {
+      try {
+        mq = window.matchMedia("(prefers-color-scheme: dark)");
+        var onMq = function () { paint(); };
+        if (mq.addEventListener) mq.addEventListener("change", onMq);
+        else if (mq.addListener) mq.addListener(onMq);
+      } catch (e) {}
     }
     paint();
-    if (chart && chart.bars && chart.bars.length) select(chart.bars.slice(-state.range).length - 1, false);
+    if (state._bars && state._bars.length) select(state._bars.length - 1, false);
     rootEl._c102Cleanup = function () {
       try { if (ro) ro.disconnect(); } catch (e) {}
       try { if (mo) mo.disconnect(); } catch (e) {}
@@ -344,5 +384,5 @@
       fail("The readings did not load. No number was filled in.");
     });
   }
-  root.c102ui = { render: render, mount: mount, draw: draw, readout: readout };
+  root.c102ui = { render: render, mount: mount, draw: draw, readout: readout, windowBars: windowBars };
 })(typeof globalThis !== "undefined" ? globalThis : this);

@@ -15,7 +15,7 @@ NEW_APP_SHA256=b5dcd5fca7514f1d09a29d4e5c67c7a1c2d64d54bf92969cadf7244dd9073440
 NEW_L1='const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)'
 MANIFEST=(
   "patch_c102.py 52d44b7c3c4a0f800fc3f7d5e1198d1f5c873e072e6ea740c3a446f18f87712b"
-  "server_block_c102.js 67f968ae1e22448999afa0f3579ae6132a9e1b0e54da72f97ed926ff976da665"
+  "server_block_c102.js 7d229c3f63a61d31c43ed29c71a7a5bcc0627f9d4818e6bcc35556582dfcac61"
   "app_block_c102.js dbed6c1ac0ca8181e44aa92ac3528cf9aa137b7a60f31d583e3efcef09c0a206"
 )
 DRY=0; DIR=""

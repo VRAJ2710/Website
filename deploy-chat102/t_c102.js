@@ -347,6 +347,87 @@ test("app.js boot guard keeps Dashboard and Gold and passes node --check", () =>
   assert.equal(serverCheck.status, 0, serverCheck.stderr);
 });
 
+test("repeated futures volume is left blank on the earlier session only", () => {
+  const day = (iso, close, vol) => ({ sec: Math.floor(Date.parse(iso) / 1000), close: close, vol: vol });
+  const days = [day("2026-11-04T05:00:00Z", 4073, 232561), day("2026-11-05T05:00:00Z", 4113.5, 232561), day("2026-11-06T05:00:00Z", 4073.5, 160887)];
+  const chart = lib.c102Chart({
+    chart: { result: [{
+      meta: { symbol: "GC=F", shortName: "Gold Dec 26", instrumentType: "FUTURE", exchangeTimezoneName: "America/New_York", currency: "USD", fullExchangeName: "COMEX" },
+      timestamp: days.map((d) => d.sec),
+      indicators: { quote: [{ open: days.map((d) => d.close - 2), high: days.map((d) => d.close + 2), low: days.map((d) => d.close - 3), close: days.map((d) => d.close), volume: days.map((d) => d.vol) }] }
+    }] }
+  }, Date.parse("2026-11-06T16:00:00Z"));
+  assert.equal(chart.excludedIncompleteSessions, 1);
+  assert.equal(chart.bars.length, 2);
+  assert.equal(chart.bars[0].sessionDate, "2026-11-04");
+  assert.equal(chart.bars[0].volume, null);
+  assert.equal(chart.bars[1].volume, 232561);
+  assert.equal(chart.volumeRepeatsCleared, 1);
+  assert.match(chart.barTimeNote, /not a settlement time/);
+  assert.match(chart.barTimeNote, /04:00/);
+  assert.match(chart.barTimeNote, /05:00/);
+});
+
+test("six-month window does not keep the older year on screen", () => {
+  const context = { console: console, Intl: Intl, Date: Date };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync(path.join(dir, "client_c102.js"), "utf8"), context);
+  const bars = [];
+  for (let i = 0; i < 500; i++) {
+    const d = new Date(Date.UTC(2024, 0, 1 + i));
+    bars.push({ sessionDate: d.toISOString().slice(0, 10), c: 100 + i });
+  }
+  const six = context.c102ui.windowBars(bars, 6);
+  const year = context.c102ui.windowBars(bars, 12);
+  assert.ok(six[0].sessionDate > bars[0].sessionDate);
+  assert.ok(six[0].sessionDate >= "2024-11-01");
+  assert.equal(six[six.length - 1].sessionDate, bars[bars.length - 1].sessionDate);
+  assert.ok(year.length > six.length);
+  assert.ok(year[0].sessionDate < six[0].sessionDate);
+});
+
+test("dark theme uses the site hook and the live readout is not a second visible line", () => {
+  const built = spawnSync(process.execPath, ["build_block.js"], { cwd: dir, encoding: "utf8" });
+  assert.equal(built.status, 0, built.stderr);
+  const css = require("./lib_c102.js").C102_CSS;
+  assert.match(css, /\.c102-live\{position:absolute/);
+  assert.equal(/\.c102-live\{[^}]*display:\s*none/.test(css), false);
+  const ui = {};
+  const context = { console: console, Intl: Intl, Date: Date, URL: URL };
+  context.globalThis = context;
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync(path.join(dir, "client_c102.js"), "utf8"), context);
+  const html = context.c102ui.render({ title: "Terminal", note: "A note." }, null);
+  assert.equal((html.match(/id="c102-readout"/g) || []).length, 1);
+  assert.equal((html.match(/id="c102-live"/g) || []).length, 1);
+  assert.match(html, /id="c102-live" class="c102-live" aria-live="polite"/);
+  assert.match(html, /data-c102-months="6" aria-pressed="true"/);
+  assert.match(html, /href="\/dashboard\/"/);
+  assert.match(html, /href="\/gold\/"/);
+  const hooked = [];
+  const box = {
+    console: console, globalThis: {}, URL: URL, Date: Date, Map: Map, Promise: Promise, Intl: Intl,
+    setTimeout: setTimeout, clearTimeout: clearTimeout,
+    fetch: async () => ({ ok: false, status: 503 }),
+    handle: async function () { return "pass"; },
+    c97Hook: function (req) { hooked.push(req.url); },
+    c93Shell: function (s) { return "<!doctype html><html><head></head><body><header class=\"site\"><nav><a href=\"/gold/\">Gold</a><a href=\"/dashboard/\">Dashboard</a><a href=\"/brief/\">Brief</a></nav></header><main>" + s.body + "</main></body></html>"; },
+    c93Html: function (req, res, html) { res.end(html); }
+  };
+  box.globalThis = box;
+  vm.createContext(box);
+  vm.runInContext(fs.readFileSync(path.join(dir, "server_block_c102.js"), "utf8"), box);
+  const res = { writeHead: function () {}, end: function (b) { res.body = b; } };
+  return box.handle({ method: "GET", url: "/terminal/", headers: {} }, res).then(function () {
+    assert.deepEqual(hooked, ["/terminal/"]);
+    assert.match(res.body, />Gold</);
+    assert.match(res.body, />Dashboard</);
+    assert.match(res.body, />Brief</);
+    assert.match(res.body, /c102-live/);
+    assert.match(res.body, /aria-live/);
+  });
+});
+
 test("deploy dry-run aborts when the live snapshot hash does not match chat101h", () => {
   const work = fs.mkdtempSync("/tmp/c102-deploy-");
   fs.writeFileSync(path.join(work, "server.js"), "const BB10I_MAINTENANCE_ON = false;\n");

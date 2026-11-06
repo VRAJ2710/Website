@@ -306,6 +306,15 @@ function c102Chart(payload, nowMs) {
     if (!bar.sessionDate || bar.sessionDate >= today) { excluded++; continue; }
     completed.push(bar);
   }
+  let volumeRepeatsCleared = 0;
+  for (let i = 0; i < completed.length - 1; i++) {
+    const a = completed[i];
+    const b = completed[i + 1];
+    if (a.volume != null && b.volume != null && a.volume === b.volume && (a.c !== b.c || a.o !== b.o || a.h !== b.h || a.l !== b.l)) {
+      a.volume = null;
+      volumeRepeatsCleared++;
+    }
+  }
   const vendorName = String(meta.shortName || meta.longName || "").trim();
   const label = vendorName ? vendorName + " future \u00b7 delayed" : "COMEX front-month gold future \u00b7 delayed";
   const last = completed.length ? completed[completed.length - 1] : null;
@@ -322,7 +331,10 @@ function c102Chart(payload, nowMs) {
     exchangeTimezone: tz,
     currency: meta.currency || "USD",
     historyKind: "continuous-rolling-proxy",
-    historyNote: "Daily bars are Yahoo Finance's continuous rolling front-month series. The vendor name is the name on this response. The bars are not that named month's own history, they are not back-adjusted here, and they are not spot gold. Volume, where the feed returned it, is futures volume, not spot volume.",
+    historyNote: "Daily bars are Yahoo Finance's continuous rolling front-month series. The vendor name is the name on this response. The bars are not that named month's own history, they are not back-adjusted here, and they are not spot gold. Volume, where the feed returned a figure that was not repeated on the next session, is futures volume, not spot volume.",
+    barTimeNote: "Each daily bar is timestamped at midnight in America/New_York. In UTC that is 04:00 during US daylight time and 05:00 during US standard time. That clock is the bar timestamp, not a settlement time.",
+    volumeRepeatsCleared: volumeRepeatsCleared,
+    volumeRepeatNote: volumeRepeatsCleared ? "The feed repeated one futures volume on the next session. The earlier copy is left blank." : "",
     excludedIncompleteSessions: excluded,
     incompleteNote: excluded
       ? "The current session (" + today + ", " + tz + ") is incomplete, so its candle is left out of the chart and the averages. Last completed session: " + last.sessionDate + "."
@@ -722,7 +734,7 @@ function c102Render(model, chart) {
   return "<div class=\"c102\" data-c102><p class=\"c102-k\">" + c102Esc(m.generatedAtUk || "") + "</p><div class=\"c102-tiles\">" + tiles + "</div>" + chartBlock + "<div class=\"c102-grid\"><section aria-labelledby=\"c102-macro\"><h2 id=\"c102-macro\">Macro</h2>" + macro + "</section><section aria-labelledby=\"c102-pos\"><h2 id=\"c102-pos\">Positioning</h2>" + posHtml + "</section></div><section aria-labelledby=\"c102-ev\"><h2 id=\"c102-ev\">Events</h2>" + evHtml + "</section><section aria-labelledby=\"c102-risk\"><h2 id=\"c102-risk\">Risk and sources</h2>" + risk + "</section></div>";
 }
 
-const C102_CSS = "<style id=\"c102-css\">.c102{font:15px/1.5 var(--sans,Inter,system-ui,sans-serif);color:var(--ink,#1b1b1b);min-width:0;max-width:100%;overflow-x:clip;container-type:inline-size}.c102 h2,.c102 h3{font-family:var(--serif,Georgia,serif);line-height:1.2;margin:0 0 8px}.c102 h2{font-size:1.6rem}.c102-k{color:var(--muted,#5f6368);font-size:14px}.c102-v{font:600 1.7rem/1.2 var(--serif,Georgia,serif);margin:4px 0}.c102-miss{color:var(--ink,#1b1b1b);background:transparent;border-left:3px solid var(--amber,#8a6a12);padding:4px 0 4px 10px;margin:8px 0}.c102-tiles{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:12px 0 18px}.c102-tile{min-width:0;border-top:2px solid var(--ink,#1b1b1b);padding:10px 2px 4px}.c102-tile h3{font:600 14px/1.3 var(--sans,Inter,sans-serif);letter-spacing:.02em;margin:0 0 6px}.c102-tile p{margin:4px 0;overflow-wrap:anywhere}.c102 a{text-decoration-thickness:1px;text-underline-offset:3px}.c102 a:focus-visible,.c102 button:focus-visible,#c102-canvas:focus-visible{outline:2px solid var(--accent,#1f3a5f);outline-offset:3px}.c102-tools{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}.c102-tools button{min-height:44px;min-width:44px;padding:8px 12px;font:600 15px/1.2 var(--sans,Inter,sans-serif);background:transparent;color:inherit;border:1px solid var(--rule,#dedad2);border-radius:4px;cursor:pointer}.c102-tools button[aria-pressed=true]{background:var(--ink,#1b1b1b);color:var(--paper,#fbfaf7);border-color:var(--ink,#1b1b1b)}.c102-chart{min-width:0;margin:8px 0 22px}#c102-canvas{display:block;width:100%;height:460px;touch-action:pan-y;background:transparent}.c102-read,.c102-live{min-height:1.4em;font-size:15px}.c102-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:28px;min-width:0}.c102 section{min-width:0;padding:8px 0 18px}.c102-ev,.c102-src{padding-left:1.2rem;margin:8px 0}.c102-ev li,.c102-src li{margin:6px 0}.c102-session{border-top:1px solid var(--rule,#dedad2);padding:8px 0}.c102-session p{margin:2px 0}@container (max-width:900px){.c102-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.c102-grid{grid-template-columns:1fr}#c102-canvas{height:360px}}@media (max-width:700px){.c102-tiles{grid-template-columns:1fr}.c102-grid{grid-template-columns:1fr}#c102-canvas{height:300px}.c102{font-size:15px}}@media (prefers-reduced-motion:reduce){.c102 *{transition:none!important;animation:none!important}}</style>";
+const C102_CSS = "<style id=\"c102-css\">.c102{font:15px/1.5 var(--sans,Inter,system-ui,sans-serif);color:var(--ink,#1b1b1b);min-width:0;max-width:100%;overflow-x:clip;container-type:inline-size}.c102 h2,.c102 h3{font-family:var(--serif,Georgia,serif);line-height:1.2;margin:0 0 8px}.c102 h2{font-size:1.6rem}.c102-k{color:var(--muted,#5f6368);font-size:14px}.c102-v{font:600 1.7rem/1.2 var(--serif,Georgia,serif);margin:4px 0}.c102-miss{color:var(--ink,#1b1b1b);background:transparent;border-left:3px solid var(--amber,#8a6a12);padding:4px 0 4px 10px;margin:8px 0}.c102-tiles{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px;margin:12px 0 18px}.c102-tile{min-width:0;border-top:2px solid var(--ink,#1b1b1b);padding:10px 2px 4px}.c102-tile h3{font:600 14px/1.3 var(--sans,Inter,sans-serif);letter-spacing:.02em;margin:0 0 6px}.c102-tile p{margin:4px 0;overflow-wrap:anywhere}.c102 a{text-decoration-thickness:1px;text-underline-offset:3px}.c102 a:focus-visible,.c102 button:focus-visible,#c102-canvas:focus-visible{outline:2px solid var(--accent,#1f3a5f);outline-offset:3px}.c102-tools{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}.c102-tools button{min-height:44px;min-width:44px;padding:8px 12px;font:600 15px/1.2 var(--sans,Inter,sans-serif);background:transparent;color:inherit;border:1px solid var(--rule,#dedad2);border-radius:4px;cursor:pointer}.c102-tools button[aria-pressed=true]{background:var(--ink,#1b1b1b);color:var(--paper,#fbfaf7);border-color:var(--ink,#1b1b1b)}.c102-chart{min-width:0;margin:8px 0 22px}#c102-canvas{display:block;width:100%;height:460px;touch-action:pan-y;background:transparent}.c102-read{min-height:1.4em;font-size:15px}.c102-live{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}.c102-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:28px;min-width:0}.c102 section{min-width:0;padding:8px 0 18px}.c102-ev,.c102-src{padding-left:1.2rem;margin:8px 0}.c102-ev li,.c102-src li{margin:6px 0}.c102-session{border-top:1px solid var(--rule,#dedad2);padding:8px 0}.c102-session p{margin:2px 0}@container (max-width:900px){.c102-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.c102-grid{grid-template-columns:1fr}#c102-canvas{height:360px}}@media (max-width:700px){.c102-tiles{grid-template-columns:1fr}.c102-grid{grid-template-columns:1fr}#c102-canvas{height:300px}.c102{font-size:15px}}@media (prefers-reduced-motion:reduce){.c102 *{transition:none!important;animation:none!important}}</style>";
 
 function c102Install() {
   if (c102Install.done) return;
@@ -772,6 +784,7 @@ function c102Install() {
     res.end(payload);
   }
   async function page(req, res) {
+    try { if (typeof c97Hook === "function") c97Hook(req, res); } catch (e) {}
     let user = null;
     try { user = typeof c96UserOf === "function" ? await c96UserOf(req) : null; } catch (e) { user = null; }
     const origin = (typeof PUBLIC_ORIGIN === "string" && PUBLIC_ORIGIN) || "https://thedispatch.uk";
