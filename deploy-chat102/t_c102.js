@@ -428,6 +428,87 @@ test("dark theme uses the site hook and the live readout is not a second visible
   });
 });
 
+test("deploy.sh bytes match EXPECTED_SHA256 on their own", () => {
+  const spec = fs.readFileSync(path.join(dir, "EXPECTED_SHA256"), "utf8");
+  const sha = (spec.match(/sha256 ([a-f0-9]{64})/) || [])[1];
+  const bytes = Number((spec.match(/bytes (\d+)/) || [])[1]);
+  const buf = fs.readFileSync(path.join(dir, "deploy.sh"));
+  assert.equal(buf.length, bytes);
+  assert.equal(require("crypto").createHash("sha256").update(buf).digest("hex"), sha);
+  assert.ok(buf.length > 0);
+});
+
+test("bad project root is refused and mockup plus old backups stay untouched", () => {
+  const root = fs.mkdtempSync("/tmp/c102-bad-");
+  fs.writeFileSync(path.join(root, "server.js"), "const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)\nnope\n");
+  fs.writeFileSync(path.join(root, "app.js"), "nope");
+  fs.writeFileSync(path.join(root, "index.html"), "<html></html>");
+  const bakDir = path.join(root, ".backups", "pre-bb8h-rt59");
+  const mockDir = path.join(root, "artifacts", "mockup-sandbox");
+  fs.mkdirSync(bakDir, { recursive: true });
+  fs.mkdirSync(mockDir, { recursive: true });
+  const bak = path.join(bakDir, "server.js");
+  const mock = path.join(mockDir, "index.html");
+  const oldBak = path.join(root, "server.js.20260101-000000.bak-chat102");
+  fs.writeFileSync(bak, "backup-server");
+  fs.writeFileSync(mock, "mock-index");
+  fs.writeFileSync(oldBak, "previous-chat102-backup");
+  const run = spawnSync("bash", [path.join(dir, "deploy.sh"), "--dry-run", "--dir", root], { encoding: "utf8" });
+  assert.notEqual(run.status, 0);
+  assert.match(run.stdout, new RegExp("root server.js = " + root + "/server.js"));
+  assert.match(run.stdout, new RegExp("root index.html = " + root + "/index.html"));
+  assert.equal(run.stdout.includes("mockup-sandbox"), false);
+  assert.equal(run.stdout.includes("pre-bb8h-rt59"), false);
+  assert.equal(fs.readFileSync(bak, "utf8"), "backup-server");
+  assert.equal(fs.readFileSync(mock, "utf8"), "mock-index");
+  assert.equal(fs.readFileSync(oldBak, "utf8"), "previous-chat102-backup");
+  assert.equal(fs.readFileSync(path.join(root, "server.js"), "utf8").includes("c102"), false);
+});
+
+test("first chat102 root is replaced even when a bak-chat102 file exists", () => {
+  const appSrc = "/tmp/c102hash/app.js";
+  assert.equal(fs.existsSync(appSrc), true, "patched chat102 app.js fixture missing");
+  const oldBlock = require("child_process").execFileSync("git", ["-C", path.join(dir, ".."), "show", "d10d6b9:deploy-chat102/server_block_c102.js"]);
+  const root = fs.mkdtempSync("/tmp/c102-r2-");
+  const prefix = "const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)\nfunction handle(){}\n";
+  fs.writeFileSync(path.join(root, "server.js"), Buffer.concat([Buffer.from(prefix), oldBlock]));
+  fs.copyFileSync(appSrc, path.join(root, "app.js"));
+  const index = '<script src="/app.js?v=chat102"></script>\n';
+  fs.writeFileSync(path.join(root, "index.html"), index);
+  const mockDir = path.join(root, "artifacts", "mockup-sandbox");
+  fs.mkdirSync(mockDir, { recursive: true });
+  const mock = path.join(mockDir, "index.html");
+  fs.writeFileSync(mock, "do-not-touch");
+  const oldBak = path.join(root, "server.js.20260101-000000.bak-chat102");
+  fs.writeFileSync(oldBak, "keep-me");
+  const before = {
+    server: fs.readFileSync(path.join(root, "server.js")),
+    app: fs.readFileSync(path.join(root, "app.js")),
+    index: fs.readFileSync(path.join(root, "index.html"))
+  };
+  const dry = spawnSync("bash", [path.join(dir, "deploy.sh"), "--dry-run", "--dir", root], { encoding: "utf8" });
+  assert.equal(dry.status, 0, dry.stderr);
+  assert.ok(dry.stdout.length > 0);
+  assert.match(dry.stdout, /mode: replace/);
+  assert.match(dry.stdout, new RegExp("root server.js = " + root + "/server.js"));
+  assert.equal(dry.stdout.includes("mockup-sandbox"), false);
+  assert.deepEqual(fs.readFileSync(path.join(root, "server.js")), before.server);
+  assert.deepEqual(fs.readFileSync(path.join(root, "app.js")), before.app);
+  assert.equal(fs.readFileSync(path.join(root, "index.html"), "utf8"), index);
+  const live = spawnSync("bash", [path.join(dir, "deploy.sh"), "--dir", root], { encoding: "utf8" });
+  assert.equal(live.status, 0, live.stderr);
+  const server = fs.readFileSync(path.join(root, "server.js"));
+  const block = fs.readFileSync(path.join(dir, "server_block_c102.js"));
+  assert.ok(server.includes(block));
+  assert.ok(server.indexOf("function handle(){}") >= 0);
+  assert.equal(require("crypto").createHash("md5").update(fs.readFileSync(path.join(root, "app.js"))).digest("hex"), "b84058f6da16ad022640b06c9cdda72d");
+  assert.equal(fs.readFileSync(path.join(root, "index.html"), "utf8"), index);
+  assert.equal(fs.readFileSync(mock, "utf8"), "do-not-touch");
+  assert.equal(fs.readFileSync(oldBak, "utf8"), "keep-me");
+  const names = fs.readdirSync(root).filter((n) => n.includes("bak-chat102r2"));
+  assert.equal(names.length, 3);
+});
+
 test("deploy dry-run aborts when the live snapshot hash does not match chat101h", () => {
   const work = fs.mkdtempSync("/tmp/c102-deploy-");
   fs.writeFileSync(path.join(work, "server.js"), "const BB10I_MAINTENANCE_ON = false;\n");
