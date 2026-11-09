@@ -423,7 +423,8 @@ function c102Cnbc(rates) {
 
 function c102Classify(err) {
   const msg = String(err && err.message || err || "");
-  if (/timeout/i.test(msg)) return c102Fail("timeout", "This source did not answer in time. No number was filled in.");
+  const name = err && err.name;
+  if (name === "AbortError" || /timeout|aborted/i.test(msg)) return c102Fail("timeout", "This source did not answer in time. No number was filled in.");
   if (/malformed|json|unexpected/i.test(msg)) return c102Fail("malformed", "This source returned something we could not use. No number was filled in.");
   return c102Fail("unavailable", "This source did not answer. No number was filled in.");
 }
@@ -487,17 +488,29 @@ function c102Deadline(promise, ms) {
 
 async function c102Get(deps, url, accept, ms) {
   const fetch = deps.fetch;
-  const res = await c102Deadline(fetch(url, {
-    headers: { "User-Agent": (deps && deps.ua) || C102_UA, Accept: accept || "application/json" },
-    redirect: "follow"
-  }), ms || 7000);
-  if (!res || !res.ok) throw new Error("http " + (res && res.status));
-  return res;
+  const limit = ms || 2000;
+  const ctrl = typeof AbortController === "function" ? new AbortController() : null;
+  const timer = setTimeout(() => { try { if (ctrl) ctrl.abort(); } catch (e) {} }, limit);
+  try {
+    const res = await c102Deadline(fetch(url, {
+      headers: { "User-Agent": (deps && deps.ua) || C102_UA, Accept: accept || "application/json" },
+      redirect: "follow",
+      signal: ctrl ? ctrl.signal : undefined
+    }), limit);
+    if (!res || !res.ok) throw new Error("http " + (res && res.status));
+    return res;
+  } catch (e) {
+    if (e && (e.name === "AbortError" || /aborted/i.test(String(e.message || "")))) throw new Error("timeout");
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function c102Collect(deps, nowMs) {
-  const ms = (deps && deps.timeoutMs) || 7000;
+  const ms = (deps && deps.timeoutMs) || 2000;
   const job = (fn) => fn().then((v) => ({ ok: true, v: v })).catch((e) => ({ ok: false, err: c102Classify(e) }));
+  const limit = (p) => c102Deadline(Promise.resolve().then(() => p), ms);
   const yahoo = (symbol, range, interval) => c102Get(deps, C102_YAHOO + encodeURIComponent(symbol) + "?range=" + range + "&interval=" + interval, "application/json", ms).then((r) => r.json());
   const tasks = {
     gold: job(() => c102Get(deps, C102_GOLD_URL, "application/json", ms).then((r) => r.json()).then((j) => c102ParseMetal(j, "XAU"))),
@@ -515,12 +528,12 @@ async function c102Collect(deps, nowMs) {
       label: "US 10-year Treasury yield", source: "Cboe 10-year Treasury yield index via Yahoo Finance, delayed", sourceUrl: "https://finance.yahoo.com/"
     }))),
     dgs10: job(async () => {
-      if (deps.fred) return deps.fred("DGS10");
+      if (deps.fred) return limit(deps.fred("DGS10"));
       const res = await c102Get(deps, C102_FRED + "DGS10", "text/csv,*/*", ms);
       return c102FredCsv(await res.text(), "DGS10");
     }),
     dfii10: job(async () => {
-      if (deps.fred) return deps.fred("DFII10");
+      if (deps.fred) return limit(deps.fred("DFII10"));
       const res = await c102Get(deps, C102_FRED + "DFII10", "text/csv,*/*", ms);
       return c102FredCsv(await res.text(), "DFII10");
     }),
@@ -537,15 +550,15 @@ async function c102Collect(deps, nowMs) {
     }),
     events: job(async () => {
       if (!deps.calendar) return c102Fail("unavailable", "The release calendar is not configured on this server. No dates were filled in.");
-      return c102Events(await deps.calendar());
+      return c102Events(await limit(deps.calendar()));
     }),
     spotChange: job(async () => {
       if (!deps.goldDash) return c102Fail("unavailable", "The spot snapshot change is not configured. The futures percentage was not used.");
-      return c102SnapshotChange(await deps.goldDash());
+      return c102SnapshotChange(await limit(deps.goldDash()));
     }),
     cnbc: job(async () => {
       if (!deps.cnbc) return null;
-      return c102Cnbc(await deps.cnbc());
+      return c102Cnbc(await limit(deps.cnbc()));
     })
   };
   const keys = Object.keys(tasks);
@@ -589,30 +602,75 @@ async function c102Collect(deps, nowMs) {
 }
 
 async function c102ChartFetch(deps, nowMs) {
-  const res = await c102Get(deps, C102_YAHOO + encodeURIComponent(C102_FUTURE) + "?range=1y&interval=1d", "application/json", (deps && deps.timeoutMs) || 8000);
+  const res = await c102Get(deps, C102_YAHOO + encodeURIComponent(C102_FUTURE) + "?range=1y&interval=1d", "application/json", (deps && deps.timeoutMs) || 2500);
   const json = await res.json();
   return c102Chart(json, nowMs || Date.now());
 }
 
-function c102Memo(store, key, ttl, producer) {
+const c102Flights = new Map();
+
+function c102WorthStoring(body) {
+  if (!body || typeof body !== "object") return false;
+  if (body.cacheState === "cold") return false;
+  if (body.status === "timeout" || body.status === "unavailable" || body.status === "malformed") return false;
+  if (Array.isArray(body.bars) && body.bars.length && body.status === "ok") return true;
+  const keys = ["spot", "silver", "dollar", "vix", "nominal", "realMarket", "nominalOfficial", "realOfficial", "positioning", "events"];
+  return keys.some((k) => {
+    const row = body[k];
+    if (!row || (row.status !== "ok" && row.status !== "stale" && row.status !== "partial")) return false;
+    return typeof row.price === "number" || typeof row.value === "number" || typeof row.net === "number" || (Array.isArray(row.items) && row.items.length > 0);
+  });
+}
+
+function c102WithCache(body, at, state) {
+  const copy = Object.assign({}, body);
+  copy.cacheState = state;
+  copy.cachedAt = new Date(at).toISOString();
+  if (state === "stale") {
+    const age = Math.max(0, Math.round((Date.now() - at) / 1000));
+    copy.cacheNote = "Stored reading from " + copy.cachedAt + ", " + c102LagText(age) + " ago. It was not refreshed for this response. It is not a new print.";
+  } else {
+    delete copy.cacheNote;
+  }
+  return copy;
+}
+
+function c102Kick(store, key, producer) {
+  if (c102Flights.has(key)) return c102Flights.get(key);
+  const run = Promise.resolve().then(() => producer()).then((body) => {
+    if (c102WorthStoring(body)) store.set(key, { ok: true, at: Date.now(), body: body });
+    return body;
+  }).catch(() => null).finally(() => { c102Flights.delete(key); });
+  c102Flights.set(key, run);
+  return run;
+}
+
+function c102Memo(store, key, ttl, producer, cold) {
   const now = Date.now();
   const hit = store.get(key);
-  if (hit && hit.ok && now - hit.at < ttl) return Promise.resolve({ body: hit.body, cached: true, at: hit.at });
-  return producer().then((body) => {
-    const failed = body && (body.status === "timeout" || body.status === "unavailable" || body.status === "malformed") && !body.ok;
-    if (!failed) store.set(key, { ok: true, at: Date.now(), body: body });
-    return { body: body, cached: false, at: Date.now() };
-  }).catch((e) => {
-    if (hit && hit.ok && hit.body) {
-      const age = Math.round((Date.now() - hit.at) / 1000);
-      const copy = Object.assign({}, hit.body, {
-        previousLabel: "Stored reading from " + new Date(hit.at).toISOString() + ", " + c102LagText(age) + " ago. It was not refreshed. It is not a new print."
-      });
-      copy.cacheState = "stale-labeled";
-      return { body: copy, cached: false, stale: true, at: hit.at };
-    }
-    throw e;
-  });
+  const fresh = !!(hit && hit.ok && now - hit.at < ttl);
+  if (!fresh) c102Kick(store, key, producer);
+  if (fresh) return Promise.resolve({ body: c102WithCache(hit.body, hit.at, "fresh"), cached: true, stale: false, at: hit.at });
+  if (hit && hit.ok) return Promise.resolve({ body: c102WithCache(hit.body, hit.at, "stale"), cached: true, stale: true, at: hit.at });
+  return Promise.resolve({ body: typeof cold === "function" ? cold() : null, cached: false, stale: false, at: 0 });
+}
+
+function c102ColdSnap(nowMs) {
+  const model = c102Assemble({}, nowMs || Date.now());
+  model.ok = false;
+  model.cacheState = "cold";
+  model.cacheNote = "No stored reading yet. The feeds are being asked in the background. No number was filled in.";
+  return model;
+}
+
+function c102ColdChart() {
+  return {
+    ok: false,
+    status: "unavailable",
+    cacheState: "cold",
+    message: "No stored futures chart yet. The feed is being asked in the background. No candles were filled in.",
+    cacheNote: "No stored futures chart yet. The feed is being asked in the background. No candles were filled in."
+  };
 }
 
 function c102Line(label, value, extra) {
@@ -765,18 +823,23 @@ function c102Install() {
     cnbc: typeof c101fRates === "function" ? () => c101fRates() : null
   });
   async function snapshot() {
-    const hit = await c102Memo(store, "snap", 60 * 1000, () => c102Collect(depsOf(), Date.now()));
-    return hit.body;
+    const hit = await c102Memo(store, "snap", 60 * 1000, () => c102Collect(depsOf(), Date.now()), () => c102ColdSnap(Date.now()));
+    return hit.body || c102ColdSnap(Date.now());
   }
   async function chart() {
-    const hit = await c102Memo(store, "chart", 120 * 1000, () => c102ChartFetch(depsOf(), Date.now()));
-    return hit.body;
+    const hit = await c102Memo(store, "chart", 120 * 1000, () => c102ChartFetch(depsOf(), Date.now()), c102ColdChart);
+    return hit.body || c102ColdChart();
+  }
+  function cacheControl(body) {
+    if (!body || body.cacheState === "cold") return "no-store";
+    if (body.cacheState === "stale") return "private, max-age=0, stale-while-revalidate=120";
+    return "private, max-age=15, stale-while-revalidate=120";
   }
   function send(res, code, body) {
     const payload = JSON.stringify(body);
     res.writeHead(code, {
       "Content-Type": "application/json; charset=utf-8",
-      "Cache-Control": "no-store",
+      "Cache-Control": cacheControl(body),
       "X-Content-Type-Options": "nosniff",
       "X-Frame-Options": "DENY",
       "Referrer-Policy": "strict-origin-when-cross-origin"
@@ -840,12 +903,20 @@ function c102Install() {
     wrappedMap.__c102 = 1;
     renderPublicSitemap = wrappedMap;
   }
+  try {
+    const warm = setTimeout(() => {
+      snapshot().catch(() => {});
+      chart().catch(() => {});
+    }, 50);
+    if (warm && typeof warm.unref === "function") warm.unref();
+  } catch (e) {}
   c102Install.done = 1;
 }
 
 const api = {
   c102Esc, c102Uk, c102Ymd, c102ParseMetal, c102Ratio, c102YahooQuote, c102FredCsv, c102FredRows, c102Cot, c102Chart, c102Sma,
   c102SnapshotChange, c102Events, c102Cnbc, c102Assemble, c102Collect, c102ChartFetch, c102Render, c102Install, c102Classify,
+  c102Memo, c102ColdSnap, c102ColdChart, c102WorthStoring,
   C102_CSS, C102_FUTURE
 };
 if (typeof module !== "undefined" && module.exports) module.exports = api;

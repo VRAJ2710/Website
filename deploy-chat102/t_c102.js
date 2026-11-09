@@ -479,6 +479,138 @@ test("no stored theme preference stays on system and dark follows the OS media q
   assert.equal(schemeOf("other=1"), "system");
 });
 
+test("a hung feed is bounded and does not invent the readings that never answered", async () => {
+  const t0 = Date.now();
+  const model = await lib.c102Collect({
+    fetch: async (url) => {
+      const u = String(url);
+      if (u.includes("XAU")) return { ok: true, json: async () => ({ symbol: "XAU", currency: "USD", price: 4100.25, updatedAt: "2026-11-06T15:23:00Z" }) };
+      if (u.includes("XAG")) return { ok: true, json: async () => ({ symbol: "XAG", currency: "USD", price: 50, updatedAt: "2026-11-06T15:23:00Z" }) };
+      return new Promise(() => {});
+    },
+    timeoutMs: 80,
+    fred: () => new Promise(() => {}),
+    calendar: () => new Promise(() => {}),
+    goldDash: () => new Promise(() => {}),
+    cnbc: () => new Promise(() => {})
+  }, NOW);
+  const dt = Date.now() - t0;
+  assert.ok(dt < 500, "collect took " + dt);
+  assert.equal(model.spot.status, "ok");
+  assert.equal(model.spot.price, 4100.25);
+  assert.match(model.spot.source, /gold-api/);
+  assert.equal(model.nominalOfficial.status, "timeout");
+  assert.equal(model.events.status, "timeout");
+  assert.equal(model.nominalOfficial.value, undefined);
+  assert.equal(model.dollar.price, undefined);
+});
+
+test("stored reading is served stale while one hung refresh is in flight", async () => {
+  const store = new Map();
+  let started = 0;
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const producer = () => {
+    started += 1;
+    return gate.then(() => ({ status: "ok", spot: { status: "ok", price: 9999, source: "should-not-replace" } }));
+  };
+  store.set("snap-stale", { ok: true, at: Date.now() - 120000, body: { status: "ok", spot: { status: "ok", price: 4100.25, source: "gold-api.com", asOfUk: "Fri, 6 November 2026 at 15:23" }, generatedAtUtc: "2026-11-06T15:23:00.000Z" } });
+  const t0 = Date.now();
+  const a = await lib.c102Memo(store, "snap-stale", 1000, producer, () => lib.c102ColdSnap(NOW));
+  const b = await lib.c102Memo(store, "snap-stale", 1000, producer, () => lib.c102ColdSnap(NOW));
+  const dt = Date.now() - t0;
+  assert.ok(dt < 250, "memo took " + dt);
+  assert.equal(started, 1);
+  assert.equal(a.body.cacheState, "stale");
+  assert.equal(a.body.spot.price, 4100.25);
+  assert.equal(a.body.spot.source, "gold-api.com");
+  assert.match(a.body.cacheNote, /Stored reading from /);
+  assert.match(a.body.cacheNote, /not a new print/);
+  assert.equal(b.body.spot.price, 4100.25);
+  assert.equal(JSON.stringify(a.body).includes("9999"), false);
+  release();
+  await new Promise((r) => setImmediate(r));
+  const fresh = await lib.c102Memo(store, "snap-stale", 60 * 1000, producer, () => lib.c102ColdSnap(NOW));
+  assert.equal(fresh.body.cacheState, "fresh");
+  assert.equal(fresh.body.spot.price, 9999);
+  assert.equal(fresh.body.cacheNote, undefined);
+});
+
+test("hung upstream does not delay /terminal/ html or the json routes", async () => {
+  const pageSrc = fs.readFileSync(path.join(dir, "lib_c102.js"), "utf8");
+  const pageFn = pageSrc.slice(pageSrc.indexOf("async function page"), pageSrc.indexOf("if (typeof handle"));
+  assert.equal(pageFn.includes("c102Collect"), false);
+  assert.equal(pageFn.includes("snapshot("), false);
+  assert.equal(pageFn.includes("c102Get"), false);
+  assert.equal(pageFn.includes("gold-api"), false);
+  const built = spawnSync(process.execPath, ["build_block.js"], { cwd: dir, encoding: "utf8" });
+  assert.equal(built.status, 0, built.stderr);
+  let calls = 0;
+  const box = {
+    console: console, globalThis: {}, URL: URL, Date: Date, Map: Map, Promise: Promise, Intl: Intl,
+    setTimeout: setTimeout, clearTimeout: clearTimeout, AbortController: AbortController,
+    fetch: function (_url, opts) {
+      calls += 1;
+      return new Promise((_resolve, reject) => {
+        const signal = opts && opts.signal;
+        if (signal) signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" })));
+      });
+    },
+    handle: async function () { return "pass"; },
+    c93Shell: function (s) { return "<!doctype html><title>Terminal</title>" + s.body; },
+    c93Html: function (req, res, html) { res.end(html); }
+  };
+  box.globalThis = box;
+  vm.createContext(box);
+  vm.runInContext(fs.readFileSync(path.join(dir, "server_block_c102.js"), "utf8"), box);
+  function ask(url) {
+    const res = { writeHead: function (code, h) { res.code = code; res.headers = h; }, end: function (b) { res.body = b || ""; } };
+    const t0 = Date.now();
+    return box.handle({ method: "GET", url: url, headers: {} }, res).then(function () {
+      res.ms = Date.now() - t0;
+      return res;
+    });
+  }
+  const html = await ask("/terminal/");
+  const snap = await ask("/api/c102/terminal");
+  const chart = await ask("/api/c102/chart");
+  const again = await ask("/api/c102/terminal");
+  await new Promise((r) => setImmediate(r));
+  const after = calls;
+  await ask("/api/c102/terminal");
+  await ask("/api/c102/chart");
+  await new Promise((r) => setImmediate(r));
+  assert.ok(html.ms < 250, "html " + html.ms);
+  assert.ok(snap.ms < 250, "snap " + snap.ms);
+  assert.ok(chart.ms < 250, "chart " + chart.ms);
+  assert.ok(again.ms < 250, "again " + again.ms);
+  assert.match(html.body, /<section id="c102-mount" aria-busy="true"><p>Loading readings/);
+  assert.equal(html.body.includes("4100"), false);
+  const snapJson = JSON.parse(snap.body);
+  const chartJson = JSON.parse(chart.body);
+  assert.equal(snapJson.cacheState, "cold");
+  assert.match(snapJson.cacheNote, /No stored reading yet/);
+  assert.match(snapJson.cacheNote, /No number was filled in/);
+  assert.equal(snapJson.spot.price, undefined);
+  assert.equal(chartJson.cacheState, "cold");
+  assert.equal(chartJson.bars, undefined);
+  assert.match(chartJson.message, /No candles were filled in/);
+  assert.equal(snap.headers["Cache-Control"], "no-store");
+  assert.equal(calls, after);
+  assert.ok(after > 0);
+  const ui = { console: console, Intl: Intl, Date: Date };
+  vm.createContext(ui);
+  vm.runInContext(fs.readFileSync(path.join(dir, "client_c102.js"), "utf8"), ui);
+  const shown = ui.c102ui.render({
+    cacheNote: "Stored reading from 2026-11-09T15:00:00.000Z, 4 minutes ago. It was not refreshed for this response. It is not a new print.",
+    generatedAtUtc: "2026-11-09T15:00:00.000Z",
+    spot: { status: "ok", price: 4100.25, source: "gold-api.com", asOfUk: "Mon, 9 November 2026 at 15:00" }
+  }, { cacheNote: "Stored chart from 2026-11-09T15:00:00.000Z. It is not a new print." });
+  assert.match(shown, /not a new print/);
+  assert.match(shown, /gold-api.com/);
+  assert.match(shown, /4100\.25|4,100\.25/);
+});
+
 test("deploy.sh bytes match EXPECTED_SHA256 on their own", () => {
   const spec = fs.readFileSync(path.join(dir, "EXPECTED_SHA256"), "utf8");
   const sha = (spec.match(/sha256 ([a-f0-9]{64})/) || [])[1];
@@ -556,7 +688,7 @@ test("remote payload is fetched and a lookalike first-chat102 root is not applie
   assert.equal(fs.readFileSync(path.join(root, "index.html"), "utf8"), index);
   assert.equal(fs.readFileSync(mock, "utf8"), "do-not-touch");
   assert.equal(fs.readFileSync(oldBak, "utf8"), "keep-me");
-  assert.equal(fs.readdirSync(root).some((n) => n.includes("bak-chat102r2")), false);
+  assert.equal(fs.readdirSync(root).some((n) => /bak-chat102r\d/.test(n)), false);
 });
 
 test("deploy dry-run aborts when the live snapshot hash does not match chat101h", () => {

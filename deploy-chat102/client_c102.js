@@ -1,4 +1,4 @@
-/* chat102 terminal client. No polling. Two requests, then stop. */
+/* chat102 terminal client. No polling. Two requests, then one retry only when the server has no stored reading yet. */
 (function (root) {
   "use strict";
   function esc(s) {
@@ -107,7 +107,9 @@
     var note = (fut && fut.historyNote) || "Completed sessions only. The current session is left out when the feed includes it.";
     var extra = [fut && fut.barTimeNote, fut && fut.volumeRepeatNote, fut && fut.incompleteNote].filter(Boolean).join(" ");
     var chartHtml = "<div id=\"c102-chart\" class=\"c102-chart\"><div class=\"c102-chart-h\"><h2 id=\"c102-chart-title\">" + esc(label) + "</h2><p id=\"c102-chart-note\" class=\"c102-k\">" + esc(note) + "</p><p class=\"c102-k\">" + esc(extra) + "</p></div><div class=\"c102-tools\" role=\"group\" aria-label=\"Chart range\"><button type=\"button\" data-c102-months=\"3\" aria-pressed=\"false\">3 months</button><button type=\"button\" data-c102-months=\"6\" aria-pressed=\"true\">6 months</button><button type=\"button\" data-c102-months=\"12\" aria-pressed=\"false\">1 year</button><button type=\"button\" data-c102-ma=\"20\" aria-pressed=\"true\">20-session average</button><button type=\"button\" data-c102-ma=\"50\" aria-pressed=\"true\">50-session average</button><button type=\"button\" id=\"c102-table-btn\" aria-expanded=\"false\" aria-controls=\"c102-table\">Table of sessions</button></div><p id=\"c102-span\" class=\"c102-k\"></p><p id=\"c102-readout\" class=\"c102-read\">Use the arrow keys on the chart to read a session.</p><div id=\"c102-live\" class=\"c102-live\" aria-live=\"polite\"></div><canvas id=\"c102-canvas\" width=\"800\" height=\"460\" tabindex=\"0\" role=\"img\" aria-label=\"" + esc(label) + "\" aria-describedby=\"c102-readout c102-chart-note\"></canvas><div id=\"c102-table\" hidden></div></div>";
-    return "<div class=\"c102\" id=\"c102\"><p class=\"c102-k\">Assembled " + esc(model.generatedAtUk || uk(model.generatedAtUtc) || "") + "</p><div class=\"c102-tiles\">" + tiles + "</div>" + chartHtml + "<div class=\"c102-grid\"><section aria-labelledby=\"c102-macro\"><h2 id=\"c102-macro\">Macro</h2>" + macro + "</section><section aria-labelledby=\"c102-pos\"><h2 id=\"c102-pos\">Positioning</h2>" + posHtml + "</section></div><section aria-labelledby=\"c102-ev\"><h2 id=\"c102-ev\">Events</h2>" + evHtml + "</section><section aria-labelledby=\"c102-risk\"><h2 id=\"c102-risk\">Risk and sources</h2>" + risk + "</section></div>";
+    var cacheHtml = model.cacheNote ? "<p class=\"c102-miss\" id=\"c102-cache\">" + esc(model.cacheNote) + "</p>" : "";
+    var chartCache = chart && chart.cacheNote ? "<p class=\"c102-miss\">" + esc(chart.cacheNote) + "</p>" : "";
+    return "<div class=\"c102\" id=\"c102\"><p class=\"c102-k\">Assembled " + esc(model.generatedAtUk || uk(model.generatedAtUtc) || "") + "</p>" + cacheHtml + "<div class=\"c102-tiles\">" + tiles + "</div>" + chartCache + chartHtml + "<div class=\"c102-grid\"><section aria-labelledby=\"c102-macro\"><h2 id=\"c102-macro\">Macro</h2>" + macro + "</section><section aria-labelledby=\"c102-pos\"><h2 id=\"c102-pos\">Positioning</h2>" + posHtml + "</section></div><section aria-labelledby=\"c102-ev\"><h2 id=\"c102-ev\">Events</h2>" + evHtml + "</section><section aria-labelledby=\"c102-risk\"><h2 id=\"c102-risk\">Risk and sources</h2>" + risk + "</section></div>";
   }
 
   function cssColor(name, fallback) {
@@ -377,19 +379,25 @@
       return;
     }
     var timer = setTimeout(function () { if (ctrl) ctrl.abort(); fail("The readings did not arrive in time. No number was filled in."); }, 12000);
-    Promise.all([
-      fetch("/api/c102/terminal", { signal: ctrl ? ctrl.signal : undefined, headers: { Accept: "application/json" } }).then(function (r) { if (!r.ok) throw new Error("http"); return r.json(); }),
-      fetch("/api/c102/chart", { signal: ctrl ? ctrl.signal : undefined, headers: { Accept: "application/json" } }).then(function (r) { if (!r.ok) throw new Error("http"); return r.json(); })
-    ]).then(function (pair) {
-      clearTimeout(timer);
-      el.innerHTML = render(pair[0], pair[1]);
-      el.setAttribute("aria-busy", "false");
-      bind(el, pair[1]);
-    }).catch(function () {
-      clearTimeout(timer);
-      if (el.getAttribute("aria-busy") === "false" && el.querySelector(".c102")) return;
-      fail("The readings did not load. No number was filled in.");
-    });
+    function pull(attempt) {
+      Promise.all([
+        fetch("/api/c102/terminal", { signal: ctrl ? ctrl.signal : undefined, headers: { Accept: "application/json" } }).then(function (r) { if (!r.ok) throw new Error("http"); return r.json(); }),
+        fetch("/api/c102/chart", { signal: ctrl ? ctrl.signal : undefined, headers: { Accept: "application/json" } }).then(function (r) { if (!r.ok) throw new Error("http"); return r.json(); })
+      ]).then(function (pair) {
+        clearTimeout(timer);
+        if (el._c102Cleanup) el._c102Cleanup();
+        el.innerHTML = render(pair[0], pair[1]);
+        el.setAttribute("aria-busy", "false");
+        bind(el, pair[1]);
+        var cold = (pair[0] && pair[0].cacheState === "cold") || (pair[1] && pair[1].cacheState === "cold");
+        if (attempt === 0 && cold) setTimeout(function () { if (ctrl && ctrl.signal && ctrl.signal.aborted) return; pull(1); }, 1500);
+      }).catch(function () {
+        clearTimeout(timer);
+        if (el.getAttribute("aria-busy") === "false" && el.querySelector(".c102")) return;
+        fail("The readings did not load. No number was filled in.");
+      });
+    }
+    pull(0);
   }
   root.c102ui = { render: render, mount: mount, draw: draw, readout: readout, windowBars: windowBars, tableHtml: tableHtml, barStamp: barStamp };
 })(typeof globalThis !== "undefined" ? globalThis : this);
