@@ -7,7 +7,7 @@
 set -u
 # Payload commit is the commit that already contains these blobs.
 # Do not point this at a commit that only changes deploy.sh.
-PAYLOAD_COMMIT=f692baf6aef0fedb9f8a5a3767bc94fb2e5c8995
+PAYLOAD_COMMIT=d31e220ac94188a37fc4ffb4a245c2cc772303c6
 BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/${PAYLOAD_COMMIT}/deploy-chat103"
 
 # Staged root after chat104. The index tag is app.js?v=chat104.
