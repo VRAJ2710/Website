@@ -132,3 +132,33 @@ test("replacing the scrub block leaves the CPI prefix byte-identical and keeps t
   assert.equal(after.slice(0, after.length - fresh.length), cpi);
   assert.equal(spawnSync(process.execPath, ["--check", server], { encoding: "utf8" }).status, 0);
 });
+
+test("deploy.sh bytes match EXPECTED_SHA256 on their own", () => {
+  const spec = fs.readFileSync(path.join(dir, "EXPECTED_SHA256"), "utf8");
+  const sha = (spec.match(/sha256 ([a-f0-9]{64})/) || [])[1];
+  const bytes = Number((spec.match(/bytes (\d+)/) || [])[1]);
+  const buf = fs.readFileSync(path.join(dir, "deploy.sh"));
+  assert.equal(buf.length, bytes);
+  assert.equal(require("crypto").createHash("sha256").update(buf).digest("hex"), sha);
+  assert.match(buf.toString("utf8"), /715b843b5e7b15e38a16a6478337d7f94752eeb4da3b902b4bcd60603e15aaa7/);
+});
+
+test("remote payload is fetched and a non-matching root is refused", () => {
+  const root = fs.mkdtempSync("/tmp/c102r6g-root-");
+  fs.writeFileSync(path.join(root, "server.js"), "/* CPI */\n" + oldBlock);
+  fs.writeFileSync(path.join(root, "app.js"), "app");
+  fs.writeFileSync(path.join(root, "index.html"), "index");
+  const before = fs.readFileSync(path.join(root, "server.js"));
+  const run = spawnSync("bash", [path.join(dir, "deploy.sh"), "--dry-run", "--dir", root], { encoding: "utf8" });
+  const spec = fs.readFileSync(path.join(dir, "deploy.sh"), "utf8");
+  const payload = (spec.match(/PAYLOAD_COMMIT=([a-f0-9]{40})/) || [])[1];
+  const blockHash = (spec.match(/server_block_c102r6g\.js ([a-f0-9]{64})/) || [])[1];
+  const out = run.stdout + run.stderr;
+  assert.notEqual(run.status, 0);
+  assert.match(out, new RegExp("remote payload ok: server_block_c102r6g.js " + blockHash));
+  assert.match(out, new RegExp(payload));
+  assert.match(out, /replace refused/);
+  assert.match(out, /42cbf25522df13bb8732a5efba9f0db4/);
+  assert.deepEqual(fs.readFileSync(path.join(root, "server.js")), before);
+  assert.equal(fs.readdirSync(root).some((n) => n.includes("bak-chat102r6g")), false);
+});
