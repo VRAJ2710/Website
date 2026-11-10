@@ -349,34 +349,35 @@ test("deploy dry-run refuses a mismatched root and writes nothing", () => {
   assert.equal(fs.readdirSync(root).some((name) => name.includes("bak-chat103")), false);
   const spec = fs.readFileSync(path.join(dir, "deploy.sh"), "utf8");
   assert.match(spec, /099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054/);
-  assert.match(spec, /BASE_SERVER_MD5=6130d1e111d58c619926ff924f164f16/);
-  assert.match(spec, /BASE_APP_MD5=b05af1cd11ff32bdd4b1ff4859e8b23f/);
-  assert.match(spec, /BASE_INDEX_MD5=2603bdcb7f0f8b7010fff96da58fd009/);
+  assert.match(spec, /BASE_SERVER_MD5=2cf106c8b7a929036fc854cecd5cf105/);
+  assert.match(spec, /BASE_APP_MD5=93644cb45fc3884e7068bf9a902d73e3/);
+  assert.match(spec, /BASE_INDEX_MD5=338615e7ece511104855785b67e9c10a/);
 });
 
-test("the update patch keeps the chat102 block and replaces chat103", () => {
+test("chat103d replaces only the CPI block and leaves the r6c last write in place", () => {
   const root = fs.mkdtempSync("/tmp/c103-up-");
   const block = fs.readFileSync(path.join(dir, "../deploy-chat102/server_block_c102.js"), "utf8");
-  const server = "const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)\n" + block + "// chat103 cpi day. old\nold();\n";
-  const app = 'if (c102Path === "/terminal" || c102Path === "/terminal/" || c102Path === "/cpi" || c102Path === "/cpi/") return;\n// chat103: keep /cpi/ old\nold();\n';
-  const index = '<script src="/app.js?v=chat103"></script>\n';
+  const tail = "// chat102r6 market-reference cache.\nr6();\n// chat102r6b reader-facing scrub.\nr6b();\n// chat102r6c last-write scrub.\nproto.end = end;\nconsole.log(\"[c102r6c] scrub attached\");\n";
+  const server = "const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)\n" + block + "// chat103 cpi day. old\nold();\n" + tail;
+  const app = "staged app bytes\n";
+  const index = '<script src="/app.js?v=chat103c"></script>\n';
   fs.writeFileSync(path.join(root, "server.js"), server);
   fs.writeFileSync(path.join(root, "app.js"), app);
   fs.writeFileSync(path.join(root, "index.html"), index);
-  const run = spawnSync("python3", [path.join(dir, "patch_c103.py"), path.join(root, "server.js"), path.join(root, "app.js"), path.join(root, "index.html"), path.join(dir, "server_block_c103.js"), path.join(dir, "app_block_c103.js")], { encoding: "utf8" });
+  const run = spawnSync("python3", [path.join(dir, "patch_c103.py"), path.join(root, "server.js"), path.join(root, "app.js"), path.join(root, "index.html"), path.join(dir, "server_block_c103.js")], { encoding: "utf8" });
   assert.equal(run.status, 0, run.stderr);
   const next = fs.readFileSync(path.join(root, "server.js"), "utf8");
   const cut = server.indexOf("\n// chat103 cpi day");
   assert.equal(next.slice(0, cut + 1), server.slice(0, cut + 1));
+  assert.equal(next.slice(next.indexOf("\n// chat102r6 market-reference cache.")), "\n" + tail);
+  assert.equal(next.slice(next.indexOf("\n// chat102r6c last-write scrub.")), "\n" + tail.slice(tail.indexOf("// chat102r6c")));
+  assert.equal(next.split("proto.end = end").length, server.split("proto.end = end").length);
+  assert.match(next.slice(cut, next.indexOf("\n// chat102r6 market-reference cache.")), /Year-on-year not published:/);
   const marker = "// chat102 terminal. Built from lib_c102.js and client_c102.js. Edit those, then run node build_block.js.";
-  const tail = next.slice(next.indexOf(marker), next.indexOf("\n// chat103 cpi day") + 1);
-  const hash = require("crypto").createHash("sha256").update(tail).digest("hex");
-  assert.equal(hash, "099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054");
-  assert.match(next, /c103-navfit|flex-wrap:wrap/);
-  const nextApp = fs.readFileSync(path.join(root, "app.js"), "utf8");
-  assert.equal(nextApp.startsWith(app.slice(0, app.indexOf("\n// chat103: keep /cpi/") + 1)), true);
-  assert.match(nextApp, /c103-navfit/);
-  assert.equal(fs.readFileSync(path.join(root, "index.html"), "utf8").includes('/app.js?v=chat103b"'), true);
+  const kept = next.slice(next.indexOf(marker), next.indexOf("\n// chat103 cpi day") + 1);
+  assert.equal(require("crypto").createHash("sha256").update(kept).digest("hex"), "099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054");
+  assert.equal(fs.readFileSync(path.join(root, "app.js"), "utf8"), app);
+  assert.equal(fs.readFileSync(path.join(root, "index.html"), "utf8"), index);
 });
 
 test("labelled fallback is used only when the schedule does not already have that date", () => {

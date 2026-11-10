@@ -1,55 +1,61 @@
 #!/usr/bin/env python3
-"""Replace the staged chat103 block. Bytes before that block, including the chat102r5 terminal, stay byte-for-byte."""
+"""Replace the chat103 block in place. Everything from chat102r6 onward, including the r6c last-write scrub, stays byte for byte."""
 import pathlib
 import sys
 
-SERVER_MARK = "// chat103 cpi day"
-APP_MARK = "// chat103: keep /cpi/"
-INDEX_OLD = '/app.js?v=chat103"'
-INDEX_NEW = '/app.js?v=chat103b"'
-
-
-def replace_from(text, mark, block):
-    at = text.find(mark)
-    if at < 0:
-        sys.exit("missing marker " + mark)
-    if text.find(mark, at + len(mark)) >= 0:
-        sys.exit("marker is not unique: " + mark)
-    line = text.rfind("\n", 0, at)
-    if line < 0:
-        sys.exit("marker is not on its own line: " + mark)
-    return text[: line + 1] + block.strip("\n") + "\n", text[: line + 1]
+START = "// chat103 cpi day"
+R6 = "// chat102r6 market-reference cache."
+R6B = "// chat102r6b reader-facing scrub."
+R6C = "// chat102r6c last-write scrub."
+TAG = "app.js?v=chat103c"
 
 
 def main():
-    if len(sys.argv) != 6:
-        sys.exit("usage: patch_c103.py server.js app.js index.html server_block app_block")
-    server, app, index, sblock, ablock = [pathlib.Path(p) for p in sys.argv[1:6]]
-    sb = sblock.read_text(encoding="utf-8")
-    ab = ablock.read_text(encoding="utf-8")
-    if SERVER_MARK not in sb:
-        sys.exit("server block is missing its marker")
-    if APP_MARK not in ab:
-        sys.exit("app block is missing its marker")
-    st = server.read_text(encoding="utf-8")
+    if len(sys.argv) != 5:
+        sys.exit("usage: patch_c103.py server.js app.js index.html server_block")
+    server, app, index, sblock = [pathlib.Path(p) for p in sys.argv[1:5]]
+    block = sblock.read_text(encoding="utf-8").strip("\n")
+    text = server.read_text(encoding="utf-8")
     at = app.read_text(encoding="utf-8")
     it = index.read_text(encoding="utf-8")
-    if SERVER_MARK not in st:
-        sys.exit("server.js does not already contain chat103")
-    if APP_MARK not in at:
-        sys.exit("app.js does not already contain the chat103 menu block")
-    if 'c102Path === "/terminal"' not in at or 'c102Path === "/cpi"' not in at:
-        sys.exit("app.js lost the terminal or /cpi/ path guard")
-    if it.count(INDEX_OLD) != 1:
-        sys.exit("index.html does not contain exactly one chat103 app cache token")
-    new_server, server_prefix = replace_from(st, SERVER_MARK, sb)
-    new_app, app_prefix = replace_from(at, APP_MARK, ab)
-    if not new_server.startswith(server_prefix) or not new_app.startswith(app_prefix):
-        sys.exit("prefix was not kept")
-    server.write_text(new_server, encoding="utf-8")
-    app.write_text(new_app, encoding="utf-8")
-    index.write_text(it.replace(INDEX_OLD, INDEX_NEW, 1), encoding="utf-8")
-    print("patched")
+    if START not in block:
+        sys.exit("server block is missing its marker")
+    if "proto.end" in block:
+        sys.exit("server block wraps res.end; that would sit after the r6c scrub")
+    if text.count("\n" + START) != 1:
+        sys.exit("chat103 block is missing or not unique")
+    for mark in (R6, R6B, R6C):
+        if text.count("\n" + mark) != 1:
+            sys.exit("missing or repeated anchor " + mark)
+    start = text.find("\n" + START)
+    end = text.find("\n" + R6)
+    if end < start:
+        sys.exit("chat102r6 is not after the chat103 block")
+    if R6C in text[start:end]:
+        sys.exit("r6c sits inside the chat103 block")
+    suffix = text[end:]
+    if it.count(TAG) != 1:
+        sys.exit("index.html does not contain exactly one chat103c cache tag")
+    if "app.js?v=chat103d" in it or "app.js?v=chat103b" in it:
+        sys.exit("index.html cache tag is not chat103c")
+    new = text[: start + 1] + block + suffix
+    if new[new.find("\n" + R6):] != suffix:
+        sys.exit("bytes from chat102r6 onward changed")
+    old_c = text[text.find("\n" + R6C):]
+    new_c = new[new.find("\n" + R6C):]
+    if old_c != new_c:
+        sys.exit("chat102r6c last-write block changed")
+    if new.count("proto.end = end") != text.count("proto.end = end"):
+        sys.exit("a response-end wrapper was added")
+    if new.count("[c102r6c] scrub attached") != 1:
+        sys.exit("r6c attach log is not intact")
+    if "Year-on-year not published:" not in new[start:new.find("\n" + R6)]:
+        sys.exit("replacement chat103 block has no year-on-year note")
+    server.write_text(new, encoding="utf-8")
+    # app.js is unchanged, so the chat103c cache tag stays.
+    if at != app.read_text(encoding="utf-8") or it != index.read_text(encoding="utf-8"):
+        sys.exit("app.js or index.html was touched")
+    print("replaced the chat103 block; chat102r6c stayed last")
 
 
 if __name__ == "__main__":
