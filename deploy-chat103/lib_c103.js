@@ -187,6 +187,82 @@ function c103Pct(newer, older) {
   return (newer / older - 1) * 100;
 }
 
+function c103FredMonth(iso) {
+  const m = /^(\d{4})-(\d{2})/.exec(String(iso || ""));
+  return m ? m[1] + "-" + m[2] : "";
+}
+
+function c103ShiftYm(ym, delta) {
+  const m = /^(\d{4})-(\d{2})$/.exec(ym || "");
+  if (!m) return "";
+  let y = Number(m[1]);
+  let mo = Number(m[2]) + delta;
+  while (mo < 1) { mo += 12; y -= 1; }
+  while (mo > 12) { mo -= 12; y += 1; }
+  return y + "-" + c103Pad(mo);
+}
+
+function c103FredAt(rows, ym) {
+  if (!ym) return null;
+  const hit = (rows || []).find((row) => row && c103FredMonth(row[0]) === ym && typeof row[1] === "number" && isFinite(row[1]));
+  return hit || null;
+}
+
+function c103CalendarChange(rows, index, monthsBack) {
+  const cur = rows && rows[index];
+  if (!cur || typeof cur[1] !== "number" || !isFinite(cur[1])) return null;
+  const base = c103FredAt(rows, c103ShiftYm(c103FredMonth(cur[0]), -monthsBack));
+  if (!base) return null;
+  return c103Pct(cur[1], base[1]);
+}
+
+function c103SignedPct(n) {
+  const rounded = c103Round1(n);
+  if (typeof rounded !== "number") return "";
+  if (rounded === 0) return "0.0%";
+  return (rounded > 0 ? "+" : "\u2212") + Math.abs(rounded).toFixed(1) + "%";
+}
+
+function c103SeriesChange(rows, period, monthsBack) {
+  const cur = c103FredAt(rows, period);
+  if (!cur) return null;
+  const index = (rows || []).indexOf(cur);
+  return c103CalendarChange(rows, index, monthsBack);
+}
+
+function c103CalendarCpiText(headline, core, nsa, index) {
+  const period = c103FredMonth(headline[index][0]);
+  const mom = c103Round1(c103CalendarChange(headline, index, 1));
+  const coreMom = c103Round1(c103SeriesChange(core, period, 1));
+  const yoy = c103Round1(c103SeriesChange(nsa, period, 12));
+  if (typeof yoy === "number") return (yoy < 0 ? "\u2212" : "") + Math.abs(yoy).toFixed(1) + "% a year";
+  const base = c103ShiftYm(period, -12);
+  const gap = base === "2025-10"
+    ? "year-on-year not published by BLS (no October 2025 data)"
+    : "year-on-year not published by BLS (no " + c103PeriodLabel(base) + " data)";
+  const momText = typeof mom === "number" ? c103SignedPct(mom) + " on the month" : "month change not published";
+  const coreText = typeof coreMom === "number" ? " (core " + c103SignedPct(coreMom) + ")" : "";
+  return momText + coreText + "; " + gap;
+}
+
+function c103CalendarCpi(headline, core, nsa) {
+  const rows = headline || [];
+  const i = rows.length - 1;
+  if (i < 0) return null;
+  const period = c103FredMonth(rows[i][0]);
+  if (!period) return null;
+  const prevYm = c103ShiftYm(period, -1);
+  const prev = c103FredAt(rows, prevYm);
+  const prevIndex = prev ? rows.indexOf(prev) : -1;
+  return {
+    period: period,
+    prevPeriod: prev ? prevYm : "",
+    actual: c103CalendarCpiText(rows, core, nsa, i),
+    previous: prevIndex >= 0 ? c103CalendarCpiText(rows, core, nsa, prevIndex) : "Not published: no " + c103PeriodLabel(prevYm) + " index",
+    how: C103_SOURCE + ". Month change, seasonally adjusted. The year change uses the same month a year earlier and is left unpublished when that index is missing."
+  };
+}
+
 function c103Contribution(weight, change) {
   if (typeof weight !== "number" || typeof change !== "number" || !isFinite(weight) || !isFinite(change)) return null;
   return (weight / 100) * change;
@@ -1979,7 +2055,8 @@ const api = {
   c103CarryNote, c103NoteWhen, c103SqlNum, c103Persist, c103SeriesGood, c103PickSeries, c103BlsPlan, c103BlsCharge, c103BlsSeriesCap,
   c103CacheMs, c103ForNow, c103DismissGate, c103RecordTick, c103ChangedSeries, c103ParseArchive,
   c103WeightsMatch, c103MergeGold, c103LoadStored,
-  c103WorthStoring, c103GoldUrl
+  c103WorthStoring, c103GoldUrl,
+  c103CalendarChange, c103CalendarCpi
 };
 
 if (typeof module !== "undefined" && module.exports) module.exports = api;

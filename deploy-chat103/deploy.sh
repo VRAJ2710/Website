@@ -19,8 +19,8 @@ BASE_SERVER_MD5=9a4070ba75c5900cfa4b34ac5b7899e1
 NEW_L1='const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)'
 MARKER='// chat102 terminal. Built from lib_c102.js and client_c102.js. Edit those, then run node build_block.js.'
 MANIFEST=(
-  "patch_c103.py 2afe6f9a01375ee48222bb639a968706ad246aea51265013f6ef055ca0676691"
-  "server_block_c103.js 3e549518dd298194e1aa5b57a4b2586f9ca3b55c18c7b7923ac3eacda5cb6da6"
+  "patch_c103.py 1fe3b2e092126c3773fcdbc0b1eeb7b59d654c063f6017d4bc1204dd4758f9b4"
+  "server_block_c103.js b6c5bbf806044db699284416e829e4e1ad3790396452b845c2650706edb28ac6"
   "ddl_c103.sql 90e84a3513161531846a52350f815f88c261a7e6540ac42e9b5e888862820794"
 )
 DRY=0; DIR=""
@@ -111,9 +111,11 @@ cp "$S/server.js" "$S/server.js.base"; cp "$S/app.js" "$S/app.js.base"
 python3 "$P/patch_c103.py" "$S/server.js" "$S/app.js" "$S/index.html" "$P/server_block_c103.js" || die "patch_c103 failed (project-root files untouched)"
 cmp -s "$S/app.js.base" "$S/app.js" || die "app.js changed; this installer does not edit it"
 cmp -s "$S/index.html" "$INDEX" || die "index.html changed"
-python3 - "$S" "$MARKER" "$R5_TAIL_SHA256" << 'PY' || die "scratch disturbed chat102r6c or the chat102r5 prefix"
+python3 - "$S" "$MARKER" "$R5_TAIL_SHA256" "$P/patch_c103.py" << 'PY' || die "scratch disturbed chat102r6c or the chat102r5 prefix"
 import hashlib, pathlib, re, sys
-scratch, marker, expect = sys.argv[1:]
+scratch, marker, expect, patch = sys.argv[1:]
+ns = {"__name__": "patch_c103"}
+exec(pathlib.Path(patch).read_text(encoding="utf-8"), ns)
 root = pathlib.Path(scratch)
 old = (root/"server.js.base").read_text(encoding="utf-8")
 new = (root/"server.js").read_text(encoding="utf-8")
@@ -125,8 +127,13 @@ end = re.compile(r"\n// chat(?!103\b)").search(old, cut + 1)
 if end is None or old.find(r6c) < 0:
     sys.exit("base is missing the block after chat103 or the r6c scrub")
 suffix = old[end.start():]
-if not new.startswith(old[:cut + 1]):
-    sys.exit("bytes in front of chat103 changed")
+fixed = ns["apply_calendar"](old)
+fixed_cut = fixed.find("\n// chat103 cpi day")
+new_cut = new.find("\n// chat103 cpi day")
+if new[:new_cut + 1] != fixed[:fixed_cut + 1]:
+    sys.exit("bytes in front of chat103 changed besides the calendar CPI anchor")
+if "c103CalendarCpi" not in new or "rows[i - 12]" in new:
+    sys.exit("calendar still falls back to a neighbouring CPI month")
 if new[len(new) - len(suffix):] != suffix:
     sys.exit("bytes after the chat103 block changed")
 if new[new.find(r6c):] != old[old.find(r6c):]:
@@ -136,7 +143,7 @@ if new.count("proto.end = end") != old.count("proto.end = end"):
 tail = old[old.find(marker):cut + 1]
 if hashlib.sha256(tail.encode("utf-8")).hexdigest() != expect:
     sys.exit("chat102r5 tail changed")
-region = new[cut:len(new) - len(suffix)]
+region = new[new_cut:len(new) - len(suffix)]
 if "Year-on-year not published:" not in region:
     sys.exit("year-on-year note missing from the chat103 block")
 if "Not published by BLS (no October 2025 data)" not in region:

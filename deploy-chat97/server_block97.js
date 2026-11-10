@@ -329,7 +329,10 @@ const C97_KIND = {
 // Latest two readings per kind, with the period they describe. Values are computed exactly as stated in "how".
 async function c97Readings() {
   const out = {};
-  const yoy = (rows, i) => i >= 12 ? (rows[i][1] / rows[i - 12][1] - 1) * 100 : null;
+  const yoy = (rows, i) => {
+    const api = typeof globalThis !== "undefined" && globalThis.c103;
+    return api && typeof api.c103CalendarChange === "function" ? api.c103CalendarChange(rows, i, 12) : null;
+  };
   const fr = async (id) => { const r = await c97Fred(id, 3); return r.v || []; };
   const jobs = await fr("PAYEMS"), un = await fr("UNRATE");
   if (jobs.length > 2) {
@@ -339,7 +342,18 @@ async function c97Readings() {
   }
   for (const [k, id] of [["us_cpi", "CPIAUCSL"], ["us_pce", "PCEPI"]]) {
     const r = await fr(id); const i = r.length - 1;
-    if (i > 13) out[k] = { period: r[i][0].slice(0, 7), actual: c97N(yoy(r, i), 1) + "% a year", prevPeriod: r[i - 1][0].slice(0, 7), previous: c97N(yoy(r, i - 1), 1) + "% a year", how: "Year-on-year change in the index (FRED " + id + ")" };
+    if (!(i > 13)) continue;
+    if (k === "us_cpi") {
+      const core = await fr("CPILFESL");
+      const nsa = await fr("CPIAUCNS");
+      const api = typeof globalThis !== "undefined" && globalThis.c103;
+      const line = api && typeof api.c103CalendarCpi === "function" ? api.c103CalendarCpi(r, core, nsa) : null;
+      if (line) out[k] = line;
+      continue;
+    }
+    const change = yoy(r, i), prev = i > 0 ? yoy(r, i - 1) : null;
+    const missing = "Year-on-year not published: the index a year earlier is missing";
+    out[k] = { period: r[i][0].slice(0, 7), actual: change == null ? missing : c97N(change, 1) + "% a year", prevPeriod: r[i - 1][0].slice(0, 7), previous: prev == null ? missing : c97N(prev, 1) + "% a year", how: "Year-on-year change against the same month a year earlier (FRED " + id + "). A missing month is not filled from a neighbour." };
   }
   const g = await fr("A191RL1Q225SBEA");
   if (g.length > 1) { const i = g.length - 1; out.us_gdp = { period: g[i][0].slice(0, 7), quarter: true, actual: c97N(g[i][1], 1) + "% annualised", prevPeriod: g[i - 1][0].slice(0, 7), previous: c97N(g[i - 1][1], 1) + "% annualised", how: "Real GDP growth, seasonally adjusted annual rate (FRED A191RL1Q225SBEA)" }; }

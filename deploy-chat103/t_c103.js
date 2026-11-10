@@ -300,6 +300,35 @@ test("October 2025 is an empty trend slot and November does not invent a month c
   });
 });
 
+test("a missing CPI base month is null rather than the neighbouring month", () => {
+  const rows = [];
+  for (let y = 2025; y <= 2026; y++) {
+    for (let m = 1; m <= 12; m++) {
+      if (y === 2025 && m < 8) continue;
+      if (y === 2026 && m > 10) continue;
+      if (y === 2025 && m === 10) continue;
+      rows.push([y + "-" + String(m).padStart(2, "0") + "-01", 300 + rows.length]);
+    }
+  }
+  const last = rows.length - 1;
+  assert.equal(rows[last][0].slice(0, 7), "2026-10");
+  assert.equal(lib.c103CalendarChange(rows, last, 12), null);
+  assert.notEqual(rows[last - 12][0].slice(0, 7), "2025-10");
+  assert.equal(Number.isFinite((rows[last][1] / rows[last - 12][1] - 1) * 100), true);
+  const exact = [["2025-09-01", 100], ["2025-10-01", 200], ["2026-09-01", 110], ["2026-10-01", 150]];
+  assert.equal(lib.c103CalendarChange(exact, exact.length - 1, 12), (150 / 200 - 1) * 100);
+  const headline = [["2026-09-01", 336.298], ["2026-10-01", 337.643]];
+  const core = [["2026-09-01", 338.896], ["2026-10-01", 339.913]];
+  const nsa = [["2025-09-01", 324.8], ["2025-11-01", 326], ["2026-09-01", 336.94], ["2026-10-01", 338]];
+  const line = lib.c103CalendarCpi(headline, core, nsa);
+  assert.equal(line.period, "2026-10");
+  assert.equal(line.prevPeriod, "2026-09");
+  assert.equal(line.actual, "+0.4% on the month (core +0.3%); year-on-year not published by BLS (no October 2025 data)");
+  assert.equal(line.previous, "3.7% a year");
+  assert.match(line.how, /Source: U\.S\. Bureau of Labor Statistics/);
+  assert.equal("Oct 2026: " + line.actual, "Oct 2026: +0.4% on the month (core +0.3%); year-on-year not published by BLS (no October 2025 data)");
+});
+
 test("contribution is the weight times the category change", () => {
   assert.equal(lib.c103Contribution(35.323, 0.4), 35.323 * 0.4 / 100);
   assert.equal(lib.c103Contribution(13.507, 0), 0);
@@ -554,7 +583,8 @@ test("chat103d replaces only the CPI block and leaves the r6c last write in plac
   const root = fs.mkdtempSync("/tmp/c103-up-");
   const block = fs.readFileSync(path.join(dir, "../deploy-chat102/server_block_c102.js"), "utf8");
   const tail = "// chat102r6 market-reference cache.\nr6();\n// chat102r6b reader-facing scrub.\nr6b();\n// chat102r6c last-write scrub.\nproto.end = end;\nconsole.log(\"[c102r6c] scrub attached\");\n";
-  const server = "const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)\n" + block + "// chat103 cpi day. old\nold();\n" + tail;
+  const cal = "  const yoy = (rows, i) => i >= 12 ? (rows[i][1] / rows[i - 12][1] - 1) * 100 : null;\n  for (const [k, id] of [[\"us_cpi\", \"CPIAUCSL\"], [\"us_pce\", \"PCEPI\"]]) {\n    const r = await fr(id); const i = r.length - 1;\n    if (i > 13) out[k] = { period: r[i][0].slice(0, 7), actual: c97N(yoy(r, i), 1) + \"% a year\", prevPeriod: r[i - 1][0].slice(0, 7), previous: c97N(yoy(r, i - 1), 1) + \"% a year\", how: \"Year-on-year change in the index (FRED \" + id + \")\" };\n  }\n";
+  const server = "const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)\n" + cal + block + "// chat103 cpi day. old\nold();\n" + tail;
   const app = "staged app bytes\n";
   const index = '<script src="/app.js?v=chat103c"></script>\n';
   fs.writeFileSync(path.join(root, "server.js"), server);
@@ -564,12 +594,14 @@ test("chat103d replaces only the CPI block and leaves the r6c last write in plac
   assert.equal(run.status, 0, run.stderr);
   const next = fs.readFileSync(path.join(root, "server.js"), "utf8");
   const cut = server.indexOf("\n// chat103 cpi day");
-  assert.equal(next.slice(0, cut + 1), server.slice(0, cut + 1));
+  const marker = "// chat102 terminal. Built from lib_c102.js and client_c102.js. Edit those, then run node build_block.js.";
+  assert.equal(next.includes("rows[i - 12]"), false);
+  assert.match(next, /c103CalendarCpi/);
+  assert.equal(next.slice(next.indexOf(marker), next.indexOf("\n// chat103 cpi day") + 1), server.slice(server.indexOf(marker), cut + 1));
   assert.equal(next.slice(next.indexOf("\n// chat102r6 market-reference cache.")), "\n" + tail);
   assert.equal(next.slice(next.indexOf("\n// chat102r6c last-write scrub.")), "\n" + tail.slice(tail.indexOf("// chat102r6c")));
   assert.equal(next.split("proto.end = end").length, server.split("proto.end = end").length);
   assert.match(next.slice(cut, next.indexOf("\n// chat102r6 market-reference cache.")), /Year-on-year not published:/);
-  const marker = "// chat102 terminal. Built from lib_c102.js and client_c102.js. Edit those, then run node build_block.js.";
   const kept = next.slice(next.indexOf(marker), next.indexOf("\n// chat103 cpi day") + 1);
   assert.equal(require("crypto").createHash("sha256").update(kept).digest("hex"), "099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054");
   assert.equal(fs.readFileSync(path.join(root, "app.js"), "utf8"), app);
@@ -580,7 +612,8 @@ test("the CPI splice keeps a chat104 block that sits outside it", () => {
   const root = fs.mkdtempSync("/tmp/c103-chat104-");
   const block = fs.readFileSync(path.join(dir, "../deploy-chat102/server_block_c102.js"), "utf8");
   const outside = "// chat104 rename.\nchat104();\n// chat102r6c last-write scrub.\nproto.end = end;\nconsole.log(\"[c102r6c] scrub attached\");\n";
-  const server = "const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)\n" + block + "// chat103 cpi day. old\nold();\n" + outside;
+  const cal = "  const yoy = (rows, i) => i >= 12 ? (rows[i][1] / rows[i - 12][1] - 1) * 100 : null;\n  for (const [k, id] of [[\"us_cpi\", \"CPIAUCSL\"], [\"us_pce\", \"PCEPI\"]]) {\n    const r = await fr(id); const i = r.length - 1;\n    if (i > 13) out[k] = { period: r[i][0].slice(0, 7), actual: c97N(yoy(r, i), 1) + \"% a year\", prevPeriod: r[i - 1][0].slice(0, 7), previous: c97N(yoy(r, i - 1), 1) + \"% a year\", how: \"Year-on-year change in the index (FRED \" + id + \")\" };\n  }\n";
+  const server = "const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)\n" + cal + block + "// chat103 cpi day. old\nold();\n" + outside;
   const app = "staged app bytes\n";
   const index = "<html>chat104</html>\n";
   fs.writeFileSync(path.join(root, "server.js"), server);
@@ -590,7 +623,9 @@ test("the CPI splice keeps a chat104 block that sits outside it", () => {
   assert.equal(run.status, 0, run.stderr);
   const next = fs.readFileSync(path.join(root, "server.js"), "utf8");
   const cut = server.indexOf("\n// chat103 cpi day");
-  assert.equal(next.slice(0, cut + 1), server.slice(0, cut + 1));
+  const marker = "// chat102 terminal. Built from lib_c102.js and client_c102.js. Edit those, then run node build_block.js.";
+  assert.equal(next.includes("rows[i - 12]"), false);
+  assert.equal(next.slice(next.indexOf(marker), next.indexOf("\n// chat103 cpi day") + 1), server.slice(server.indexOf(marker), cut + 1));
   assert.equal(next.slice(next.indexOf("\n// chat104 rename.")), "\n" + outside);
   assert.equal(next.slice(next.indexOf("\n// chat102r6c last-write scrub.")), "\n" + outside.slice(outside.indexOf("// chat102r6c")));
   assert.equal(fs.readFileSync(path.join(root, "app.js"), "utf8"), app);
