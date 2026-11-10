@@ -349,7 +349,7 @@ test("deploy dry-run refuses a mismatched root and writes nothing", () => {
   assert.equal(fs.readdirSync(root).some((name) => name.includes("bak-chat103")), false);
   const spec = fs.readFileSync(path.join(dir, "deploy.sh"), "utf8");
   assert.match(spec, /099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054/);
-  assert.match(spec, /BASE_SERVER_MD5=67a9c7972e1d8880b78d38056ffa876f/);
+  assert.match(spec, /BASE_SERVER_MD5=16044e0cce0ff8728c4c38e3df96e4a7/);
   assert.match(spec, /BASE_APP_MD5=93644cb45fc3884e7068bf9a902d73e3/);
   assert.match(spec, /BASE_INDEX_MD5=338615e7ece511104855785b67e9c10a/);
 });
@@ -677,6 +677,114 @@ test("a missing second batch is requested and the first batch's month stays", ()
   const kept = lib.c103Compose({ series: { ok: false }, previousSeries: series, previousEvents: [release], icsOk: false, htmlOk: false, hourly: [], daily: [] }, at);
   assert.equal(kept.latest.period, "2026-10");
   assert.equal(typeof kept.latest.headline.saIndex, "number");
+});
+
+test("a null year figure is stored as NULL and retried after a failed release row", async () => {
+  assert.equal(lib.c103SqlNum(""), null);
+  assert.equal(lib.c103SqlNum(undefined), null);
+  assert.equal(lib.c103SqlNum(NaN), null);
+  assert.equal(lib.c103SqlNum(0.4), 0.4);
+  const seen = [];
+  let fail = true;
+  const sql = async () => [];
+  sql.query = async (text, params) => {
+    if (String(text).includes("headline_yoy")) {
+      seen.push(params);
+      if (fail) {
+        fail = false;
+        throw new Error('invalid input syntax for type double precision: ""');
+      }
+    }
+    return [{ data: [] }];
+  };
+  const model = {
+    seriesFresh: true,
+    latest: {
+      period: "2026-10",
+      periodLabel: "October 2026",
+      fetchedAt: "2026-11-10T17:10:00.000Z",
+      headline: { saIndex: 337.643, momRounded: 0.4, yoyRounded: "" },
+      core: { saIndex: 339.9, momRounded: 0.3, yoyRounded: "" }
+    },
+    previousSeries: { CUSR0000SA0: [{ year: 2026, month: 10, value: 337.643 }, { year: 2026, month: 9, value: 336.298 }] }
+  };
+  const lines = [];
+  const log = console.log;
+  console.log = (...args) => { lines.push(args.join(" ")); };
+  try {
+    await lib.c103Persist({ sql: sql, knownSeries: {} }, model);
+    assert.equal(model.releaseRowPending, true);
+    assert.match(lines.join("\n"), /\[c103\] persist fail 2026-10/);
+    assert.equal(seen[0][5], null);
+    assert.equal(seen[0][7], null);
+    await lib.c103Persist({ sql: sql, knownSeries: model.previousSeries }, model);
+    assert.equal(model.releaseRowPending, false);
+    assert.match(lines.join("\n"), /\[c103\] persist ok 2026-10/);
+  } finally { console.log = log; }
+});
+
+test("the second batch logs its own BLS line", async () => {
+  const at = Date.parse("2026-11-10T17:15:00.000Z");
+  const release = lib.c103ReleaseInstant(2026, 11, 10, 8, 30);
+  release.source = "bls-ics";
+  const series = {};
+  lib.C103_CATALOG.forEach((row, index) => {
+    const points = [{ year: 2026, month: 9, value: 100 }, { year: 2026, month: 8, value: 99 }];
+    if (index < 12) points.push({ year: 2026, month: 10, value: 101 });
+    series[row[2]] = points;
+    series[row[3]] = points.slice();
+  });
+  const lines = [];
+  const log = console.log;
+  console.log = (...args) => { lines.push(args.join(" ")); };
+  try {
+    await lib.c103Refresh({
+      timeoutMs: 1000,
+      blsBudget: { dayKey: "2026-11-10", calls: 3, lastBlsAt: at - 6 * 60 * 1000 },
+      fetch: async (url) => {
+        if (String(url).includes("api.bls.gov")) {
+          return { ok: true, status: 200, text: async () => JSON.stringify({ status: "REQUEST_SUCCEEDED", Results: { series: [
+            { seriesID: "CUSR0000SAR", data: [{ year: "2026", period: "M10", value: "110" }, { year: "2026", period: "M09", value: "109" }] }
+          ] } }) };
+        }
+        return { ok: false, status: 500, text: async () => "" };
+      }
+    }, at, {
+      latest: { period: "2026-10", headline: { saIndex: 101, momRounded: 0.4, yoyRounded: null } },
+      previousSeries: series,
+      previousEvents: [release],
+      feedTimes: { schedule: "2026-11-10T12:00:00.000Z", bls: "2026-11-10T17:10:00.000Z" },
+      blsBudget: { dayKey: "2026-11-10", calls: 3, lastBlsAt: at - 6 * 60 * 1000 }
+    });
+  } finally { console.log = log; }
+  assert.ok(lines.some((line) => /\[c103\] BLS ok reason=second-batch offset=25 /.test(line)), lines.join("\n"));
+});
+
+test("the stored-reading time is the fetch time of the month on screen, in UK time", async () => {
+  const note = lib.c103CarryNote("2026-11-10T17:10:00.000Z");
+  assert.match(note, /Tue 10 Nov, 17:10 UK/);
+  assert.equal(/\d{4}-\d{2}-\d{2}T/.test(note), false);
+  const store = new Map();
+  store.set("m", { ok: true, at: Date.parse("2026-11-10T17:10:00.000Z"), body: { latest: { period: "2026-10", headline: { saIndex: 1 } }, countdown: { releaseAtUtc: "2026-12-10T13:30:00.000Z" } } });
+  const stale = await lib.c103Memo(store, "m", 1000, async () => ({}), () => ({}));
+  assert.match(stale.cacheNote, /10 Nov, 17:10 UK/);
+  assert.equal(/\d{4}-\d{2}-\d{2}T/.test(stale.cacheNote), false);
+  const release = lib.c103ReleaseInstant(2026, 11, 10, 8, 30);
+  release.source = "bls-ics";
+  const sql = async () => [];
+  sql.query = async (text) => {
+    if (text.includes("__schedule")) return [{ data: [{ payload: { events: [release], fetchedAt: "2026-11-10T12:00:00.000Z" }, bls_fetched_at: "2026-11-10T16:34:41.192Z" }] }];
+    if (text.includes("MAX(fetched_at)")) return [{ data: [{ period: "2026-10", series_id: "CUSR0000SA0", fetched_at: "2026-11-10T17:10:00.000Z" }] }];
+    if (text.includes("cpi_series_values") && !text.includes("MAX(fetched_at)")) return [{ data: [{ series_id: "CUSR0000SA0", period: "2026-10", value: 337.643 }, { series_id: "CUSR0000SA0", period: "2026-09", value: 336.298 }] }];
+    if (text.includes("^[0-9]{4}")) return [{ data: [{ period: "2026-09", bls_fetched_at: "2026-11-10T16:34:41.192Z" }] }];
+    return [{ data: [] }];
+  };
+  const loaded = await lib.c103LoadStored({ sql: sql });
+  assert.equal(loaded.latest.period, "2026-10");
+  assert.equal(loaded.latest.fetchedAt, "2026-11-10T17:10:00.000Z");
+  assert.equal(loaded.releaseRowPending, true);
+  assert.match(lib.c103CarryNote(loaded.latest.fetchedAt), /17:10 UK/);
+  assert.equal(/16:34/.test(lib.c103CarryNote(loaded.latest.fetchedAt)), false);
 });
 
 test("only changed series values are written", () => {

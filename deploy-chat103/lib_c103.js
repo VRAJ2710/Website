@@ -735,8 +735,27 @@ function c103SeriesGood(points) {
   return Array.isArray(points) && points.some((p) => p && typeof p.value === "number" && isFinite(p.value));
 }
 
+function c103SqlNum(value) {
+  if (typeof value === "number") return isFinite(value) ? value : null;
+  if (value == null) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const n = Number(text);
+  return isFinite(n) ? n : null;
+}
+
+function c103NoteWhen(value) {
+  const ms = typeof value === "number" ? value : Date.parse(value);
+  if (!isFinite(ms)) return "";
+  const p = c103Parts(ms, "Europe/London");
+  const weekday = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short" }).format(new Date(ms));
+  const mon = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][p.month - 1];
+  return weekday + " " + p.day + " " + mon + ", " + c103Pad(p.hour) + ":" + c103Pad(p.minute) + " UK";
+}
+
 function c103CarryNote(when) {
-  return "Stored reading from " + (when || "the last good response") + ". It was not refreshed. It is not a new print.";
+  const shown = c103NoteWhen(when);
+  return "Stored reading from " + (shown || "the last good response") + ". It was not refreshed. It is not a new print.";
 }
 
 function c103NewestPeriod(points) {
@@ -944,7 +963,7 @@ function c103WithCache(body, at, state) {
   copy.cachedAt = new Date(at).toISOString();
   if (state === "stale") {
     const age = Math.max(0, Math.round((Date.now() - at) / 1000));
-    copy.cacheNote = "Stored release from " + copy.cachedAt + ", " + age + " seconds ago. It was not refreshed for this response. It is not a new print.";
+    copy.cacheNote = "Stored release from " + (c103NoteWhen(copy.cachedAt) || "the last response") + ", " + age + " seconds ago. It was not refreshed for this response. It is not a new print.";
   } else delete copy.cacheNote;
   return copy;
 }
@@ -1248,16 +1267,18 @@ async function c103FetchAll(deps, nowMs) {
   const series = {};
   let seriesOk = false;
   let blsMade = 0;
-  blsParts.forEach((part) => {
+  blsParts.forEach((part, i) => {
+    const offset = (plan.offset || 0) + i * (plan.batch || 0);
+    const where = "reason=" + (plan.reason || "call") + " offset=" + offset;
     if (!part.ok) {
-      console.log("[c103] BLS fail " + (part.error || "failed"));
+      console.log("[c103] BLS fail " + where + " " + (part.error || "failed"));
       return;
     }
     let json = null;
     try { json = JSON.parse(part.value); } catch (e) { json = null; }
     const parsed = c103ParseBls(json);
     if (!parsed.ok) {
-      console.log("[c103] BLS fail status");
+      console.log("[c103] BLS fail " + where + " status");
       return;
     }
     blsMade += 1;
@@ -1268,8 +1289,9 @@ async function c103FetchAll(deps, nowMs) {
       const top = c103NewestPeriod(parsed.series[id]);
       if (top > newest) newest = top;
     });
-    console.log("[c103] BLS ok series=" + Object.keys(parsed.series).length + " newest=" + (newest || "none"));
+    console.log("[c103] BLS ok " + where + " series=" + Object.keys(parsed.series).length + " newest=" + (newest || "none"));
   });
+  if (riDue) console.log("[c103] weights " + (ri.ok ? "ok month=" + ((ri.value && c103ParseRi(ri.value).weightMonth) || "none") : "fail " + (ri.error || "failed")));
   const blsBudget = c103BlsCharge(plan, blsMade, nowMs);
   let hourlyBars = [];
   let dailyBars = [];
@@ -1530,6 +1552,7 @@ async function c103LoadStored(deps) {
   const budgetRows = await one("SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS data FROM (SELECT payload FROM cpi_releases WHERE period = '__bls_budget') t");
   const scheduleRows = await one("SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS data FROM (SELECT payload, bls_fetched_at FROM cpi_releases WHERE period = '__schedule') t");
   const figureRows = await one("SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS data FROM (SELECT period, bls_fetched_at FROM cpi_releases WHERE period ~ '^[0-9]{4}-[0-9]{2}$') t");
+  const seriesAtRows = await one("SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS data FROM (SELECT period, series_id, MAX(fetched_at) AS fetched_at FROM cpi_series_values GROUP BY period, series_id) t");
   const series = {};
   seriesRows.forEach((row) => {
     const m = /^(\d{4})-(\d{2})$/.exec(row.period || "");
@@ -1556,9 +1579,17 @@ async function c103LoadStored(deps) {
   const figureAt = (figureRows || []).reduce((best, row) => {
     if (!row || !row.period || row.period <= best.period) return best;
     return { period: row.period, at: row.bls_fetched_at || "" };
-  }, { period: "", at: "" }).at;
+  }, { period: "", at: "" });
+  let newestSeries = "";
+  Object.keys(series).forEach((id) => {
+    const top = c103NewestPeriod(series[id]);
+    if (top > newestSeries) newestSeries = top;
+  });
+  const shownAt = (seriesAtRows || []).filter((row) => row && row.period === newestSeries);
+  const headlineAt = shownAt.find((row) => row.series_id === "CUSR0000SA0");
+  const seriesAt = (headlineAt && headlineAt.fetched_at) || (shownAt[0] && shownAt[0].fetched_at) || "";
   const scheduleAt = (schedule && schedule.fetchedAt) || (scheduleRows[0] && scheduleRows[0].bls_fetched_at) || "";
-  const savedAt = figureAt || "";
+  const savedAt = seriesAt || figureAt.at || "";
   if (!Object.keys(series).length && !storedGold.length && !savedEvents.length) return null;
   const model = c103Compose({
     series: { ok: Object.keys(series).length > 0, series: series },
@@ -1575,6 +1606,7 @@ async function c103LoadStored(deps) {
   }, savedAt ? Date.parse(savedAt) : Date.now());
   model.storedGold = storedGold;
   model.blsBudget = budget;
+  model.releaseRowPending = !!(newestSeries && !(figureRows || []).some((row) => row && row.period === newestSeries));
   if (savedAt && model.latest) model.latest.fetchedAt = savedAt;
   model.statusNote = model.latest ? "Stored release loaded from the database." : "not loaded yet";
   return model;
@@ -1613,7 +1645,7 @@ function c103Install() {
     deps.knownSeries = prev && prev.body && prev.body.previousSeries || {};
     deps.knownGold = prev && prev.body && prev.body.storedGold || [];
     const body = await c103Refresh(deps, Date.now(), prev && prev.body);
-    c103Persist(deps, body).catch((err) => { console.log("[c103] persist fail " + (err && err.message || err)); });
+    await c103Persist(deps, body);
     return body;
   }
   function read() {
@@ -1784,19 +1816,27 @@ async function c103Persist(deps, model) {
   }
   const changed = c103ChangedSeries(deps.knownSeries || {}, model.previousSeries || {});
   const newestStored = c103NewestPeriod([].concat(...Object.keys(deps.knownSeries || {}).map((id) => deps.knownSeries[id] || [])));
-  const fresh = !!(model.seriesFresh && model.latest && model.latest.headline && typeof model.latest.headline.saIndex === "number" && (!newestStored || model.latest.period >= newestStored));
-  if (changed.length && typeof deps.sql.query === "function") {
-    await deps.sql.query(
-      "INSERT INTO cpi_series_values (series_id, period, value) SELECT series_id, period, value FROM jsonb_to_recordset($1::jsonb) AS x(series_id text, period text, value double precision) ON CONFLICT (series_id, period) DO UPDATE SET value = EXCLUDED.value, fetched_at = NOW() WHERE cpi_series_values.value IS DISTINCT FROM EXCLUDED.value",
-      [JSON.stringify(changed)]
-    );
-  }
-  if (fresh && typeof deps.sql.query === "function") {
-    const latest = model.latest;
-    await deps.sql.query(
-      "INSERT INTO cpi_releases (period, release_at, release_source, reference_label, headline_mom, headline_yoy, core_mom, core_yoy, bls_fetched_at, payload) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb) ON CONFLICT (period) DO UPDATE SET headline_mom = EXCLUDED.headline_mom, headline_yoy = EXCLUDED.headline_yoy, core_mom = EXCLUDED.core_mom, core_yoy = EXCLUDED.core_yoy, bls_fetched_at = EXCLUDED.bls_fetched_at, fetched_at = NOW()",
-      [latest.period, latest.releaseAtUtc || null, latest.releaseSource || "stored", latest.periodLabel, latest.headline.momRounded, latest.headline.yoyRounded, latest.core ? latest.core.momRounded : null, latest.core ? latest.core.yoyRounded : null, latest.fetchedAt, JSON.stringify({ period: latest.period })]
-    );
+  const latest = model.latest;
+  const month = latest && latest.period || "none";
+  const wantRelease = !!(latest && latest.headline && typeof latest.headline.saIndex === "number" && (model.seriesFresh || model.releaseRowPending) && (!newestStored || latest.period >= newestStored));
+  try {
+    if (changed.length && typeof deps.sql.query === "function") {
+      await deps.sql.query(
+        "INSERT INTO cpi_series_values (series_id, period, value) SELECT series_id, period, value FROM jsonb_to_recordset($1::jsonb) AS x(series_id text, period text, value double precision) ON CONFLICT (series_id, period) DO UPDATE SET value = EXCLUDED.value, fetched_at = NOW() WHERE cpi_series_values.value IS DISTINCT FROM EXCLUDED.value",
+        [JSON.stringify(changed.map((row) => ({ series_id: row.series_id, period: row.period, value: c103SqlNum(row.value) })).filter((row) => row.value != null))]
+      );
+    }
+    if (wantRelease && typeof deps.sql.query === "function") {
+      await deps.sql.query(
+        "INSERT INTO cpi_releases (period, release_at, release_source, reference_label, headline_mom, headline_yoy, core_mom, core_yoy, bls_fetched_at, payload) VALUES ($1, $2, $3, $4, NULLIF($5::text, '')::double precision, NULLIF($6::text, '')::double precision, NULLIF($7::text, '')::double precision, NULLIF($8::text, '')::double precision, $9, $10::jsonb) ON CONFLICT (period) DO UPDATE SET headline_mom = EXCLUDED.headline_mom, headline_yoy = EXCLUDED.headline_yoy, core_mom = EXCLUDED.core_mom, core_yoy = EXCLUDED.core_yoy, bls_fetched_at = EXCLUDED.bls_fetched_at, fetched_at = NOW()",
+        [latest.period, latest.releaseAtUtc || null, latest.releaseSource || "stored", latest.periodLabel || null, c103SqlNum(latest.headline.momRounded), c103SqlNum(latest.headline.yoyRounded), c103SqlNum(latest.core && latest.core.momRounded), c103SqlNum(latest.core && latest.core.yoyRounded), latest.fetchedAt && isFinite(Date.parse(latest.fetchedAt)) ? latest.fetchedAt : null, JSON.stringify({ period: latest.period })]
+      );
+      model.releaseRowPending = false;
+      console.log("[c103] persist ok " + month);
+    }
+  } catch (err) {
+    if (wantRelease) model.releaseRowPending = true;
+    console.log("[c103] persist fail " + month + " " + (err && err.message || err));
   }
   const goldRows = c103ChangedGold(deps.knownGold || [], model.gold || []);
   if (goldRows.length && typeof deps.sql.query === "function") {
@@ -1805,9 +1845,9 @@ async function c103Persist(deps, model) {
       [JSON.stringify(goldRows.map((g) => ({
         release_at: g.releaseAtUtc,
         reference_period: g.referencePeriod || null,
-        plus_1h_pct: g.plus1hPct,
-        plus_1d_pct: g.plus1dPct,
-        plus_5d_pct: g.plus5dPct,
+        plus_1h_pct: c103SqlNum(g.plus1hPct),
+        plus_1d_pct: c103SqlNum(g.plus1dPct),
+        plus_5d_pct: c103SqlNum(g.plus5dPct),
         hourly_available: !!g.hourlyAvailable,
         recorded: !!g.recorded,
         hour_label: g.hourLabel || null,
@@ -1865,7 +1905,7 @@ const api = {
   c103ParseBls, c103ParseRi, c103BuildMonths, c103ParseYahoo, c103GoldReaction, c103ApplySnapshots,
   c103SnapshotDecision, c103Compose, c103Cold, c103Memo, c103Respond, c103IsPremium, c103DdlAudit,
   c103InsertNav, c103Paths, c103RawGet, c103Refresh, c103FetchAll, c103CacheControl, c103Install,
-  c103CarryNote, c103SeriesGood, c103PickSeries, c103BlsPlan, c103BlsCharge, c103BlsSeriesCap,
+  c103CarryNote, c103NoteWhen, c103SqlNum, c103Persist, c103SeriesGood, c103PickSeries, c103BlsPlan, c103BlsCharge, c103BlsSeriesCap,
   c103CacheMs, c103ForNow, c103DismissGate, c103RecordTick, c103ChangedSeries, c103ParseArchive,
   c103WeightsMatch, c103MergeGold, c103LoadStored,
   c103WorthStoring, c103GoldUrl
