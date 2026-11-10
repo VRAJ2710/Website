@@ -6,7 +6,7 @@
 set -u
 # Payload commit is the commit that already contains these blobs.
 # Do not point this at a commit that only changes deploy.sh.
-PAYLOAD_COMMIT=fa6d68ff895278b011bd27496ff677e5637a5625
+PAYLOAD_COMMIT=5a20274a6eb3328e67585fab5469195953084aef
 BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/${PAYLOAD_COMMIT}/deploy-chat103"
 
 # Staged root after chat103b, chat102r6, r6b and r6c (cache tag chat103c).
