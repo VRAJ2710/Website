@@ -91,6 +91,8 @@ test("premium fields are absent from the free response", () => {
   assert.equal(JSON.stringify(free).includes("4242.5"), false);
   assert.equal(JSON.stringify(free).includes("Shelter"), false);
   assert.equal(free.latest.headline.momRounded, 0.6);
+  assert.equal(/CUSR|CUUR|momSeries|yoySeries/.test(JSON.stringify(free)), false);
+  assert.equal(/CUSR|CUUR|momSeries|yoySeries/.test(JSON.stringify(premium)), false);
   assert.equal(premium.access, "premium");
   assert.equal(premium.categories[0].contribution, 4242.5);
   assert.equal(premium.goldLabel, "Gold futures (COMEX, front month), Yahoo Finance delayed");
@@ -287,9 +289,34 @@ test("deploy dry-run refuses a mismatched root and writes nothing", () => {
   assert.equal(fs.readdirSync(root).some((name) => name.includes("bak-chat103")), false);
   const spec = fs.readFileSync(path.join(dir, "deploy.sh"), "utf8");
   assert.match(spec, /099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054/);
-  assert.match(spec, /b84058f6da16ad022640b06c9cdda72d/);
-  assert.match(spec, /b3e02b0c6e403133843a96adf45d219c/);
-  assert.match(spec, /R5_SERVER_MD5=0284a3b26acaa055ed4699b1c36b6ddc/);
+  assert.match(spec, /BASE_SERVER_MD5=6130d1e111d58c619926ff924f164f16/);
+  assert.match(spec, /BASE_APP_MD5=b05af1cd11ff32bdd4b1ff4859e8b23f/);
+  assert.match(spec, /BASE_INDEX_MD5=2603bdcb7f0f8b7010fff96da58fd009/);
+});
+
+test("the update patch keeps the chat102 block and replaces chat103", () => {
+  const root = fs.mkdtempSync("/tmp/c103-up-");
+  const block = fs.readFileSync(path.join(dir, "../deploy-chat102/server_block_c102.js"), "utf8");
+  const server = "const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)\n" + block + "// chat103 cpi day. old\nold();\n";
+  const app = 'if (c102Path === "/terminal" || c102Path === "/terminal/" || c102Path === "/cpi" || c102Path === "/cpi/") return;\n// chat103: keep /cpi/ old\nold();\n';
+  const index = '<script src="/app.js?v=chat103"></script>\n';
+  fs.writeFileSync(path.join(root, "server.js"), server);
+  fs.writeFileSync(path.join(root, "app.js"), app);
+  fs.writeFileSync(path.join(root, "index.html"), index);
+  const run = spawnSync("python3", [path.join(dir, "patch_c103.py"), path.join(root, "server.js"), path.join(root, "app.js"), path.join(root, "index.html"), path.join(dir, "server_block_c103.js"), path.join(dir, "app_block_c103.js")], { encoding: "utf8" });
+  assert.equal(run.status, 0, run.stderr);
+  const next = fs.readFileSync(path.join(root, "server.js"), "utf8");
+  const cut = server.indexOf("\n// chat103 cpi day");
+  assert.equal(next.slice(0, cut + 1), server.slice(0, cut + 1));
+  const marker = "// chat102 terminal. Built from lib_c102.js and client_c102.js. Edit those, then run node build_block.js.";
+  const tail = next.slice(next.indexOf(marker), next.indexOf("\n// chat103 cpi day") + 1);
+  const hash = require("crypto").createHash("sha256").update(tail).digest("hex");
+  assert.equal(hash, "099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054");
+  assert.match(next, /c103-navfit|flex-wrap:wrap/);
+  const nextApp = fs.readFileSync(path.join(root, "app.js"), "utf8");
+  assert.equal(nextApp.startsWith(app.slice(0, app.indexOf("\n// chat103: keep /cpi/") + 1)), true);
+  assert.match(nextApp, /c103-navfit/);
+  assert.equal(fs.readFileSync(path.join(root, "index.html"), "utf8").includes('/app.js?v=chat103b"'), true);
 });
 
 test("labelled fallback is used only when the schedule does not already have that date", () => {
@@ -437,15 +464,21 @@ test("gold day moves use the prior session and the hour label is not a raw times
   const html = ui.c103ui.render({
     access: "premium",
     source: "Source: U.S. Bureau of Labor Statistics",
+    countdown: { releaseAtUtc: "2026-12-10T13:30:00.000Z", releaseUk: "Thu, 10 December 2026 at 13:30 GMT", zoneName: "GMT", days: 30, hours: 0, minutes: 0, what: "Time left until the next US CPI news release.", why: "The clock is in UK time.", referenceLabel: "December 2026", source: "bls-ics" },
     latest: { periodLabel: "September 2026", headline: { momRounded: 0.6, yoyRounded: 3.7, saIndex: 1, nsaIndex: 1, momSeries: "CUSR0000SA0", yoySeries: "CUUR0000SA0", why: "Broad index.", source: "Source: U.S. Bureau of Labor Statistics" }, core: { momRounded: 0.3, yoyRounded: 2.6, saIndex: 1, nsaIndex: 1, why: "Slower part.", source: "Source: U.S. Bureau of Labor Statistics" } },
     categories: [{ name: "Shelter", why: "Largest weight.", momRounded: 0.4, yoyRounded: 3.2, weight: 35.323, weightMonth: "Aug. 2026", contribution: 0.14, contributionNote: "", momSeries: "CUSR0000SAH1" }],
     gold: [row],
     relativeImportance: { citation: "https://www.bls.gov/news.release/cpi.t01.htm" }
   });
   assert.match(html, /BLS data/);
-  assert.equal(/>CUSR0000SA0</.test(html), false);
+  assert.equal(/CUSR0000|CUUR0000/.test(html), false);
   assert.match(html, /prior session close/);
-  assert.match(html, /href="https:\/\/data\.bls\.gov\/timeseries\//);
+  assert.match(html, /href="https:\/\/www\.bls\.gov\/cpi\/"/);
+  assert.equal(/GMT \(GMT\)/.test(html), false);
+  assert.equal((html.match(/13:30 GMT/g) || []).length, 1);
+  const summer = ui.c103ui.render({ countdown: { releaseAtUtc: "2026-07-14T12:30:00.000Z", releaseUk: lib.c103FormatUk(Date.parse("2026-07-14T12:30:00.000Z")), zoneName: "GMT", days: 1, hours: 2, minutes: 3, what: "Time left", why: "UK time", referenceLabel: "June 2026", source: "bls-ics" } });
+  assert.match(summer, /13:30 BST/);
+  assert.equal(/BST \(BST\)|GMT \(GMT\)/.test(summer), false);
   assert.match(html, /Core, dashed/);
   assert.equal(html.includes("2026-09-11T"), false);
 });
@@ -639,6 +672,11 @@ test("CPI CSS uses only variables the server pages define", () => {
   assert.ok(css.includes("var(--amber)"));
   assert.equal(css.includes("--gold"), false);
   assert.equal(css.includes("--pos"), false);
+  assert.match(css, /header\.site \.nav\{flex:1 1 0;flex-wrap:wrap/);
+  assert.equal(/header\.site \.nav\{display:none/.test(css), false);
+  const app = fs.readFileSync(path.join(dir, "app_block_c103.js"), "utf8");
+  assert.match(app, /c103-navfit/);
+  assert.match(app, /flex-wrap:wrap/);
 });
 
 test("release-day simulation", async () => {

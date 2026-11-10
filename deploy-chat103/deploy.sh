@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# deploy-chat103: public /cpi/ on the live chat102r5 root.
+# deploy-chat103: replace the staged chat103 block. The chat102r5 bytes in front of it stay.
 # Does NOT start the server, npm, git, or republish. Does not change EXPECT_TAG.
 # Usage: bash deploy.sh [--dry-run] [--dir /path/to/project]
 set -u
@@ -8,19 +8,18 @@ set -u
 PAYLOAD_COMMIT=6830ca58eb0e42c40fe56cd1d552b095360ab18b
 BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/${PAYLOAD_COMMIT}/deploy-chat103"
 
-# chat102r5 root. App and index are the chat102 bytes. The server tail is the r5 block.
+# Staged chat103 dev root (10 Nov 2026), which already contains chat102r5 plus the first chat103 block.
+# The chat102 block itself stays the r5 tail. This installer only replaces the chat103 block after it.
 R5_TAIL_SHA256=099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054
-R5_APP_MD5=b84058f6da16ad022640b06c9cdda72d
-R5_INDEX_MD5=b3e02b0c6e403133843a96adf45d219c
-# Full-file md5 of server.js on the staged chat102r5 dev root (10 Nov 2026).
-# Tail sha256 099d7a7e…, app b84058f6 and index b3e02b0c are unchanged from r4.
-R5_SERVER_MD5=0284a3b26acaa055ed4699b1c36b6ddc
+BASE_APP_MD5=b05af1cd11ff32bdd4b1ff4859e8b23f
+BASE_INDEX_MD5=2603bdcb7f0f8b7010fff96da58fd009
+BASE_SERVER_MD5=6130d1e111d58c619926ff924f164f16
 NEW_L1='const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)'
 MARKER='// chat102 terminal. Built from lib_c102.js and client_c102.js. Edit those, then run node build_block.js.'
 MANIFEST=(
-  "patch_c103.py da78fdbdac04e0a11afff84c58fe2ee558bb9def3ce32234d8cf7c862b21443a"
-  "server_block_c103.js 25d01c56667c2655aec1e9c7437cbbe3a008e52e4c8c0a60a38ca078b4eab6ef"
-  "app_block_c103.js db3d8eefdd446b56bbdb569c2056bfd8d02ae9927a3ad5d5613bb5ee07fd1a82"
+  "patch_c103.py f9b0e59a55530bd0136f2c0d2ffd2303d4f753484f6bfe584be9c19e6d0e08c9"
+  "server_block_c103.js abe1308277cd2e6b67c566bc93c2aee254fa337592c275835addabb4c6015fbc"
+  "app_block_c103.js f8756a033fa0004c1b26ce2638415473a879cb544c17d84b6b99c8134e3eca21"
   "ddl_c103.sql 90e84a3513161531846a52350f815f88c261a7e6540ac42e9b5e888862820794"
 )
 DRY=0; DIR=""
@@ -51,24 +50,28 @@ say "root index.html = $INDEX"
 for f in "$SERVER" "$APP" "$INDEX"; do [ -f "$f" ] || die "missing project-root file $f"; done
 sm=$(md5of "$SERVER"); am=$(md5of "$APP"); im=$(md5of "$INDEX")
 say "root md5: server $sm | app $am | index $im"
-[ "$am" = "$R5_APP_MD5" ] || die "root app.js md5 $am is not the chat102 app $R5_APP_MD5"
-[ "$im" = "$R5_INDEX_MD5" ] || die "root index.html md5 $im is not the chat102 index $R5_INDEX_MD5"
-[ -n "$R5_SERVER_MD5" ] || die "R5_SERVER_MD5 is empty"
-[ "$sm" = "$R5_SERVER_MD5" ] || die "root server.js md5 $sm is not the chat102r5 server $R5_SERVER_MD5"
+[ "$am" = "$BASE_APP_MD5" ] || die "root app.js md5 $am is not the staged chat103 app $BASE_APP_MD5"
+[ "$im" = "$BASE_INDEX_MD5" ] || die "root index.html md5 $im is not the staged chat103 index $BASE_INDEX_MD5"
+[ -n "$BASE_SERVER_MD5" ] || die "BASE_SERVER_MD5 is empty"
+[ "$sm" = "$BASE_SERVER_MD5" ] || die "root server.js md5 $sm is not the staged chat103 server $BASE_SERVER_MD5"
 [ "$(head -n 1 "$SERVER")" = "$NEW_L1" ] || die "project-root server.js line 1 is not the maintenance=false line"
-python3 - "$SERVER" "$MARKER" "$R5_TAIL_SHA256" << 'PY' || die "server.js tail is not the chat102r5 block"
+python3 - "$SERVER" "$MARKER" "$R5_TAIL_SHA256" << 'PY' || die "server.js is not the staged chat103 root"
 import hashlib, pathlib, sys
 server, marker, expect = sys.argv[1:]
 text = pathlib.Path(server).read_text(encoding="utf-8")
 if text.count(marker) != 1:
     sys.exit("project-root server.js does not contain exactly one chat102 block")
-tail = text[text.find(marker):]
+c103 = text.find("\n// chat103 cpi day")
+if c103 < 0 or text.find("\n// chat103 cpi day", c103 + 1) >= 0:
+    sys.exit("chat103 block is missing or not unique")
+start = text.find(marker)
+if start < 0 or start > c103:
+    sys.exit("chat102 block is not in front of chat103")
+tail = text[start:c103 + 1]
 got = hashlib.sha256(tail.encode("utf-8")).hexdigest()
 if got != expect:
-    sys.exit("server.js tail sha256 " + got + " is not the chat102r5 block " + expect)
-if "chat103 cpi day" in text:
-    sys.exit("chat103 is already installed")
-print("chat102r5 tail ok")
+    sys.exit("chat102r5 bytes in front of chat103 hash to " + got + ", not " + expect)
+print("staged chat103 root ok; chat102r5 tail kept")
 PY
 
 W=$(mktemp -d /tmp/deploy-chat103.XXXXXX) || die "mktemp failed"; P="$W/patches"; S="$W/scratch"; mkdir -p "$P" "$S"
@@ -103,28 +106,38 @@ PY
 say "DDL check: CREATE TABLE IF NOT EXISTS of the five new tables only"
 
 cp "$SERVER" "$S/server.js"; cp "$APP" "$S/app.js"; cp "$INDEX" "$S/index.html"
-cp "$S/server.js" "$S/server.js.base"
+cp "$S/server.js" "$S/server.js.base"; cp "$S/app.js" "$S/app.js.base"
 python3 "$P/patch_c103.py" "$S/server.js" "$S/app.js" "$S/index.html" "$P/server_block_c103.js" "$P/app_block_c103.js" || die "patch_c103 failed (project-root files untouched)"
-python3 - "$S" "$MARKER" "$R5_TAIL_SHA256" << 'PY' || die "scratch is not the guarded r5 edit"
+python3 - "$S" "$MARKER" "$R5_TAIL_SHA256" << 'PY' || die "scratch changed the chat102r5 bytes"
 import hashlib, pathlib, sys
 scratch, marker, expect = sys.argv[1:]
 root = pathlib.Path(scratch)
 old = (root/"server.js.base").read_text(encoding="utf-8")
 new = (root/"server.js").read_text(encoding="utf-8")
-idx = old.find(marker)
-tail = old[idx:]
-if hashlib.sha256(tail.encode("utf-8")).hexdigest() != expect:
-    sys.exit("base tail changed before the append")
-if not new.startswith(old[:idx] + tail):
+cut = old.find("\n// chat103 cpi day")
+if cut < 0:
+    sys.exit("base is missing the chat103 block")
+prefix = old[:cut + 1]
+if not new.startswith(prefix):
     sys.exit("chat102r5 bytes were not kept in front of the chat103 block")
-if "chat103 cpi day" not in new[idx+len(tail):]:
-    sys.exit("chat103 block was not appended")
+start = prefix.find(marker)
+tail = prefix[start:]
+if hashlib.sha256(tail.encode("utf-8")).hexdigest() != expect:
+    sys.exit("chat102r5 tail changed")
+if new.find("\n// chat103 cpi day") != cut:
+    sys.exit("chat103 block moved")
+if "chat103 cpi day" not in new[cut:]:
+    sys.exit("replacement chat103 block is missing")
+app_old = (root/"app.js.base").read_text(encoding="utf-8") if (root/"app.js.base").exists() else ""
 app = (root/"app.js").read_text(encoding="utf-8")
 if 'c102Path === "/terminal"' not in app or 'c102Path === "/cpi"' not in app:
     sys.exit("app.js lost the terminal guard or missed /cpi/")
+app_cut = app_old.find("\n// chat103: keep /cpi/")
+if app_cut >= 0 and not app.startswith(app_old[:app_cut + 1]):
+    sys.exit("app.js bytes in front of the chat103 menu block changed")
 idx_html = (root/"index.html").read_text(encoding="utf-8")
-if idx_html.count('/app.js?v=chat103"') != 1 or '/app.js?v=chat102"' in idx_html:
-    sys.exit("index.html is not the one cache-tag swap")
+if idx_html.count('/app.js?v=chat103b"') != 1 or '/app.js?v=chat102"' in idx_html:
+    sys.exit("index.html is not the one cache-tag bump")
 print("r5 prefix kept")
 PY
 node --check "$S/server.js" || die "node --check server.js failed (scratch)"

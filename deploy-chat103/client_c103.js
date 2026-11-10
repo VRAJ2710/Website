@@ -22,9 +22,8 @@
     if (n === 0) return "0.00%";
     return (n > 0 ? "+" : "\u2212") + Math.abs(n).toFixed(2) + "%";
   }
-  function blsLink(id) {
-    if (!id) return "BLS data";
-    return "<a href=\"https://data.bls.gov/timeseries/" + encodeURIComponent(id) + "\">BLS data</a>";
+  function blsLink() {
+    return "<a href=\"https://www.bls.gov/cpi/\">BLS data</a>";
   }
   function linkUrls(text) {
     var parts = String(text || "").split(/(https:\/\/[^\s]+)/);
@@ -43,11 +42,10 @@
     if (!row) return miss("not loaded yet");
     var value = kind === "yoy" ? row.yoyRounded : row.momRounded;
     var index = kind === "yoy" ? row.nsaIndex : row.saIndex;
-    var series = kind === "yoy" ? row.yoySeries : row.momSeries;
     var label = kind === "yoy" ? "Year change, not seasonally adjusted" : "Month change, seasonally adjusted";
     if (typeof value !== "number") return miss("not loaded yet");
     var carried = row.message ? miss(row.message) : "";
-    return "<p class=\"c103-v\">" + esc(pct(value)) + "</p><p>" + esc(label) + ".</p><p class=\"c103-k\">Index " + esc(num(index, 3)) + " \u00b7 " + blsLink(series) + "</p><p class=\"c103-k\">" + esc(row.source || "Source: U.S. Bureau of Labor Statistics") + " \u00b7 " + esc(row.periodLabel || "") + "</p><p>" + esc(row.why || "") + "</p>" + carried;
+    return "<p class=\"c103-v\">" + esc(pct(value)) + "</p><p>" + esc(label) + ".</p><p class=\"c103-k\">Index " + esc(num(index, 3)) + " \u00b7 " + blsLink() + "</p><p class=\"c103-k\">" + esc(row.source || "Source: U.S. Bureau of Labor Statistics") + " \u00b7 " + esc(row.periodLabel || "") + "</p><p>" + esc(row.why || "") + "</p>" + carried;
   }
   function card(title, body) {
     return "<article class=\"c103-card\"><h3>" + esc(title) + "</h3>" + body + "</article>";
@@ -58,7 +56,7 @@
     var src = c.source === "labelled-fallback"
       ? (c.fallbackLabel || "Labelled fallback. This date was not in the cached BLS schedule.")
       : "Schedule: U.S. Bureau of Labor Statistics.";
-    return "<section class=\"c103-count\" aria-labelledby=\"c103-count\"><h2 id=\"c103-count\">Next release</h2><p><strong data-c103-left=\"" + esc(c.releaseAtUtc) + "\">" + esc(clock) + "</strong></p><p>" + esc(c.what || "") + "</p><p>Release " + esc(c.releaseUk || "") + (c.zoneName ? " (" + esc(c.zoneName) + ")" : "") + ".</p><p class=\"c103-k\">Reference month " + esc(c.referenceLabel || "") + ".</p><p>" + esc(c.why || "") + "</p><p class=\"c103-k\">" + esc(src) + " <a href=\"" + esc(c.scheduleUrl || "https://www.bls.gov/schedule/news_release/cpi.htm") + "\">BLS schedule</a></p></section>";
+    return "<section class=\"c103-count\" aria-labelledby=\"c103-count\"><h2 id=\"c103-count\">Next release</h2><p><strong data-c103-left=\"" + esc(c.releaseAtUtc) + "\">" + esc(clock) + "</strong></p><p>" + esc(c.what || "") + "</p><p>Release " + esc(c.releaseUk || "") + ".</p><p class=\"c103-k\">Reference month " + esc(c.referenceLabel || "") + ".</p><p>" + esc(c.why || "") + "</p><p class=\"c103-k\">" + esc(src) + " <a href=\"" + esc(c.scheduleUrl || "https://www.bls.gov/schedule/news_release/cpi.htm") + "\">BLS schedule</a></p></section>";
   }
   function banner(notice) {
     if (!notice || !notice.show) return "";
@@ -84,7 +82,7 @@
     var body = (rows || []).map(function (r) {
       var weight = typeof r.weight === "number" ? num(r.weight, 3) : "not loaded yet";
       var pp = typeof r.contribution === "number" ? num(r.contribution, 3) + " pp" : (r.contributionNote || "not loaded yet");
-      return "<tr><th scope=\"row\">" + esc(r.name) + "</th><td class=\"c103-why\">" + esc(r.why || "") + "</td><td>" + esc(typeof r.momRounded === "number" ? pct(r.momRounded) : "not loaded yet") + "</td><td>" + esc(typeof r.yoyRounded === "number" ? pct(r.yoyRounded) : "not loaded yet") + "</td><td>" + esc(weight) + (r.weightMonth ? " <span class=\"c103-k\">" + esc(r.weightMonth) + "</span>" : "") + "</td><td>" + esc(pp) + "</td><td>" + blsLink(r.momSeries) + "</td></tr>";
+      return "<tr><th scope=\"row\">" + esc(r.name) + "</th><td class=\"c103-why\">" + esc(r.why || "") + "</td><td>" + esc(typeof r.momRounded === "number" ? pct(r.momRounded) : "not loaded yet") + "</td><td>" + esc(typeof r.yoyRounded === "number" ? pct(r.yoyRounded) : "not loaded yet") + "</td><td>" + esc(weight) + (r.weightMonth ? " <span class=\"c103-k\">" + esc(r.weightMonth) + "</span>" : "") + "</td><td>" + esc(pp) + "</td><td>" + blsLink() + "</td></tr>";
     }).join("");
     if (!body) return miss("not loaded yet");
     var cite = ri && ri.citation ? ri.citation : "Relative importance source: U.S. Bureau of Labor Statistics.";

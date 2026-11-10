@@ -17,7 +17,7 @@ Checked against the BLS public API and the BLS news-release calendar on 10 Novem
 
 Labelled fallback, used only when that civil date is absent from the cached calendar, and always captioned as a fallback: 10 December 2026 08:30 US Eastern, and 13 January 2027 08:30 US Eastern. On 10 Nov 2026 the December date is already in the calendar, so only 13 January 2027 needs the fallback until BLS extends the file.
 
-UK time uses `Europe/London`. The zone name is GMT or BST from `Intl`, not a fixed offset. 08:30 US Eastern is 13:30 in London when both sides are on standard time or both are on daylight time, and 12:30 in London in the March and late-October weeks when only the US has changed.
+UK time uses `Europe/London`. The zone name is GMT or BST from `Intl`, not a fixed offset, and the release line shows that name once. 08:30 US Eastern is 13:30 in London when both sides are on standard time or both are on daylight time, and 12:30 in London in the March and late-October weeks when only the US has changed.
 
 ## Series IDs
 
@@ -73,7 +73,7 @@ Gold windows. Hourly bars are timestamped at the start of the hour. The anchor i
 - `GET /api/c103/cpi` is the JSON the page draws.
 - `POST /api/c103/notice/dismiss` stores a dismissal for the signed-in user. Guests get 401.
 
-The header `C93_NAV` gains CPI Day immediately after Markets, so it sits between Markets and Research. All sections gains the same URL inside Gold and macro, immediately after Terminal when that link is present. Existing links stay, in their existing order. Admin Console is untouched and still depends on the existing admin check.
+The header `C93_NAV` gains CPI Day immediately after Markets, so it sits between Markets and Research. All sections gains the same URL inside Gold and macro, immediately after Terminal when that link is present. Existing links stay, in their existing order. Admin Console is untouched and still depends on the existing admin check. From 1280px the header row wraps and the theme control stays on the page, so the extra link does not make the page scroll sideways. Below 1280 the existing menu still holds every link.
 
 Sitemap gains `/cpi/` the same way Terminal was added.
 

@@ -70,6 +70,14 @@
     }
   } catch (e4) {}
   try {
+    if (typeof document !== "undefined" && document.head && !document.getElementById("c103-navfit")) {
+      var fit = document.createElement("style");
+      fit.id = "c103-navfit";
+      fit.textContent = "@media (min-width:1280px){header.site .wrap{height:auto;min-height:64px;flex-wrap:wrap;align-items:center;row-gap:8px;padding-top:8px;padding-bottom:8px;box-sizing:border-box;max-width:min(1300px,100%)}header.site .nav{flex:1 1 0;flex-wrap:wrap;justify-content:flex-end;align-items:center;row-gap:4px;min-width:0}header.site .nav>a{margin-left:12px}header.site form.c97tg{flex:0 0 auto}}";
+      document.head.appendChild(fit);
+    }
+  } catch (e6) {}
+  try {
     var path = String(location.pathname || "");
     if ((path === "/cpi" || path === "/cpi/") && !document.getElementById("c103")) {
       if (!sessionStorage.getItem("c103once")) {
