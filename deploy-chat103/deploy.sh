@@ -10,12 +10,12 @@ set -u
 PAYLOAD_COMMIT=f692baf6aef0fedb9f8a5a3767bc94fb2e5c8995
 BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/${PAYLOAD_COMMIT}/deploy-chat103"
 
-# Staged root the October 2025 gap patch is applied to.
-# The chat102r5 block in front of chat103 stays. r6c must remain the last write.
+# Staged root after chat104. The index tag is app.js?v=chat104.
+# app.js is not edited, so that tag stays. r6c must remain the last write.
 R5_TAIL_SHA256=099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054
-BASE_APP_MD5=c56a1cc883539489e4e33ea30e191d77
-BASE_INDEX_MD5=c21e347055d307db38116dd304ac30dc
-BASE_SERVER_MD5=9a4070ba75c5900cfa4b34ac5b7899e1
+BASE_APP_MD5=459d922ab3a3f6e504b0b534b2ea4f5d
+BASE_INDEX_MD5=ea5575ca8b4efc735105872497bbe684
+BASE_SERVER_MD5=2bf82d174263fd4b5bf224b611eb1777
 NEW_L1='const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)'
 MARKER='// chat102 terminal. Built from lib_c102.js and client_c102.js. Edit those, then run node build_block.js.'
 MANIFEST=(

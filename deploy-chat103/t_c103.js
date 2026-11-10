@@ -574,9 +574,9 @@ test("deploy dry-run refuses a mismatched root and writes nothing", () => {
   assert.equal(fs.readdirSync(root).some((name) => name.includes("bak-chat103")), false);
   const spec = fs.readFileSync(path.join(dir, "deploy.sh"), "utf8");
   assert.match(spec, /099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054/);
-  assert.match(spec, /BASE_SERVER_MD5=9a4070ba75c5900cfa4b34ac5b7899e1/);
-  assert.match(spec, /BASE_APP_MD5=c56a1cc883539489e4e33ea30e191d77/);
-  assert.match(spec, /BASE_INDEX_MD5=c21e347055d307db38116dd304ac30dc/);
+  assert.match(spec, /BASE_SERVER_MD5=2bf82d174263fd4b5bf224b611eb1777/);
+  assert.match(spec, /BASE_APP_MD5=459d922ab3a3f6e504b0b534b2ea4f5d/);
+  assert.match(spec, /BASE_INDEX_MD5=ea5575ca8b4efc735105872497bbe684/);
 });
 
 test("chat103d replaces only the CPI block and leaves the r6c last write in place", () => {
