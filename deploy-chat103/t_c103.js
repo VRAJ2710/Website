@@ -61,6 +61,8 @@ test("a missing year-ago index is named and not replaced", () => {
   assert.equal(oct.core.yoyRounded, null);
   assert.equal(oct.headline.yoy, null);
   assert.match(oct.headline.yoyNote, /Year-on-year not published: BLS has no October 2025 index because of the 2025 US government shutdown\./);
+  assert.equal(oct.headline.yoyLabel, "Not published by BLS (no October 2025 data)");
+  assert.equal(oct.core.yoyLabel, "Not published by BLS (no October 2025 data)");
   assert.match(oct.core.yoyNote, /October 2025/);
   const shelter = oct.categories.find((row) => row.key === "shelter");
   assert.equal(shelter.yoyRounded, null);
@@ -87,8 +89,10 @@ test("a missing year-ago index is named and not replaced", () => {
   const trend = model.trend.find((row) => row.period === "2026-10");
   const arch = model.archive.find((row) => row.period === "2026-10");
   assert.equal(trend.headlineYoy, null);
-  assert.match(trend.headlineYoyNote, /October 2025/);
+  assert.equal(trend.headlineYoyNote, "Not published by BLS (no October 2025 data)");
+  assert.match(trend.headlineYoyDetail, /government shutdown/);
   assert.match(arch.headline.yoyNote, /October 2025/);
+  assert.equal(arch.headline.yoyLabel, "Not published by BLS (no October 2025 data)");
   const ui = { document: { documentElement: {} }, devicePixelRatio: 1, encodeURIComponent: encodeURIComponent };
   ui.getComputedStyle = () => ({ getPropertyValue: () => "" });
   vm.createContext(ui);
@@ -96,12 +100,204 @@ test("a missing year-ago index is named and not replaced", () => {
   const free = lib.c103Respond(model, { premium: false }, []);
   const html = ui.c103ui.render(free);
   assert.match(html, /Year-on-year not published: BLS has no October 2025 index because of the 2025 US government shutdown\./);
+  assert.match(html, /Not published by BLS \(no October 2025 data\)/);
   assert.equal((html.match(/October 2025/g) || []).length >= 2, true);
   const premium = lib.c103Respond(model, { premium: true }, []);
   const member = ui.c103ui.render(premium);
   assert.match(member, /October 2025/);
   assert.match(member, /pp/);
   assert.equal(premium.categories.find((row) => row.key === "shelter").contribution, shelter.contribution);
+});
+
+test("October 2025 is an empty trend slot and November does not invent a month change", () => {
+  const series = {
+    CUSR0000SA0: [
+      { year: 2025, month: 9, value: 320 },
+      { year: 2025, month: 11, value: 322 },
+      { year: 2026, month: 9, value: 336.298 },
+      { year: 2026, month: 10, value: 337.643 }
+    ],
+    CUUR0000SA0: [
+      { year: 2024, month: 9, value: 310 },
+      { year: 2024, month: 11, value: 312 },
+      { year: 2025, month: 9, value: 318 },
+      { year: 2025, month: 11, value: 321 },
+      { year: 2026, month: 9, value: 336.94 },
+      { year: 2026, month: 10, value: 338 }
+    ],
+    CUSR0000SA0L1E: [
+      { year: 2025, month: 9, value: 330 },
+      { year: 2025, month: 11, value: 332 },
+      { year: 2026, month: 9, value: 338.896 },
+      { year: 2026, month: 10, value: 339.913 }
+    ],
+    CUUR0000SA0L1E: [
+      { year: 2024, month: 9, value: 320 },
+      { year: 2024, month: 11, value: 322 },
+      { year: 2025, month: 9, value: 328 },
+      { year: 2025, month: 11, value: 331 },
+      { year: 2026, month: 9, value: 339.287 },
+      { year: 2026, month: 10, value: 340 }
+    ]
+  };
+  const model = lib.c103Compose({
+    series: { ok: true, series: series },
+    icsOk: false,
+    htmlOk: false,
+    hourly: [],
+    daily: []
+  }, Date.parse("2026-11-13T16:00:00.000Z"));
+  const periods = model.trend.map((row) => row.period);
+  const i9 = periods.indexOf("2025-09");
+  const i10 = periods.indexOf("2025-10");
+  const i11 = periods.indexOf("2025-11");
+  assert.equal(i10, i9 + 1);
+  assert.equal(i11, i10 + 1);
+  const gap = model.trend[i10];
+  assert.equal(gap.periodLabel, "October 2025");
+  assert.equal(gap.headlineYoy, null);
+  assert.equal(gap.coreYoy, null);
+  assert.equal(gap.headlineMom, null);
+  assert.equal(gap.coreMom, null);
+  assert.equal(gap.note, "Not collected by BLS (2025 US government shutdown)");
+  const nov = model.trend[i11];
+  assert.equal(nov.headlineMom, null);
+  assert.equal(nov.coreMom, null);
+  assert.equal(nov.headlineMomNote, "Month-on-month not published: no October 2025 index");
+  assert.equal(nov.coreMomNote, "Month-on-month not published: no October 2025 index");
+  const oct = model.trend.find((row) => row.period === "2026-10");
+  assert.equal(oct.headlineMom, 0.4);
+  assert.equal(oct.coreMom, 0.3);
+  assert.equal(oct.headlineYoy, null);
+  assert.equal(oct.coreYoy, null);
+  assert.equal(oct.headlineYoyNote, "Not published by BLS (no October 2025 data)");
+  assert.equal(oct.coreYoyNote, "Not published by BLS (no October 2025 data)");
+  assert.match(oct.headlineYoyDetail, /BLS has no October 2025 index because of the 2025 US government shutdown/);
+  const archGap = model.archive.find((row) => row.period === "2025-10");
+  const archNov = model.archive.find((row) => row.period === "2025-11");
+  const archOct = model.archive.find((row) => row.period === "2026-10");
+  assert.equal(archGap.headline.momRounded, null);
+  assert.equal(archGap.headline.yoyRounded, null);
+  assert.equal(archGap.core.momRounded, null);
+  assert.equal(archGap.core.yoyRounded, null);
+  assert.equal(archGap.headline.momNote, "Not collected by BLS (2025 US government shutdown)");
+  assert.equal(archGap.headline.yoyLabel, "Not published by BLS (no October 2025 data)");
+  assert.equal(archNov.headline.momRounded, null);
+  assert.equal(archNov.core.momRounded, null);
+  assert.equal(archNov.headline.momNote, "Month-on-month not published: no October 2025 index");
+  assert.equal(archOct.headline.momRounded, 0.4);
+  assert.equal(archOct.core.momRounded, 0.3);
+  assert.equal(archOct.headline.yoyRounded, null);
+  assert.equal(archOct.headline.yoyLabel, "Not published by BLS (no October 2025 data)");
+  const ui = { document: { documentElement: {} }, devicePixelRatio: 1, encodeURIComponent: encodeURIComponent };
+  ui.getComputedStyle = () => ({ getPropertyValue: () => "" });
+  vm.createContext(ui);
+  vm.runInContext(fs.readFileSync(path.join(dir, "client_c103.js"), "utf8"), ui);
+  const html = ui.c103ui.render(lib.c103Respond(model, { premium: false }, []));
+  const heroYear = html.split("Headline, year")[1].split("</article>")[0];
+  const heroMonth = html.split("Headline, month")[1].split("</article>")[0];
+  const coreMonth = html.split("Core, month")[1].split("</article>")[0];
+  assert.match(heroMonth, /\+0\.4%/);
+  assert.match(coreMonth, /\+0\.3%/);
+  assert.match(heroYear, /Not published by BLS \(no October 2025 data\)/);
+  assert.match(heroYear, /government shutdown/);
+  assert.equal(/0\.0%/.test(heroYear), false);
+  assert.match(html, /id="c103-gap"[^>]*>October 2025: Not collected by BLS \(2025 US government shutdown\)/);
+  assert.match(html, /Month-on-month not published: no October 2025 index/);
+  function rowsFor(label) {
+    const found = [];
+    let from = 0;
+    const marker = ">" + label + "<";
+    while (from < html.length) {
+      const at = html.indexOf(marker, from);
+      if (at < 0) break;
+      found.push(html.slice(at, html.indexOf("</tr>", at)));
+      from = at + marker.length;
+    }
+    return found;
+  }
+  const octRows = rowsFor("October 2026");
+  assert.equal(octRows.length >= 2, true);
+  octRows.forEach((row) => {
+    assert.match(row, /Not published by BLS \(no October 2025 data\)/);
+    assert.equal(/0\.0%/.test(row), false);
+  });
+  const archiveOct = octRows.find((row) => row.includes("+0.4%"));
+  assert.match(archiveOct, /\+0\.3%/);
+  const gapRows = rowsFor("October 2025");
+  assert.equal(gapRows.length >= 1, true);
+  gapRows.forEach((row) => {
+    assert.match(row, /Not collected by BLS \(2025 US government shutdown\)/);
+    assert.equal(/0\.0%/.test(row), false);
+  });
+  function strokes(width, muted) {
+    const ops = [];
+    let style = "";
+    let path = [];
+    const ctx = {
+      setTransform() {},
+      clearRect() {},
+      beginPath() { path = []; },
+      moveTo(x, y) { path.push(["M", x, y]); },
+      lineTo(x, y) { path.push(["L", x, y]); },
+      stroke() { ops.push({ style: style, path: path.slice() }); path = []; },
+      fill() {},
+      fillRect() {},
+      fillText() {},
+      arc(x) { ops.push({ style: style, path: [["arc", x]] }); },
+      setLineDash() {}
+    };
+    Object.defineProperties(ctx, {
+      strokeStyle: { set(v) { style = v; } },
+      fillStyle: { set() {} },
+      lineWidth: { set() {} },
+      font: { set() {} }
+    });
+    const canvas = {
+      clientWidth: width,
+      clientHeight: 220,
+      getContext() { return ctx; }
+    };
+    ui.getComputedStyle = () => ({
+      getPropertyValue(name) {
+        if (name === "--ink") return "#111111";
+        if (name === "--up") return "#226644";
+        if (name === "--muted") return muted;
+        if (name === "--paper") return "#ffffff";
+        if (name === "--rule") return "#cccccc";
+        return "";
+      }
+    });
+    ui.c103ui.draw(canvas, model.trend);
+    return ops;
+  }
+  [390, 320].forEach((width) => {
+    ["#5c6570", "#9aa3ad"].forEach((muted) => {
+      const ops = strokes(width, muted);
+      const step = (width - 36 - 8) / (model.trend.length - 1);
+      const gapX = 36 + i10 * step;
+      const headline = ops.filter((row) => row.style === "#111111");
+      const spans = [];
+      headline.forEach((row) => {
+        let prev = null;
+        row.path.forEach((op) => {
+          if (op[0] === "M") prev = op[1];
+          if (op[0] === "L" && prev != null) {
+            spans.push(op[1] - prev);
+            prev = op[1];
+          }
+        });
+      });
+      assert.equal(spans.length > 0, true);
+      spans.forEach((dx) => assert.ok(Math.abs(dx - step) < 0.01, "line jumped " + dx + " at " + width));
+      const markers = ops.filter((row) => row.style === muted && row.path.some((op) => op[0] === "M") && row.path.some((op) => op[0] === "L"));
+      assert.equal(markers.length, 1, "one gap marker at " + width);
+      const marker = markers[0];
+      assert.ok(marker.path.every((op) => op[0] === "M" || op[0] === "L" ? Math.abs(op[1] - gapX) < 0.01 : true));
+      const dot = ops.find((row) => row.style === muted && row.path.some((op) => op[0] === "arc" && Math.abs(op[1] - gapX) < 0.01));
+      assert.ok(dot, "missing gap dot at " + width);
+    });
+  });
 });
 
 test("contribution is the weight times the category change", () => {
@@ -349,9 +545,9 @@ test("deploy dry-run refuses a mismatched root and writes nothing", () => {
   assert.equal(fs.readdirSync(root).some((name) => name.includes("bak-chat103")), false);
   const spec = fs.readFileSync(path.join(dir, "deploy.sh"), "utf8");
   assert.match(spec, /099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054/);
-  assert.match(spec, /BASE_SERVER_MD5=b2e44157f0a86a38d145072aea5f89b9/);
-  assert.match(spec, /BASE_APP_MD5=93644cb45fc3884e7068bf9a902d73e3/);
-  assert.match(spec, /BASE_INDEX_MD5=338615e7ece511104855785b67e9c10a/);
+  assert.match(spec, /BASE_SERVER_MD5=9a4070ba75c5900cfa4b34ac5b7899e1/);
+  assert.match(spec, /BASE_APP_MD5=c56a1cc883539489e4e33ea30e191d77/);
+  assert.match(spec, /BASE_INDEX_MD5=c21e347055d307db38116dd304ac30dc/);
 });
 
 test("chat103d replaces only the CPI block and leaves the r6c last write in place", () => {
@@ -376,6 +572,27 @@ test("chat103d replaces only the CPI block and leaves the r6c last write in plac
   const marker = "// chat102 terminal. Built from lib_c102.js and client_c102.js. Edit those, then run node build_block.js.";
   const kept = next.slice(next.indexOf(marker), next.indexOf("\n// chat103 cpi day") + 1);
   assert.equal(require("crypto").createHash("sha256").update(kept).digest("hex"), "099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054");
+  assert.equal(fs.readFileSync(path.join(root, "app.js"), "utf8"), app);
+  assert.equal(fs.readFileSync(path.join(root, "index.html"), "utf8"), index);
+});
+
+test("the CPI splice keeps a chat104 block that sits outside it", () => {
+  const root = fs.mkdtempSync("/tmp/c103-chat104-");
+  const block = fs.readFileSync(path.join(dir, "../deploy-chat102/server_block_c102.js"), "utf8");
+  const outside = "// chat104 rename.\nchat104();\n// chat102r6c last-write scrub.\nproto.end = end;\nconsole.log(\"[c102r6c] scrub attached\");\n";
+  const server = "const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)\n" + block + "// chat103 cpi day. old\nold();\n" + outside;
+  const app = "staged app bytes\n";
+  const index = "<html>chat104</html>\n";
+  fs.writeFileSync(path.join(root, "server.js"), server);
+  fs.writeFileSync(path.join(root, "app.js"), app);
+  fs.writeFileSync(path.join(root, "index.html"), index);
+  const run = spawnSync("python3", [path.join(dir, "patch_c103.py"), path.join(root, "server.js"), path.join(root, "app.js"), path.join(root, "index.html"), path.join(dir, "server_block_c103.js")], { encoding: "utf8" });
+  assert.equal(run.status, 0, run.stderr);
+  const next = fs.readFileSync(path.join(root, "server.js"), "utf8");
+  const cut = server.indexOf("\n// chat103 cpi day");
+  assert.equal(next.slice(0, cut + 1), server.slice(0, cut + 1));
+  assert.equal(next.slice(next.indexOf("\n// chat104 rename.")), "\n" + outside);
+  assert.equal(next.slice(next.indexOf("\n// chat102r6c last-write scrub.")), "\n" + outside.slice(outside.indexOf("// chat102r6c")));
   assert.equal(fs.readFileSync(path.join(root, "app.js"), "utf8"), app);
   assert.equal(fs.readFileSync(path.join(root, "index.html"), "utf8"), index);
 });

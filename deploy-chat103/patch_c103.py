@@ -1,13 +1,22 @@
 #!/usr/bin/env python3
-"""Replace the chat103 block in place. Everything from chat102r6 onward, including the r6c last-write scrub, stays byte for byte."""
+"""Replace the chat103 block in place.
+
+The end of the CPI block is the next line that starts a different // chat
+block, so a later chat104 rename outside the CPI region is left alone.
+The last-write scrub stays byte for byte. app.js and index.html are not written.
+"""
 import pathlib
+import re
 import sys
 
 START = "// chat103 cpi day"
-R6 = "// chat102r6 market-reference cache."
-R6B = "// chat102r6b reader-facing scrub."
 R6C = "// chat102r6c last-write scrub."
-TAG = "app.js?v=chat103c"
+NEXT = re.compile(r"\n// chat(?!103\b)")
+
+
+def next_chat(text, start):
+    match = NEXT.search(text, start + 1)
+    return -1 if match is None else match.start()
 
 
 def main():
@@ -24,23 +33,20 @@ def main():
         sys.exit("server block wraps res.end; that would sit after the r6c scrub")
     if text.count("\n" + START) != 1:
         sys.exit("chat103 block is missing or not unique")
-    for mark in (R6, R6B, R6C):
-        if text.count("\n" + mark) != 1:
-            sys.exit("missing or repeated anchor " + mark)
+    if text.count("\n" + R6C) != 1:
+        sys.exit("missing or repeated anchor " + R6C)
     start = text.find("\n" + START)
-    end = text.find("\n" + R6)
-    if end < start:
-        sys.exit("chat102r6 is not after the chat103 block")
+    end = next_chat(text, start)
+    if end < 0 or end < start:
+        sys.exit("no later // chat block after chat103")
     if R6C in text[start:end]:
         sys.exit("r6c sits inside the chat103 block")
     suffix = text[end:]
-    if it.count(TAG) != 1:
-        sys.exit("index.html does not contain exactly one chat103c cache tag")
-    if "app.js?v=chat103d" in it or "app.js?v=chat103b" in it:
-        sys.exit("index.html cache tag is not chat103c")
     new = text[: start + 1] + block + suffix
-    if new[new.find("\n" + R6):] != suffix:
-        sys.exit("bytes from chat102r6 onward changed")
+    if not new.startswith(text[: start + 1]):
+        sys.exit("bytes in front of chat103 changed")
+    if new[len(new) - len(suffix):] != suffix:
+        sys.exit("bytes after the chat103 block changed")
     old_c = text[text.find("\n" + R6C):]
     new_c = new[new.find("\n" + R6C):]
     if old_c != new_c:
@@ -49,13 +55,17 @@ def main():
         sys.exit("a response-end wrapper was added")
     if new.count("[c102r6c] scrub attached") != 1:
         sys.exit("r6c attach log is not intact")
-    if "Year-on-year not published:" not in new[start:new.find("\n" + R6)]:
+    region = new[start:len(new) - len(suffix)]
+    if "proto.end" in region:
+        sys.exit("replacement chat103 block wraps res.end")
+    if "Year-on-year not published:" not in region:
         sys.exit("replacement chat103 block has no year-on-year note")
+    if "Not published by BLS (no October 2025 data)" not in region:
+        sys.exit("replacement chat103 block has no October 2025 label")
     server.write_text(new, encoding="utf-8")
-    # app.js is unchanged, so the chat103c cache tag stays.
     if at != app.read_text(encoding="utf-8") or it != index.read_text(encoding="utf-8"):
         sys.exit("app.js or index.html was touched")
-    print("replaced the chat103 block; chat102r6c stayed last")
+    print("replaced the chat103 block; bytes outside it stayed")
 
 
 if __name__ == "__main__":

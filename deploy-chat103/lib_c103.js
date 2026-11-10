@@ -447,10 +447,18 @@ function c103WeightsMatch(weightMonth, latestPeriod) {
 
 function c103IndexGapNote(kind, y, m) {
   const label = C103_MONTHS[m - 1] + " " + y;
+  if (y === 2025 && m === 10 && kind === "mom") return "Month-on-month not published: no October 2025 index";
+  if (y === 2025 && m === 10 && kind === "yoy") return "Year-on-year not published: BLS has no October 2025 index because of the 2025 US government shutdown.";
   const lead = kind === "yoy" ? "Year-on-year not published: " : "Month change not published: ";
-  if (y === 2025 && m === 10) return lead + "BLS has no October 2025 index because of the 2025 US government shutdown.";
   return lead + "BLS has no " + label + " index.";
 }
+
+function c103YoyLabel(y, m) {
+  if (y === 2025 && m === 10) return "Not published by BLS (no October 2025 data)";
+  return "";
+}
+
+const C103_SHUTDOWN_NOTE = "Not collected by BLS (2025 US government shutdown)";
 
 function c103ChangePair(saMap, nsaMap, y, m) {
   const sa = saMap.get(y + "-" + m);
@@ -468,7 +476,8 @@ function c103ChangePair(saMap, nsaMap, y, m) {
     momNote: typeof sa === "number" && typeof saPrev !== "number" ? c103IndexGapNote("mom", prev.y, prev.m) : "",
     yoy: yoy,
     yoyRounded: c103Round1(yoy),
-    yoyNote: typeof nsa === "number" && typeof nsaPrevYear !== "number" ? c103IndexGapNote("yoy", y - 1, m) : ""
+    yoyNote: typeof nsa === "number" && typeof nsaPrevYear !== "number" ? c103IndexGapNote("yoy", y - 1, m) : "",
+    yoyLabel: typeof nsa === "number" && typeof nsaPrevYear !== "number" ? c103YoyLabel(y - 1, m) : ""
   };
 }
 
@@ -511,6 +520,7 @@ function c103BuildMonths(series, ri) {
         yoy: pair.yoy,
         yoyRounded: pair.yoyRounded,
         yoyNote: pair.yoyNote,
+        yoyLabel: pair.yoyLabel,
         weight: weightNum,
         weightMonth: ri && (ri.weightMonth || ri.asOf) || "",
         weightsMatch: weightsOk,
@@ -727,6 +737,8 @@ function c103LatestFigure(month, key) {
     yoy: row.yoy,
     yoyRounded: row.yoyRounded,
     yoyNote: row.yoyNote || "",
+    yoyLabel: row.yoyLabel || "",
+    momNote: row.momNote || "",
     source: C103_SOURCE
   };
 }
@@ -802,6 +814,51 @@ function c103PickSeries(nextMap, prevMap) {
   return { series: out, carried: carried };
 }
 
+function c103ShutdownRow() {
+  return {
+    period: "2025-10",
+    periodLabel: "October 2025",
+    headlineYoy: null,
+    coreYoy: null,
+    headlineMom: null,
+    coreMom: null,
+    note: C103_SHUTDOWN_NOTE,
+    headlineYoyNote: C103_SHUTDOWN_NOTE,
+    coreYoyNote: C103_SHUTDOWN_NOTE,
+    headlineYoyDetail: C103_SHUTDOWN_NOTE,
+    coreYoyDetail: C103_SHUTDOWN_NOTE,
+    headlineMomNote: C103_SHUTDOWN_NOTE,
+    coreMomNote: C103_SHUTDOWN_NOTE,
+    gap: true
+  };
+}
+
+function c103WithShutdownGap(rows) {
+  const list = rows || [];
+  if (!list.some((row) => row && row.period < "2025-10") || !list.some((row) => row && row.period > "2025-10")) return list;
+  if (list.some((row) => row && row.period === "2025-10")) return list;
+  return list.concat([c103ShutdownRow()]).sort((a, b) => a.period < b.period ? -1 : a.period > b.period ? 1 : 0).slice(-24);
+}
+
+function c103WithShutdownArchive(rows) {
+  const list = rows || [];
+  if (!list.some((row) => row && row.period < "2025-10") || !list.some((row) => row && row.period > "2025-10")) return list;
+  if (list.some((row) => row && row.period === "2025-10")) return list;
+  const blank = {
+    momRounded: null,
+    yoyRounded: null,
+    momNote: C103_SHUTDOWN_NOTE,
+    yoyNote: C103_SHUTDOWN_NOTE,
+    yoyLabel: "Not published by BLS (no October 2025 data)"
+  };
+  return list.concat([{
+    period: "2025-10",
+    periodLabel: "October 2025",
+    headline: Object.assign({}, blank),
+    core: Object.assign({}, blank)
+  }]).sort((a, b) => a.period < b.period ? 1 : a.period > b.period ? -1 : 0);
+}
+
 function c103Compose(parts, nowMs) {
   const prevMap = (parts && parts.previousSeries) || {};
   const nextMap = parts && parts.series && parts.series.ok ? parts.series.series : {};
@@ -835,22 +892,26 @@ function c103Compose(parts, nowMs) {
   const months = series ? c103BuildMonths(series, ri) : [];
   const latest = months.length ? months[months.length - 1] : null;
   const trendMonths = months.filter((row) => row.headline && (row.headline.nsaIndex != null || row.headline.saIndex != null));
-  const trend = trendMonths.slice(-24).map((row) => ({
+  const trend = c103WithShutdownGap(trendMonths.slice(-24).map((row) => ({
     period: row.period,
     periodLabel: row.periodLabel,
     headlineYoy: row.headline.yoyRounded,
     coreYoy: row.core && typeof row.core.yoyRounded === "number" ? row.core.yoyRounded : null,
-    headlineYoyNote: row.headline.yoyNote || "",
-    coreYoyNote: row.core && row.core.yoyNote || "",
+    headlineYoyNote: row.headline.yoyLabel || row.headline.yoyNote || "",
+    headlineYoyDetail: row.headline.yoyNote || "",
+    coreYoyNote: row.core && (row.core.yoyLabel || row.core.yoyNote) || "",
+    coreYoyDetail: row.core && row.core.yoyNote || "",
     headlineMom: row.headline.momRounded,
-    coreMom: row.core ? row.core.momRounded : null
-  }));
-  const archive = months.slice().reverse().map((row) => ({
+    coreMom: row.core ? row.core.momRounded : null,
+    headlineMomNote: row.headline.momNote || "",
+    coreMomNote: row.core && row.core.momNote || ""
+  })));
+  const archive = c103WithShutdownArchive(months.slice().reverse().map((row) => ({
     period: row.period,
     periodLabel: row.periodLabel,
     headline: c103LatestFigure(row, "headline"),
     core: c103LatestFigure(row, "core")
-  })).filter((row) => row.headline || row.core);
+  })).filter((row) => row.headline || row.core));
   const past = usedEvents.filter((ev) => ev.startMs <= nowMs);
   const goldComputed = (hourly.length || daily.length)
     ? past.slice().reverse().map((ev) => {
@@ -1471,7 +1532,7 @@ function c103CacheControl(body) {
   return "private, max-age=15, stale-while-revalidate=120";
 }
 
-const C103_CSS = "<style id=\"c103-css\">.c103{box-sizing:border-box;max-width:100%;overflow-x:clip;font:15px/1.45 var(--sans,Inter,system-ui,sans-serif);color:var(--ink);background:var(--paper);min-width:0}.c103 *,.c103 *::before,.c103 *::after{box-sizing:border-box}.c103 h2,.c103 h3{font-family:var(--serif,Georgia,serif);line-height:1.2;margin:0 0 8px;color:var(--ink)}.c103 h2{font-size:1.45rem}.c103 p,.c103 caption,.c103 caption a{overflow-wrap:anywhere}.c103 a{color:var(--ink);text-decoration-thickness:1px;text-underline-offset:3px}.c103 a:focus-visible,.c103 button:focus-visible,#c103-canvas:focus-visible{outline:3px solid var(--ink);outline-offset:3px}.c103-k{color:var(--ink);font-size:14px}.c103-v{font:600 1.6rem/1.2 var(--serif,Georgia,serif);margin:4px 0;font-variant-numeric:tabular-nums;color:var(--ink)}.c103-miss{border-left:3px solid var(--amber);padding:4px 0 4px 10px;margin:8px 0;color:var(--ink)}.c103-banner{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;border:1px solid var(--rule);padding:10px 12px;margin:0 0 14px;background:var(--paper);color:var(--ink)}.c103-banner button,.c103-tools button{min-height:44px;min-width:44px;padding:8px 12px;background:var(--paper);color:var(--ink);border:1px solid var(--rule);border-radius:4px;cursor:pointer}.c103-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:12px 0}.c103-card{min-width:0;border-top:2px solid var(--ink);padding:10px 2px}.c103-card h3{font:600 14px/1.3 var(--sans,Inter,sans-serif);margin:0 0 6px;color:var(--ink)}.c103-count{border-top:2px solid var(--ink);padding:12px 0;margin:8px 0 4px}.c103-count strong{font:600 1.8rem/1.1 var(--serif,Georgia,serif);font-variant-numeric:tabular-nums}.c103-chart{min-width:0;margin:8px 0 16px}#c103-canvas{display:block;width:100%;height:420px;max-width:100%;touch-action:pan-y;background:var(--paper)}.c103-legend{display:flex;flex-wrap:wrap;gap:12px 18px;list-style:none;margin:8px 0;padding:0;color:var(--ink)}.c103-swatch{display:inline-block;width:28px;height:0;border-top:3px solid var(--ink);margin-right:6px;vertical-align:middle}.c103-swatch-core{border-top-style:dashed;border-top-color:var(--up)}.c103-scroll{display:block;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}.c103 table{border-collapse:collapse;width:max-content;min-width:100%;font-size:15px;color:var(--ink)}.c103 caption{caption-side:top;text-align:left;padding:0 0 8px;font-size:15px;white-space:normal;color:var(--ink)}.c103 th,.c103 td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);white-space:nowrap;font-weight:400;vertical-align:top;color:var(--ink);background:var(--paper)}.c103 thead th{font-weight:600}.c103 td.c103-why{white-space:normal;min-width:14rem}.c103-live{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}.c103-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:22px;min-width:0}.c103-lock{border:1px solid var(--rule);padding:12px;margin:12px 0;color:var(--ink);background:var(--paper)}@media (max-width:899px){.c103-stats{grid-template-columns:1fr 1fr}.c103-grid{grid-template-columns:1fr}#c103-canvas{height:300px}}@media (max-width:479px){.c103-stats{grid-template-columns:1fr}#c103-canvas{height:240px}.c103{font-size:15px}}@media (prefers-reduced-motion:reduce){.c103 *{transition:none!important;animation:none!important}}@media (min-width:1280px){header.site .wrap{height:auto;min-height:64px;flex-wrap:wrap;align-items:center;row-gap:8px;padding-top:8px;padding-bottom:8px;box-sizing:border-box;max-width:min(1300px,100%)}header.site .nav{flex:1 1 0;flex-wrap:wrap;justify-content:flex-end;align-items:center;row-gap:4px;min-width:0}header.site .nav>a{margin-left:12px}header.site form.c97tg{flex:0 0 auto}}</style>";
+const C103_CSS = "<style id=\"c103-css\">.c103{box-sizing:border-box;max-width:100%;overflow-x:clip;font:15px/1.45 var(--sans,Inter,system-ui,sans-serif);color:var(--ink);background:var(--paper);min-width:0}.c103 *,.c103 *::before,.c103 *::after{box-sizing:border-box}.c103 h2,.c103 h3{font-family:var(--serif,Georgia,serif);line-height:1.2;margin:0 0 8px;color:var(--ink)}.c103 h2{font-size:1.45rem}.c103 p,.c103 caption,.c103 caption a{overflow-wrap:anywhere}.c103 a{color:var(--ink);text-decoration-thickness:1px;text-underline-offset:3px}.c103 a:focus-visible,.c103 button:focus-visible,#c103-canvas:focus-visible{outline:3px solid var(--ink);outline-offset:3px}.c103-k{color:var(--ink);font-size:14px}.c103-v{font:600 1.6rem/1.2 var(--serif,Georgia,serif);margin:4px 0;font-variant-numeric:tabular-nums;color:var(--ink)}.c103-miss{border-left:3px solid var(--amber);padding:4px 0 4px 10px;margin:8px 0;color:var(--ink)}.c103-banner{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;border:1px solid var(--rule);padding:10px 12px;margin:0 0 14px;background:var(--paper);color:var(--ink)}.c103-banner button,.c103-tools button{min-height:44px;min-width:44px;padding:8px 12px;background:var(--paper);color:var(--ink);border:1px solid var(--rule);border-radius:4px;cursor:pointer}.c103-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:12px 0}.c103-card{min-width:0;border-top:2px solid var(--ink);padding:10px 2px}.c103-card h3{font:600 14px/1.3 var(--sans,Inter,sans-serif);margin:0 0 6px;color:var(--ink)}.c103-count{border-top:2px solid var(--ink);padding:12px 0;margin:8px 0 4px}.c103-count strong{font:600 1.8rem/1.1 var(--serif,Georgia,serif);font-variant-numeric:tabular-nums}.c103-chart{min-width:0;margin:8px 0 16px}#c103-canvas{display:block;width:100%;height:420px;max-width:100%;touch-action:pan-y;background:var(--paper)}.c103-legend{display:flex;flex-wrap:wrap;gap:12px 18px;list-style:none;margin:8px 0;padding:0;color:var(--ink)}.c103-swatch{display:inline-block;width:28px;height:0;border-top:3px solid var(--ink);margin-right:6px;vertical-align:middle}.c103-swatch-core{border-top-style:dashed;border-top-color:var(--up)}.c103-scroll{display:block;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}.c103 table{border-collapse:collapse;width:max-content;min-width:100%;font-size:15px;color:var(--ink)}.c103 caption{caption-side:top;text-align:left;padding:0 0 8px;font-size:15px;white-space:normal;color:var(--ink)}.c103 th,.c103 td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);white-space:nowrap;font-weight:400;vertical-align:top;color:var(--ink);background:var(--paper)}.c103 thead th{font-weight:600}.c103 td.c103-why{white-space:normal;min-width:14rem}.c103-live{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}.c103-gap{color:var(--muted);margin:0 0 8px}.c103-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:22px;min-width:0}.c103-lock{border:1px solid var(--rule);padding:12px;margin:12px 0;color:var(--ink);background:var(--paper)}@media (max-width:899px){.c103-stats{grid-template-columns:1fr 1fr}.c103-grid{grid-template-columns:1fr}#c103-canvas{height:300px}}@media (max-width:479px){.c103-stats{grid-template-columns:1fr}#c103-canvas{height:240px}.c103{font-size:15px}}@media (prefers-reduced-motion:reduce){.c103 *{transition:none!important;animation:none!important}}@media (min-width:1280px){header.site .wrap{height:auto;min-height:64px;flex-wrap:wrap;align-items:center;row-gap:8px;padding-top:8px;padding-bottom:8px;box-sizing:border-box;max-width:min(1300px,100%)}header.site .nav{flex:1 1 0;flex-wrap:wrap;justify-content:flex-end;align-items:center;row-gap:4px;min-width:0}header.site .nav>a{margin-left:12px}header.site form.c97tg{flex:0 0 auto}}</style>";
 
 function c103DismissGate(req, key, known, limiter, nowMs, userId) {
   const headers = (req && req.headers) || {};
