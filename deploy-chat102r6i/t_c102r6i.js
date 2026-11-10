@@ -150,7 +150,80 @@ test("replacing the scrub block leaves the prefix and patches the client anchors
   assert.equal(fs.readFileSync(index, "utf8"), "<script src=\"/app.js?v=chat102r6i\"></script>\n");
 });
 
-test("deploy.sh bytes match EXPECTED_SHA256 and the md5 guards are still placeholders", () => {
+test("the CPI region stays byte-identical and one r6i attach log remains", () => {
+  const work = fs.mkdtempSync("/tmp/c102r6i-cpi-");
+  const server = path.join(work, "server.js");
+  const app = path.join(work, "app.js");
+  const index = path.join(work, "index.html");
+  const cpi = [
+    "// chat103 cpi day",
+    "const gapRow = { period: \"2025-10\", periodLabel: \"October 2025\", gap: true, yoyLabel: \"Not published by BLS (no October 2025 data)\" };",
+    "const gap = base === \"2025-10\" ? \"year-on-year not published by BLS (no October 2025 data)\" : \"published\";",
+    "out[k] = { how: \"Year-on-year change against the same month a year earlier (FRED \" + id + \"). A missing month is not filled from a neighbour.\" };",
+    ""
+  ].join("\n");
+  fs.writeFileSync(server, cpi + blockH);
+  fs.writeFileSync(app, fs.readFileSync("/tmp/c102hash/app.js"));
+  fs.writeFileSync(index, "<script src=\"/app.js?v=chat104\"></script>\n");
+  const run = spawnSync("python3", [
+    path.join(dir, "patch_c102r6i.py"),
+    server, app, index,
+    path.join(dir, "server_block_c102r6h.js"),
+    path.join(dir, "server_block_c102r6i.js")
+  ], { encoding: "utf8" });
+  assert.equal(run.status, 0, run.stderr + run.stdout);
+  const before = fs.readFileSync(server, "utf8");
+  // The patch already wrote `before`. Re-read the pre-image from the fixture we still have in `cpi + blockH`.
+  const prior = cpi + blockH;
+  function cpiRegion(text) {
+    const start = text.indexOf("// chat103 cpi day");
+    const end = text.indexOf("// chat102r6c last-write scrub.");
+    assert.ok(start >= 0 && end > start);
+    return text.slice(start, end);
+  }
+  assert.equal(cpiRegion(before), cpiRegion(prior));
+  assert.match(cpiRegion(before), /October 2025/);
+  assert.match(cpiRegion(before), /A missing month is not filled from a neighbour/);
+  const logs = before.match(/\[c102r6[a-z]?\] scrub attached/g);
+  assert.deepEqual(logs, ["[c102r6i] scrub attached"]);
+  assert.equal(before.trimEnd().endsWith("})();"), true);
+  assert.equal(before.includes("[c102r6h] scrub attached"), false);
+});
+
+test("chat104 Learn renames do not move the gold-futures anchors", () => {
+  const patch = spawnSync("git", ["show", "f3124f6e3924b40e827c5595f7da27f596e70890:deploy-chat104/patch_c104.py"], { encoding: "utf8" });
+  assert.equal(patch.status, 0, patch.stderr);
+  const script = [
+    "import json, pathlib, sys",
+    "ns = {}",
+    "exec(sys.stdin.read().split('def tail')[0], ns)",
+    "print(json.dumps(ns['PAIRS']))"
+  ].join("\n");
+  const pairsRun = spawnSync("python3", ["-c", script], { input: patch.stdout, encoding: "utf8" });
+  assert.equal(pairsRun.status, 0, pairsRun.stderr);
+  const pairs = JSON.parse(pairsRun.stdout).filter(function (pair) { return pair[0] === "app.js"; });
+  const anchors = [
+    'return hm ? ("Gold futures (COMEX, front month) · delayed · as of " + hm + " UK") : "Gold futures (COMEX, front month) · delayed";',
+    'if (b && b.kind === "futures") return "Gold futures (COMEX, front month)";',
+    "function _rtGoldKicker() {\n  // rt14: plain words up front; the provider / status / checked detail moves to the tooltip (_rtGoldKickerTitle).\n  if (typeof livePx === \"function\" && livePx(\"XAU\") != null && liveQuoteSrc.XAU) {",
+    'if (fut) html = html.replace(/(\\s*[·|•]\\s*)spot\\b/ig, "");'
+  ];
+  pairs.forEach(function (pair) {
+    anchors.forEach(function (anchor) {
+      assert.equal(anchor.includes(pair[1]), false, pair[1]);
+      assert.equal(pair[1].includes(anchor), false, pair[1]);
+    });
+  });
+  let app = fs.readFileSync("/tmp/c102hash/app.js", "utf8");
+  anchors.forEach(function (anchor) { assert.equal(app.split(anchor).length - 1, 1); });
+  pairs.forEach(function (pair) {
+    const found = app.split(pair[1]).length - 1;
+    if (found === pair[3]) app = app.split(pair[1]).join(pair[2]);
+  });
+  anchors.forEach(function (anchor) { assert.equal(app.split(anchor).length - 1, 1, anchor.slice(0, 48)); });
+});
+
+test("deploy.sh bytes match EXPECTED_SHA256 and the md5 guards are the staged root", () => {
   const specPath = path.join(dir, "EXPECTED_SHA256");
   const deployPath = path.join(dir, "deploy.sh");
   assert.equal(fs.existsSync(specPath) && fs.existsSync(deployPath), true);
@@ -162,9 +235,9 @@ test("deploy.sh bytes match EXPECTED_SHA256 and the md5 guards are still placeho
   assert.equal(require("crypto").createHash("sha256").update(buf).digest("hex"), sha);
   const text = buf.toString("utf8");
   assert.match(text, /715b843b5e7b15e38a16a6478337d7f94752eeb4da3b902b4bcd60603e15aaa7/);
-  assert.match(text, /PENDING_AFTER_CHAT104_CHAT103H_SERVER/);
-  assert.match(text, /PENDING_AFTER_CHAT104_CHAT103H_APP/);
-  assert.match(text, /PENDING_AFTER_CHAT104_CHAT103H_INDEX/);
+  assert.match(text, /ebc29e2d257228adf720f98c5f1703fc/);
+  assert.match(text, /459d922ab3a3f6e504b0b534b2ea4f5d/);
+  assert.match(text, /ea5575ca8b4efc735105872497bbe684/);
   assert.match(text, /bak-chat102r6i/);
 });
 
@@ -183,7 +256,7 @@ test("remote payload is fetched and a non-matching root is refused", () => {
   assert.match(out, new RegExp("remote payload ok: server_block_c102r6i.js " + blockHash));
   assert.match(out, new RegExp(payload));
   assert.match(out, /replace refused/);
-  assert.match(out, /PENDING_AFTER_CHAT104_CHAT103H_SERVER/);
+  assert.match(out, /ebc29e2d257228adf720f98c5f1703fc/);
   assert.deepEqual(fs.readFileSync(path.join(root, "server.js")), before);
   assert.equal(fs.readdirSync(root).some((n) => n.includes("bak-chat102r6i")), false);
 });

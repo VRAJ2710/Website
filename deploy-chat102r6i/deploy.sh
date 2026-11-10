@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # deploy-chat102r6i: desk-quotes vendor names, futures source line, scenario copy, chart axis.
-# Runs after chat104 and chat103h. Md5 guards below are placeholders until those land.
+# Runs after chat104 and chat103h. Guards are the staged dev root.
 # Does NOT start the server, npm, git, or republish.
 # Usage: bash deploy.sh [--dry-run] [--dir /path/to/project]
 set -u
@@ -8,10 +8,10 @@ set -u
 # Do not point this at the commit that only changes deploy.sh.
 PAYLOAD_COMMIT=0e001025592b73d99aec102e0681b71ba5db1232
 BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/${PAYLOAD_COMMIT}/deploy-chat102r6i"
-# Re-pin these three after chat104 then chat103h are on the dev root.
-SERVER_MD5=PENDING_AFTER_CHAT104_CHAT103H_SERVER
-APP_MD5=PENDING_AFTER_CHAT104_CHAT103H_APP
-INDEX_MD5=PENDING_AFTER_CHAT104_CHAT103H_INDEX
+# Staged root after chat104, then chat103h. Index tag is app.js?v=chat104.
+SERVER_MD5=ebc29e2d257228adf720f98c5f1703fc
+APP_MD5=459d922ab3a3f6e504b0b534b2ea4f5d
+INDEX_MD5=ea5575ca8b4efc735105872497bbe684
 PREFIX_SHA=715b843b5e7b15e38a16a6478337d7f94752eeb4da3b902b4bcd60603e15aaa7
 MANIFEST=(
   "patch_c102r6i.py 5a6b9ed5864536050c9a3ef36cd165be707cfc8a171f10a2d98c8bee7c0725c5"
