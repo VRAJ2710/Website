@@ -536,6 +536,83 @@ test("stored reading is served stale while one hung refresh is in flight", async
   assert.equal(fresh.body.cacheNote, undefined);
 });
 
+test("a later timeout keeps the last good spot price, source and as-of", async () => {
+  const store = new Map();
+  let hangMetals = false;
+  const deps = {
+    timeoutMs: 50,
+    fred: null,
+    calendar: null,
+    goldDash: null,
+    cnbc: null,
+    fetch: async (url) => {
+      const u = String(url);
+      if (hangMetals && (u.includes("XAU") || u.includes("XAG"))) return new Promise(() => {});
+      if (u.includes("XAU")) return { ok: true, json: async () => ({ symbol: "XAU", currency: "USD", price: 4100.25, updatedAt: "2026-11-06T15:23:00Z" }) };
+      if (u.includes("XAG")) return { ok: true, json: async () => ({ symbol: "XAG", currency: "USD", price: 50, updatedAt: "2026-11-06T15:23:00Z" }) };
+      if (u.includes("DX-Y.NYB")) return { ok: true, json: async () => yahoo("DX-Y.NYB", "US Dollar Index", 102, 101, 1793978328, { fullExchangeName: "ICE Futures", exchangeName: "NYB" }) };
+      return new Promise(() => {});
+    }
+  };
+  const producer = () => lib.c102Collect(deps, NOW);
+  const cold = await lib.c102Memo(store, "snap-keep", 60 * 1000, producer, () => lib.c102ColdSnap(NOW));
+  assert.equal(cold.body.cacheState, "cold");
+  assert.equal(cold.body.spot.price, undefined);
+  await new Promise((r) => setTimeout(r, 200));
+  const saved = store.get("snap-keep");
+  assert.equal(saved.body.spot.price, 4100.25);
+  assert.equal(saved.body.spot.asOfUtc, "2026-11-06T15:23:00.000Z");
+  assert.equal(saved.body.spot.source, "gold-api.com");
+  saved.at = Date.now() - 120000;
+  hangMetals = true;
+  const t0 = Date.now();
+  const whileHung = await lib.c102Memo(store, "snap-keep", 1000, producer, () => lib.c102ColdSnap(NOW));
+  assert.ok(Date.now() - t0 < 250, "stale read took " + (Date.now() - t0));
+  assert.equal(whileHung.body.spot.price, 4100.25);
+  assert.equal(whileHung.body.spot.asOfUtc, "2026-11-06T15:23:00.000Z");
+  await new Promise((r) => setTimeout(r, 200));
+  const after = await lib.c102Memo(store, "snap-keep", 60 * 1000, producer, () => lib.c102ColdSnap(NOW));
+  assert.equal(after.body.spot.price, 4100.25);
+  assert.equal(after.body.spot.asOfUtc, "2026-11-06T15:23:00.000Z");
+  assert.equal(after.body.spot.source, "gold-api.com");
+  assert.equal(after.body.spot.status, "stale");
+  assert.match(after.body.spot.message, /Stored reading from /);
+  assert.equal(after.body.spot.message.includes(after.body.spot.asOfUk), true);
+  assert.match(after.body.spot.message, /not a new print/);
+  assert.equal(after.body.silver.price, 50);
+  assert.match(after.body.silver.message, /not a new print/);
+  assert.equal(after.body.dollar.status, "ok");
+  assert.equal(after.body.dollar.price, 102);
+  assert.equal(String(after.body.dollar.message || "").includes("not a new print"), false);
+  assert.equal(JSON.stringify(after.body.spot).includes("No number was filled in"), false);
+});
+
+test("a cold start that times out stays empty and does not invent a price", async () => {
+  const store = new Map();
+  const producer = () => lib.c102Collect({
+    fetch: () => new Promise(() => {}),
+    timeoutMs: 40,
+    fred: () => new Promise(() => {}),
+    calendar: () => new Promise(() => {}),
+    goldDash: () => new Promise(() => {}),
+    cnbc: () => new Promise(() => {})
+  }, NOW);
+  const t0 = Date.now();
+  const first = await lib.c102Memo(store, "snap-empty", 1000, producer, () => lib.c102ColdSnap(NOW));
+  assert.ok(Date.now() - t0 < 250, "cold read took " + (Date.now() - t0));
+  assert.equal(first.body.cacheState, "cold");
+  assert.match(first.body.cacheNote, /No stored reading yet/);
+  assert.match(first.body.cacheNote, /No number was filled in/);
+  assert.equal(first.body.spot.price, undefined);
+  await new Promise((r) => setTimeout(r, 150));
+  const second = await lib.c102Memo(store, "snap-empty", 1000, producer, () => lib.c102ColdSnap(NOW));
+  assert.equal(second.body.cacheState, "cold");
+  assert.equal(second.body.spot.price, undefined);
+  assert.equal(second.body.silver.price, undefined);
+  assert.match(second.body.spot.message, /No number was filled in/);
+  assert.equal(store.has("snap-empty"), false);
+});
+
 test("hung upstream does not delay /terminal/ html or the json routes", async () => {
   const pageSrc = fs.readFileSync(path.join(dir, "lib_c102.js"), "utf8");
   const pageFn = pageSrc.slice(pageSrc.indexOf("async function page"), pageSrc.indexOf("if (typeof handle"));

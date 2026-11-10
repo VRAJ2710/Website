@@ -509,12 +509,14 @@ async function c102Get(deps, url, accept, ms) {
 
 async function c102Collect(deps, nowMs) {
   const ms = (deps && deps.timeoutMs) || 2000;
+  // gold-api.com is the feed that missed the 2s cap in production. The refresh does not block the response, so this host gets one extra second. Other feeds stay at 2s.
+  const goldMs = (deps && deps.timeoutMs) || 3000;
   const job = (fn) => fn().then((v) => ({ ok: true, v: v })).catch((e) => ({ ok: false, err: c102Classify(e) }));
   const limit = (p) => c102Deadline(Promise.resolve().then(() => p), ms);
   const yahoo = (symbol, range, interval) => c102Get(deps, C102_YAHOO + encodeURIComponent(symbol) + "?range=" + range + "&interval=" + interval, "application/json", ms).then((r) => r.json());
   const tasks = {
-    gold: job(() => c102Get(deps, C102_GOLD_URL, "application/json", ms).then((r) => r.json()).then((j) => c102ParseMetal(j, "XAU"))),
-    silver: job(() => c102Get(deps, C102_SILVER_URL, "application/json", ms).then((r) => r.json()).then((j) => c102ParseMetal(j, "XAG"))),
+    gold: job(() => c102Get(deps, C102_GOLD_URL, "application/json", goldMs).then((r) => r.json()).then((j) => c102ParseMetal(j, "XAU"))),
+    silver: job(() => c102Get(deps, C102_SILVER_URL, "application/json", goldMs).then((r) => r.json()).then((j) => c102ParseMetal(j, "XAG"))),
     dollar: job(() => yahoo("DX-Y.NYB", "5d", "1d").then((j) => c102YahooQuote(j, {
       symbol: "DX-Y.NYB", instrument: "INDEX", nameTest: /dollar index/i, rejectName: /synthetic|basket|VXX/i, wantIce: true, range: [40, 200],
       label: "US dollar index", source: "ICE US Dollar Index via Yahoo Finance, delayed", sourceUrl: "https://finance.yahoo.com/"
@@ -609,17 +611,52 @@ async function c102ChartFetch(deps, nowMs) {
 
 const c102Flights = new Map();
 
+function c102RowGood(row) {
+  if (!row || (row.status !== "ok" && row.status !== "stale" && row.status !== "partial")) return false;
+  if (typeof row.price === "number" || typeof row.value === "number" || typeof row.net === "number" || typeof row.changePct === "number") return true;
+  if (Array.isArray(row.items) && row.items.length > 0) return true;
+  return false;
+}
+
+function c102CarryRow(prev) {
+  const copy = Object.assign({}, prev);
+  const when = prev.asOfUk || prev.asOfUtc || prev.date || prev.reportDate || prev.asOfText || "";
+  copy.status = "stale";
+  copy.message = "Stored reading from " + (when || "the last good response") + ". It was not refreshed. It is not a new print.";
+  return copy;
+}
+
+function c102MergeFeeds(prev, next) {
+  const out = Object.assign({}, next);
+  const keys = ["spot", "silver", "dollar", "vix", "nominal", "realMarket", "nominalOfficial", "realOfficial", "positioning", "events", "spotChange"];
+  keys.forEach((k) => {
+    if (!c102RowGood(next[k]) && c102RowGood(prev[k])) out[k] = c102CarryRow(prev[k]);
+  });
+  const goldKept = out.spot !== next.spot;
+  const silverKept = out.silver !== next.silver;
+  if (goldKept || silverKept) {
+    if (goldKept && silverKept && c102RowGood(prev.ratio)) out.ratio = c102CarryRow(prev.ratio);
+    else if (c102RowGood(out.spot) && c102RowGood(out.silver)) {
+      const ratio = c102Ratio(Object.assign({}, out.spot, { status: "ok" }), Object.assign({}, out.silver, { status: "ok" }));
+      if (typeof ratio.value === "number" && (ratio.status === "ok" || ratio.status === "partial")) {
+        const when = ratio.asOfUtc || "";
+        ratio.status = "stale";
+        ratio.message = "Stored reading from " + (when || "the last good spot prints") + ". It was not refreshed. It is not a new print.";
+        out.ratio = ratio;
+      } else if (c102RowGood(prev.ratio)) out.ratio = c102CarryRow(prev.ratio);
+      else out.ratio = ratio;
+    } else if (c102RowGood(prev.ratio)) out.ratio = c102CarryRow(prev.ratio);
+  }
+  return out;
+}
+
 function c102WorthStoring(body) {
   if (!body || typeof body !== "object") return false;
   if (body.cacheState === "cold") return false;
   if (body.status === "timeout" || body.status === "unavailable" || body.status === "malformed") return false;
   if (Array.isArray(body.bars) && body.bars.length && body.status === "ok") return true;
-  const keys = ["spot", "silver", "dollar", "vix", "nominal", "realMarket", "nominalOfficial", "realOfficial", "positioning", "events"];
-  return keys.some((k) => {
-    const row = body[k];
-    if (!row || (row.status !== "ok" && row.status !== "stale" && row.status !== "partial")) return false;
-    return typeof row.price === "number" || typeof row.value === "number" || typeof row.net === "number" || (Array.isArray(row.items) && row.items.length > 0);
-  });
+  const keys = ["spot", "silver", "dollar", "vix", "nominal", "realMarket", "nominalOfficial", "realOfficial", "positioning", "events", "spotChange", "ratio"];
+  return keys.some((k) => c102RowGood(body[k]));
 }
 
 function c102WithCache(body, at, state) {
@@ -638,8 +675,19 @@ function c102WithCache(body, at, state) {
 function c102Kick(store, key, producer) {
   if (c102Flights.has(key)) return c102Flights.get(key);
   const run = Promise.resolve().then(() => producer()).then((body) => {
-    if (c102WorthStoring(body)) store.set(key, { ok: true, at: Date.now(), body: body });
-    return body;
+    const prev = store.get(key);
+    let next = body;
+    if (prev && prev.ok && prev.body && body && (prev.body.spot || prev.body.silver) && (body.spot || body.silver)) {
+      next = c102MergeFeeds(prev.body, body);
+    }
+    if (c102WorthStoring(next)) {
+      const saved = Object.assign({}, next);
+      delete saved.cacheState;
+      delete saved.cacheNote;
+      delete saved.cachedAt;
+      store.set(key, { ok: true, at: Date.now(), body: saved });
+    }
+    return next;
   }).catch(() => null).finally(() => { c102Flights.delete(key); });
   c102Flights.set(key, run);
   return run;
@@ -660,6 +708,9 @@ function c102ColdSnap(nowMs) {
   model.ok = false;
   model.cacheState = "cold";
   model.cacheNote = "No stored reading yet. The feeds are being asked in the background. No number was filled in.";
+  ["spot", "silver", "dollar", "vix", "nominal", "realMarket", "nominalOfficial", "realOfficial", "positioning", "events", "spotChange", "ratio"].forEach((k) => {
+    if (model[k] && !c102RowGood(model[k])) model[k] = c102Fail("unavailable", "No stored reading yet. No number was filled in.");
+  });
   return model;
 }
 
@@ -916,7 +967,7 @@ function c102Install() {
 const api = {
   c102Esc, c102Uk, c102Ymd, c102ParseMetal, c102Ratio, c102YahooQuote, c102FredCsv, c102FredRows, c102Cot, c102Chart, c102Sma,
   c102SnapshotChange, c102Events, c102Cnbc, c102Assemble, c102Collect, c102ChartFetch, c102Render, c102Install, c102Classify,
-  c102Memo, c102ColdSnap, c102ColdChart, c102WorthStoring,
+  c102Memo, c102ColdSnap, c102ColdChart, c102WorthStoring, c102MergeFeeds, c102RowGood,
   C102_CSS, C102_FUTURE
 };
 if (typeof module !== "undefined" && module.exports) module.exports = api;
