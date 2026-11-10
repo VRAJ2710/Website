@@ -286,6 +286,7 @@ test("deploy dry-run refuses a mismatched root and writes nothing", () => {
   assert.match(spec, /099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054/);
   assert.match(spec, /b84058f6da16ad022640b06c9cdda72d/);
   assert.match(spec, /b3e02b0c6e403133843a96adf45d219c/);
+  assert.match(spec, /R5_SERVER_MD5=0284a3b26acaa055ed4699b1c36b6ddc/);
 });
 
 test("labelled fallback is used only when the schedule does not already have that date", () => {

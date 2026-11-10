@@ -116,7 +116,7 @@ Every card says what the number is, which source and date it came from, and why 
 - chat102 tail sha256 `099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054`
 - `app.js` md5 `b84058f6da16ad022640b06c9cdda72d` (unchanged from r4)
 - `index.html` md5 `b3e02b0c6e403133843a96adf45d219c` (unchanged from r4)
-- full `server.js` md5 is the r5 file: the r4 prefix (the bytes before the chat102 marker in the file whose md5 is `5e8e3e34b6c71ae9e510c40b298ee6fc`) plus the r5 tail. That prefix is not in this repository. The installer prints the full md5 once it is on that root, and refuses a different tail.
+- full `server.js` md5 `0284a3b26acaa055ed4699b1c36b6ddc` (the staged chat102r5 dev root), chat102 tail sha256 `099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054`
 
 A failed BLS series, the schedule, the weight table, the hourly gold feed, or the daily gold feed keeps that feed’s last good values, with the original source and as-of time, and the note “Stored reading from … It was not refreshed. It is not a new print.” “No number was filled in” is only for a feed that has never succeeded.
 

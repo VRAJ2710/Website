@@ -6,11 +6,11 @@ Public `/cpi/` for The Dispatch Market. It is added to the live chat102r5 files 
 
 | File | Required |
 | --- | --- |
-| `server.js` chat102 tail | sha256 `099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054` |
+| `server.js` | md5 `0284a3b26acaa055ed4699b1c36b6ddc`, chat102 tail sha256 `099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054` |
 | `app.js` | md5 `b84058f6da16ad022640b06c9cdda72d` |
 | `index.html` | md5 `b3e02b0c6e403133843a96adf45d219c` |
 
-The r4 server md5 was `5e8e3e34b6c71ae9e510c40b298ee6fc`. r5 replaces that tail and leaves app and index alone. The full r5 server md5 is what `deploy-chat102/deploy.sh --dry-run` prints on that r4 root. This repository does not contain the r4 prefix, so chat103 checks the r5 tail, the app, and the index. When `R5_SERVER_MD5` in `deploy.sh` is filled with that printed md5, a different full file is refused as well.
+That server md5 is the staged chat102r5 dev root. App and index are the same bytes as r4. A different full file, tail, app or index is refused.
 
 ```sh
 bash deploy.sh --dry-run

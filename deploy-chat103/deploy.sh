@@ -12,11 +12,9 @@ BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/${PAYLOAD_COMMIT}/d
 R5_TAIL_SHA256=099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054
 R5_APP_MD5=b84058f6da16ad022640b06c9cdda72d
 R5_INDEX_MD5=b3e02b0c6e403133843a96adf45d219c
-# Full-file md5 of server.js after the r5 tail is applied to the r4 root
-# (r4 md5 5e8e3e34b6c71ae9e510c40b298ee6fc, r4 tail 3e812cd7…). The r4 prefix
-# is not in this repository, so the full-file md5 is checked when this is set
-# to the value printed by the r5 dry run. An empty value does not skip the tail check.
-R5_SERVER_MD5=
+# Full-file md5 of server.js on the staged chat102r5 dev root (10 Nov 2026).
+# Tail sha256 099d7a7e…, app b84058f6 and index b3e02b0c are unchanged from r4.
+R5_SERVER_MD5=0284a3b26acaa055ed4699b1c36b6ddc
 NEW_L1='const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)'
 MARKER='// chat102 terminal. Built from lib_c102.js and client_c102.js. Edit those, then run node build_block.js.'
 MANIFEST=(
@@ -55,9 +53,8 @@ sm=$(md5of "$SERVER"); am=$(md5of "$APP"); im=$(md5of "$INDEX")
 say "root md5: server $sm | app $am | index $im"
 [ "$am" = "$R5_APP_MD5" ] || die "root app.js md5 $am is not the chat102 app $R5_APP_MD5"
 [ "$im" = "$R5_INDEX_MD5" ] || die "root index.html md5 $im is not the chat102 index $R5_INDEX_MD5"
-if [ -n "$R5_SERVER_MD5" ] && [ "$sm" != "$R5_SERVER_MD5" ]; then
-  die "root server.js md5 $sm is not the chat102r5 server $R5_SERVER_MD5"
-fi
+[ -n "$R5_SERVER_MD5" ] || die "R5_SERVER_MD5 is empty"
+[ "$sm" = "$R5_SERVER_MD5" ] || die "root server.js md5 $sm is not the chat102r5 server $R5_SERVER_MD5"
 [ "$(head -n 1 "$SERVER")" = "$NEW_L1" ] || die "project-root server.js line 1 is not the maintenance=false line"
 python3 - "$SERVER" "$MARKER" "$R5_TAIL_SHA256" << 'PY' || die "server.js tail is not the chat102r5 block"
 import hashlib, pathlib, sys
