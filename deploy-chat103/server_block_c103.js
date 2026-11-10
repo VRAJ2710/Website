@@ -742,14 +742,44 @@ function c103CarryNote(when) {
   return "Stored reading from " + (when || "the last good response") + ". It was not refreshed. It is not a new print.";
 }
 
+function c103NewestPeriod(points) {
+  let best = "";
+  (points || []).forEach((p) => {
+    if (!p || typeof p.value !== "number" || !isFinite(p.value)) return;
+    const key = c103Period(p.year, p.month);
+    if (key > best) best = key;
+  });
+  return best;
+}
+
+function c103UnionPoints(prev, next) {
+  const map = new Map();
+  (prev || []).forEach((p) => {
+    if (p && typeof p.value === "number" && isFinite(p.value)) map.set(c103Period(p.year, p.month), p);
+  });
+  const prevNewest = c103NewestPeriod(prev);
+  const nextNewest = c103NewestPeriod(next);
+  const older = !!(prevNewest && nextNewest && nextNewest < prevNewest);
+  (next || []).forEach((p) => {
+    if (!p || typeof p.value !== "number" || !isFinite(p.value)) return;
+    map.set(c103Period(p.year, p.month), p);
+  });
+  return { points: Array.from(map.values()), older: older };
+}
+
 function c103PickSeries(nextMap, prevMap) {
   const out = {};
   const carried = {};
   const ids = new Set(Object.keys(prevMap || {}).concat(Object.keys(nextMap || {})));
   ids.forEach((id) => {
-    if (c103SeriesGood(nextMap && nextMap[id])) out[id] = nextMap[id];
-    else if (c103SeriesGood(prevMap && prevMap[id])) {
-      out[id] = prevMap[id];
+    const next = nextMap && nextMap[id];
+    const prev = prevMap && prevMap[id];
+    if (c103SeriesGood(next)) {
+      const union = c103UnionPoints(prev, next);
+      out[id] = union.points;
+      if (union.older) carried[id] = true;
+    } else if (c103SeriesGood(prev)) {
+      out[id] = prev;
       carried[id] = true;
     }
   });
@@ -862,6 +892,7 @@ function c103Compose(parts, nowMs) {
     relativeImportance: ri && ri.ok ? { asOf: ri.asOf, citation: ri.citation, sourceUrl: ri.sourceUrl, homeUrl: ri.homeUrl } : (ri ? { asOf: ri.asOf || "", citation: ri.citation || "", sourceUrl: C103_RI, homeUrl: C103_RI_HOME, missing: !ri.ok } : null),
     contributionLabel: C103_CONTRIB_LABEL,
     goldLabel: C103_GOLD_LABEL,
+    seriesFresh: !!(parts && parts.series && parts.series.ok) && !headlineCarried && !coreCarried,
     noticeCandidate: match && latest ? { releaseKey: match.releaseAtUtc, periodLabel: latest.periodLabel, referencePeriod: latest.period } : null,
     previousSeries: series,
     previousRi: ri,
@@ -1190,6 +1221,7 @@ async function c103FetchAll(deps, nowMs) {
     hasStored: !!(deps && deps.hasStored),
     inReleaseWindow: !!(deps && deps.inReleaseWindow),
     hasNewMonth: !!(deps && deps.hasNewMonth),
+    missingReleaseMonth: !!(deps && deps.missingReleaseMonth),
     needsSecondBatch: !!(deps && deps.needsSecondBatch)
   };
   const plan = c103BlsPlan(deps && deps.blsBudget, nowMs, info);
@@ -1216,19 +1248,32 @@ async function c103FetchAll(deps, nowMs) {
     yahooDue ? c103Job(() => c103RawGet(deps, c103GoldUrl("1d", "5y"), ms)) : Promise.resolve({ ok: false, error: "skipped" }),
     Promise.all(chunks.map((list) => c103Job(() => c103RawGet(Object.assign({}, deps, { headers: { "Content-Type": "application/json" } }), C103_BLS, ms, blsBody(list)))))
   ]);
-  const blsMade = blsParts.filter((part) => part.ok).length;
-  const blsBudget = c103BlsCharge(plan, plan.call ? chunks.length : 0, nowMs);
   const series = {};
   let seriesOk = false;
+  let blsMade = 0;
   blsParts.forEach((part) => {
-    if (!part.ok) return;
+    if (!part.ok) {
+      console.log("[c103] BLS fail " + (part.error || "failed"));
+      return;
+    }
     let json = null;
     try { json = JSON.parse(part.value); } catch (e) { json = null; }
     const parsed = c103ParseBls(json);
-    if (!parsed.ok) return;
+    if (!parsed.ok) {
+      console.log("[c103] BLS fail status");
+      return;
+    }
+    blsMade += 1;
     seriesOk = true;
-    Object.keys(parsed.series).forEach((id) => { series[id] = parsed.series[id]; });
+    let newest = "";
+    Object.keys(parsed.series).forEach((id) => {
+      series[id] = parsed.series[id];
+      const top = c103NewestPeriod(parsed.series[id]);
+      if (top > newest) newest = top;
+    });
+    console.log("[c103] BLS ok series=" + Object.keys(parsed.series).length + " newest=" + (newest || "none"));
   });
+  const blsBudget = c103BlsCharge(plan, blsMade, nowMs);
   let hourlyBars = [];
   let dailyBars = [];
   if (hourly.ok) {
@@ -1293,6 +1338,10 @@ function c103BlsPlan(budget, nowMs, info) {
   const room = cap - calls;
   if (room <= 0) return Object.assign(base, { call: false, reason: "budget", batches: 0 });
   if (!(info && info.hasStored)) return Object.assign(base, { call: true, reason: "empty", batches: room });
+  if (info.missingReleaseMonth) {
+    if (last && nowMs - last < 5 * 60 * 1000) return Object.assign(base, { call: false, reason: "poll-wait", batches: 0, offset: 0 });
+    return Object.assign(base, { call: true, reason: "missing-month", batches: 1, offset: 0 });
+  }
   if (info.inReleaseWindow && !info.hasNewMonth) {
     if (last && nowMs - last < 5 * 60 * 1000) return Object.assign(base, { call: false, reason: "poll-wait", batches: 0, offset: 0 });
     return Object.assign(base, { call: true, reason: "release-window", batches: 1, offset: 0 });
@@ -1323,6 +1372,22 @@ function c103NeedsSecondBatch(model) {
   return C103_CATALOG.some((row) => [row[2], row[3]].some((id) => !(series[id] || []).some((p) => p.year === y && p.month === m)));
 }
 
+function c103DueReference(events, nowMs) {
+  const past = (events || []).filter((ev) => ev && ev.startMs <= nowMs && ev.referencePeriod && !ev.dailyOnly);
+  past.sort((a, b) => b.startMs - a.startMs);
+  return past[0] || null;
+}
+
+function c103ReleaseMonthMissing(model, nowMs) {
+  const due = c103DueReference(model && model.previousEvents, nowMs);
+  if (!due) return false;
+  if (nowMs - due.startMs > 36 * 3600 * 1000) return false;
+  const bits = /^(\d{4})-(\d{2})$/.exec(due.referencePeriod);
+  if (!bits) return false;
+  const points = model && model.previousSeries && model.previousSeries.CUSR0000SA0;
+  return !(points || []).some((p) => p && p.year === Number(bits[1]) && p.month === Number(bits[2]) && typeof p.value === "number");
+}
+
 function c103HasNewMonth(model, nowMs) {
   const events = model && model.previousEvents || [];
   const open = events.filter((ev) => ev && nowMs >= ev.startMs && nowMs - ev.startMs <= 90 * 60 * 1000);
@@ -1334,6 +1399,7 @@ function c103CacheMs(model, nowMs) {
   const events = model && model.previousEvents || [];
   const next = events.filter((ev) => ev && ev.startMs > nowMs).sort((a, b) => a.startMs - b.startMs)[0];
   const inWindow = c103InReleaseWindow(events, nowMs);
+  if (c103ReleaseMonthMissing(model, nowMs)) return 60 * 1000;
   if (inWindow && !c103HasNewMonth(model, nowMs)) return 60 * 1000;
   const follow = inWindow || events.some((ev) => ev && nowMs >= ev.startMs && nowMs - ev.startMs < 6 * 3600 * 1000);
   const weightsOk = !!(model && model.latest && model.previousRi && c103WeightsMatch(model.previousRi.weightMonth || model.previousRi.asOf, model.latest.period));
@@ -1355,8 +1421,10 @@ async function c103Refresh(deps, nowMs, previous) {
   deps.hasStored = !!(previous && previous.latest);
   deps.inReleaseWindow = c103InReleaseWindow(events, nowMs);
   deps.hasNewMonth = c103HasNewMonth(previous, nowMs);
+  deps.missingReleaseMonth = c103ReleaseMonthMissing(previous, nowMs);
   deps.blsBudget = (previous && previous.blsBudget) || (deps && deps.blsBudget) || { calls: 0, dayKey: "", lastBlsAt: 0 };
-  deps.needsSecondBatch = c103NeedsSecondBatch(previous) && (deps.inReleaseWindow || (events.some((ev) => ev && nowMs >= ev.startMs && nowMs - ev.startMs < 6 * 3600 * 1000)));
+  const dueNow = c103DueReference(events, nowMs);
+  deps.needsSecondBatch = c103NeedsSecondBatch(previous) && !!(dueNow && previous && previous.latest && previous.latest.period === dueNow.referencePeriod);
   deps.scheduleFresh = !!(previous && previous.previousEvents && previous.previousEvents.some((ev) => ev && ev.source === "bls-ics") && previous.feedTimes && nowMs - Date.parse(previous.feedTimes.schedule || 0) < 24 * 3600 * 1000);
   const weightsOk = previous && previous.latest && previous.previousRi && c103WeightsMatch(previous.previousRi.weightMonth || previous.previousRi.asOf, previous.latest.period);
   const lastRi = previous && previous.feedTimes && Date.parse(previous.feedTimes.ri || 0);
@@ -1370,6 +1438,10 @@ async function c103Refresh(deps, nowMs, previous) {
     model.feedTimes.ri = fetched.ri && fetched.ri.ok ? new Date(nowMs).toISOString() : (previous && previous.feedTimes && previous.feedTimes.ri);
   }
   if (!model.latest) model.statusNote = "not loaded yet";
+  if (c103ReleaseMonthMissing(model, nowMs)) {
+    const due = c103DueReference(model.previousEvents, nowMs);
+    model.statusNote = "The " + c103PeriodLabel(due.referencePeriod) + " figures are not in the stored release yet.";
+  }
   model.countdown = c103Countdown(nowMs, model.previousEvents || []);
   return model;
 }
@@ -1460,6 +1532,7 @@ async function c103LoadStored(deps) {
   const goldRows = await one("SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS data FROM (SELECT release_at, reference_period, plus_1h_pct, plus_1d_pct, plus_5d_pct, hourly_available, recorded, hour_label, source_label FROM cpi_gold_reactions) t");
   const budgetRows = await one("SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS data FROM (SELECT payload FROM cpi_releases WHERE period = '__bls_budget') t");
   const scheduleRows = await one("SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS data FROM (SELECT payload, bls_fetched_at FROM cpi_releases WHERE period = '__schedule') t");
+  const figureRows = await one("SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS data FROM (SELECT period, bls_fetched_at FROM cpi_releases WHERE period ~ '^[0-9]{4}-[0-9]{2}$') t");
   const series = {};
   seriesRows.forEach((row) => {
     const m = /^(\d{4})-(\d{2})$/.exec(row.period || "");
@@ -1479,10 +1552,16 @@ async function c103LoadStored(deps) {
     sourceLabel: C103_GOLD_LABEL,
     releaseUk: c103FormatUk(new Date(row.release_at).getTime())
   }));
-  const budget = budgetRows[0] && budgetRows[0].payload ? budgetRows[0].payload : null;
+  let budget = budgetRows[0] && budgetRows[0].payload ? budgetRows[0].payload : null;
+  if (typeof budget === "string") { try { budget = JSON.parse(budget); } catch (e) { budget = null; } }
   const schedule = scheduleRows[0] && scheduleRows[0].payload ? scheduleRows[0].payload : null;
   const savedEvents = schedule && Array.isArray(schedule.events) ? schedule.events : [];
-  const savedAt = (schedule && schedule.fetchedAt) || (scheduleRows[0] && scheduleRows[0].bls_fetched_at) || "";
+  const figureAt = (figureRows || []).reduce((best, row) => {
+    if (!row || !row.period || row.period <= best.period) return best;
+    return { period: row.period, at: row.bls_fetched_at || "" };
+  }, { period: "", at: "" }).at;
+  const scheduleAt = (schedule && schedule.fetchedAt) || (scheduleRows[0] && scheduleRows[0].bls_fetched_at) || "";
+  const savedAt = figureAt || "";
   if (!Object.keys(series).length && !storedGold.length && !savedEvents.length) return null;
   const model = c103Compose({
     series: { ok: Object.keys(series).length > 0, series: series },
@@ -1495,7 +1574,7 @@ async function c103LoadStored(deps) {
     storedGold: storedGold,
     fetchedAt: savedAt,
     storedFetchedAt: savedAt,
-    feedTimes: { bls: savedAt, schedule: savedAt }
+    feedTimes: { bls: savedAt, schedule: scheduleAt }
   }, savedAt ? Date.parse(savedAt) : Date.now());
   model.storedGold = storedGold;
   model.blsBudget = budget;
@@ -1537,7 +1616,7 @@ function c103Install() {
     deps.knownSeries = prev && prev.body && prev.body.previousSeries || {};
     deps.knownGold = prev && prev.body && prev.body.storedGold || [];
     const body = await c103Refresh(deps, Date.now(), prev && prev.body);
-    c103Persist(deps, body).catch(() => {});
+    c103Persist(deps, body).catch((err) => { console.log("[c103] persist fail " + (err && err.message || err)); });
     return body;
   }
   function read() {
@@ -1706,21 +1785,20 @@ async function c103Persist(deps, model) {
       VALUES (${s.releaseAtUtc}, ${s.observedAtUtc}, ${s.price}, ${s.windowKind}, ${C103_GOLD_LABEL})
       ON CONFLICT DO NOTHING`;
   }
-  if (model.latest && model.latest.headline && typeof model.latest.headline.saIndex === "number") {
-    const latest = model.latest;
-    const releaseAt = latest.releaseAtUtc || null;
-    const source = latest.releaseSource || "stored";
-    await deps.sql`INSERT INTO cpi_releases (period, release_at, release_source, reference_label, headline_mom, headline_yoy, core_mom, core_yoy, bls_fetched_at, payload)
-      VALUES (${latest.period}, ${releaseAt}, ${source}, ${latest.periodLabel}, ${latest.headline.momRounded}, ${latest.headline.yoyRounded},
-        ${latest.core ? latest.core.momRounded : null}, ${latest.core ? latest.core.yoyRounded : null}, ${latest.fetchedAt}, ${JSON.stringify({ period: latest.period })})
-      ON CONFLICT (period) DO UPDATE SET headline_mom = EXCLUDED.headline_mom, headline_yoy = EXCLUDED.headline_yoy,
-        core_mom = EXCLUDED.core_mom, core_yoy = EXCLUDED.core_yoy, bls_fetched_at = EXCLUDED.bls_fetched_at, fetched_at = NOW()`;
-  }
   const changed = c103ChangedSeries(deps.knownSeries || {}, model.previousSeries || {});
+  const newestStored = c103NewestPeriod([].concat(...Object.keys(deps.knownSeries || {}).map((id) => deps.knownSeries[id] || [])));
+  const fresh = !!(model.seriesFresh && model.latest && model.latest.headline && typeof model.latest.headline.saIndex === "number" && (!newestStored || model.latest.period >= newestStored));
   if (changed.length && typeof deps.sql.query === "function") {
     await deps.sql.query(
       "INSERT INTO cpi_series_values (series_id, period, value) SELECT series_id, period, value FROM jsonb_to_recordset($1::jsonb) AS x(series_id text, period text, value double precision) ON CONFLICT (series_id, period) DO UPDATE SET value = EXCLUDED.value, fetched_at = NOW() WHERE cpi_series_values.value IS DISTINCT FROM EXCLUDED.value",
       [JSON.stringify(changed)]
+    );
+  }
+  if (fresh && typeof deps.sql.query === "function") {
+    const latest = model.latest;
+    await deps.sql.query(
+      "INSERT INTO cpi_releases (period, release_at, release_source, reference_label, headline_mom, headline_yoy, core_mom, core_yoy, bls_fetched_at, payload) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb) ON CONFLICT (period) DO UPDATE SET headline_mom = EXCLUDED.headline_mom, headline_yoy = EXCLUDED.headline_yoy, core_mom = EXCLUDED.core_mom, core_yoy = EXCLUDED.core_yoy, bls_fetched_at = EXCLUDED.bls_fetched_at, fetched_at = NOW()",
+      [latest.period, latest.releaseAtUtc || null, latest.releaseSource || "stored", latest.periodLabel, latest.headline.momRounded, latest.headline.yoyRounded, latest.core ? latest.core.momRounded : null, latest.core ? latest.core.yoyRounded : null, latest.fetchedAt, JSON.stringify({ period: latest.period })]
     );
   }
   const goldRows = c103ChangedGold(deps.knownGold || [], model.gold || []);

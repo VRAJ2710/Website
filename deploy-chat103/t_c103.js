@@ -349,7 +349,7 @@ test("deploy dry-run refuses a mismatched root and writes nothing", () => {
   assert.equal(fs.readdirSync(root).some((name) => name.includes("bak-chat103")), false);
   const spec = fs.readFileSync(path.join(dir, "deploy.sh"), "utf8");
   assert.match(spec, /099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054/);
-  assert.match(spec, /BASE_SERVER_MD5=2cf106c8b7a929036fc854cecd5cf105/);
+  assert.match(spec, /BASE_SERVER_MD5=67a9c7972e1d8880b78d38056ffa876f/);
   assert.match(spec, /BASE_APP_MD5=93644cb45fc3884e7068bf9a902d73e3/);
   assert.match(spec, /BASE_INDEX_MD5=338615e7ece511104855785b67e9c10a/);
 });
@@ -597,6 +597,88 @@ test("stored gold stays when the schedule no longer lists that release", () => {
   assert.ok(model.gold.some((row) => row.releaseAtUtc === old.releaseAtUtc && row.plus1dPct === 0.4));
 });
 
+test("a restart after the release refetches the missing month without burning a failed call", async () => {
+  const release = lib.c103ReleaseInstant(2026, 11, 10, 8, 30);
+  release.source = "bls-ics";
+  const at = Date.parse("2026-11-10T16:45:00.000Z");
+  const previous = {
+    latest: { period: "2026-09", periodLabel: "September 2026", fetchedAt: "2026-11-10T14:00:00.000Z", headline: { momRounded: 0.6, saIndex: 336.298 } },
+    previousSeries: { CUSR0000SA0: [{ year: 2026, month: 9, value: 336.298 }, { year: 2026, month: 8, value: 334.131 }], CUUR0000SA0: [{ year: 2026, month: 9, value: 336.94 }, { year: 2025, month: 9, value: 324.8 }] },
+    previousEvents: [release],
+    feedTimes: { schedule: "2026-11-10T12:00:00.000Z", bls: "2026-11-10T14:00:00.000Z" },
+    blsBudget: { dayKey: "2026-11-10", calls: 4, lastBlsAt: at - 11 * 60 * 1000 }
+  };
+  const plan = lib.c103BlsPlan(previous.blsBudget, at, { apiKey: "", hasStored: true, missingReleaseMonth: true });
+  assert.equal(plan.call, true);
+  assert.equal(plan.reason, "missing-month");
+  assert.equal(plan.batches, 1);
+  const held = lib.c103BlsCharge(plan, 0, at);
+  assert.equal(held.calls, 4);
+  assert.equal(held.lastBlsAt, previous.blsBudget.lastBlsAt);
+  const stopped = lib.c103BlsPlan({ dayKey: "2026-11-10", calls: 20, lastBlsAt: at - 60 * 60 * 1000 }, at, { apiKey: "", hasStored: true, missingReleaseMonth: true });
+  assert.equal(stopped.call, false);
+  assert.equal(stopped.reason, "budget");
+  let calls = 0;
+  const body = await lib.c103Refresh({
+    timeoutMs: 1000,
+    blsBudget: previous.blsBudget,
+    fetch: async (url) => {
+      calls += String(url).includes("api.bls.gov") ? 1 : 0;
+      if (String(url).includes("api.bls.gov")) {
+        return { ok: true, status: 200, text: async () => JSON.stringify({ status: "REQUEST_SUCCEEDED", Results: { series: [
+          { seriesID: "CUSR0000SA0", data: [{ year: "2026", period: "M10", value: "337.643" }, { year: "2026", period: "M09", value: "336.298" }] },
+          { seriesID: "CUUR0000SA0", data: [{ year: "2026", period: "M10", value: "338" }, { year: "2026", period: "M09", value: "336.94" }, { year: "2025", period: "M09", value: "324.8" }] }
+        ] } }) };
+      }
+      return { ok: false, status: 500, text: async () => "" };
+    }
+  }, at, previous);
+  assert.equal(calls, 1);
+  assert.equal(body.latest.period, "2026-10");
+  assert.equal(body.latest.headline.momRounded, 0.4);
+  assert.equal(body.blsBudget.calls, 5);
+  assert.match(body.latest.headline.yoyNote, /October 2025/);
+});
+
+test("an older BLS response does not replace a newer stored month", () => {
+  const newer = { CUSR0000SA0: [{ year: 2026, month: 9, value: 336.298 }, { year: 2026, month: 10, value: 337.643 }], CUUR0000SA0: [{ year: 2026, month: 10, value: 338 }, { year: 2026, month: 9, value: 336.94 }] };
+  const older = { CUSR0000SA0: [{ year: 2026, month: 9, value: 336.298 }], CUUR0000SA0: [{ year: 2026, month: 9, value: 336.94 }, { year: 2025, month: 9, value: 324.8 }] };
+  const model = lib.c103Compose({
+    series: { ok: true, series: older },
+    previousSeries: newer,
+    icsOk: false,
+    htmlOk: false,
+    hourly: [],
+    daily: []
+  }, Date.parse("2026-11-10T16:45:00.000Z"));
+  assert.equal(model.latest.period, "2026-10");
+  assert.equal(model.latest.headline.momRounded, 0.4);
+  assert.equal(model.seriesFresh, false);
+  const rows = lib.c103ChangedSeries(newer, model.previousSeries);
+  assert.equal(rows.some((row) => row.period === "2026-10" && row.value !== 337.643), false);
+});
+
+test("a missing second batch is requested and the first batch's month stays", () => {
+  const at = Date.parse("2026-11-10T18:00:00.000Z");
+  const release = lib.c103ReleaseInstant(2026, 11, 10, 8, 30);
+  release.source = "bls-ics";
+  const series = {};
+  lib.C103_CATALOG.forEach((row, index) => {
+    const points = [{ year: 2026, month: 9, value: 100 + index }, { year: 2026, month: 8, value: 99 + index }];
+    if (index < 12) points.push({ year: 2026, month: 10, value: 101 + index });
+    series[row[2]] = points;
+    series[row[3]] = points.slice();
+  });
+  const previous = { latest: { period: "2026-10" }, previousSeries: series, previousEvents: [release], blsBudget: { dayKey: "2026-11-10", calls: 3, lastBlsAt: at - 6 * 60 * 1000 } };
+  const plan = lib.c103BlsPlan(previous.blsBudget, at, { apiKey: "", hasStored: true, hasNewMonth: true, needsSecondBatch: true });
+  assert.equal(plan.reason, "second-batch");
+  assert.equal(plan.offset, 25);
+  assert.equal(plan.batches, 1);
+  const kept = lib.c103Compose({ series: { ok: false }, previousSeries: series, previousEvents: [release], icsOk: false, htmlOk: false, hourly: [], daily: [] }, at);
+  assert.equal(kept.latest.period, "2026-10");
+  assert.equal(typeof kept.latest.headline.saIndex, "number");
+});
+
 test("only changed series values are written", () => {
   const prev = { CUSR0000SA0: [{ year: 2026, month: 9, value: 336.298 }] };
   const next = { CUSR0000SA0: [{ year: 2026, month: 9, value: 336.298 }, { year: 2026, month: 10, value: 337 }] };
@@ -681,6 +763,7 @@ test("a restart keeps the stored schedule and is stale enough to refresh", async
   const sql = async () => [];
   sql.query = async (text) => {
     if (text.includes("__schedule")) return [{ data: [{ payload: { events: [release], fetchedAt: fetchedAt }, bls_fetched_at: fetchedAt }] }];
+    if (text.includes("^[0-9]{4}")) return [{ data: [{ period: "2026-09", bls_fetched_at: fetchedAt }] }];
     if (text.includes("cpi_series_values")) return [{ data: [{ series_id: "CUSR0000SA0", period: "2026-09", value: 336.298 }, { series_id: "CUUR0000SA0", period: "2026-09", value: 336.94 }, { series_id: "CUUR0000SA0", period: "2025-09", value: 324.8 }] }];
     if (text.includes("hour_label")) return [{ data: [{ release_at: release.releaseAtUtc, reference_period: "2026-10", plus_1h_pct: 0.4, plus_1d_pct: null, plus_5d_pct: null, hourly_available: true, recorded: false, hour_label: "08:00\u219210:00 ET (hourly bars)", source_label: lib.C103_GOLD_LABEL }] }];
     return [{ data: [] }];
