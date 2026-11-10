@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# deploy-chat102r4: serve /terminal/ without waiting on feeds, on the live chat102 root.
+# deploy-chat102r5: keep the last good reading for each feed, on the live chat102 root.
 # Does NOT start the server, npm, git, or republish. Does not change EXPECT_TAG.
 # Usage: bash deploy.sh [--dry-run] [--dir /path/to/project]
 set -u
-# Payload commit cd0161a already contains these exact blobs.
+# Payload commit 023165d already contains these exact blobs.
 # Do not point this at the commit that only changes deploy.sh, and do not
 # read server_block/patch/app_block from the directory next to this script.
-PAYLOAD_COMMIT=cd0161a843494d082edf7bffa8b86cd69e491f7f
+PAYLOAD_COMMIT=023165d6969b38f626fd7901afb6a1702626ae2d
 BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/${PAYLOAD_COMMIT}/deploy-chat102"
 
 # Fresh base: audited chat101h. Replacement base: first chat102 (d10d6b9), whose
@@ -17,15 +17,15 @@ LIVE_APP_SHA256=80954f1cfde5add82ee75d9b783e3740c799e1fb8237bc8f01881a5514fbf989
 LIVE_INDEX_MD5=e5ab1af080974da456e086a1835d1e7b
 NEW_APP_MD5=b84058f6da16ad022640b06c9cdda72d
 NEW_APP_SHA256=b5dcd5fca7514f1d09a29d4e5c67c7a1c2d64d54bf92969cadf7244dd9073440
-PREV_SERVER_TAIL_SHA256=c8518e4cb15589c412a63f95b14ff47171014db6994d26803a4a3120d13425f6
-# Full-file md5s of the published chat102 root (6 Nov). App md5 is unchanged.
-PREV_SERVER_MD5=5fd466543c9ed222ea5f07d5c3f66ce8
+PREV_SERVER_TAIL_SHA256=3e812cd79470e90fe26c05a4b2fa862986874f73a16cf48ddf9e9d0c7dd12f90
+# Full-file md5 of the published chat102r4 root (10 Nov). App and index are unchanged.
+PREV_SERVER_MD5=5e8e3e34b6c71ae9e510c40b298ee6fc
 PREV_INDEX_MD5=b3e02b0c6e403133843a96adf45d219c
 NEW_L1='const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)'
 MARKER='// chat102 terminal. Built from lib_c102.js and client_c102.js. Edit those, then run node build_block.js.'
 MANIFEST=(
   "patch_c102.py 52d44b7c3c4a0f800fc3f7d5e1198d1f5c873e072e6ea740c3a446f18f87712b"
-  "server_block_c102.js 3e812cd79470e90fe26c05a4b2fa862986874f73a16cf48ddf9e9d0c7dd12f90"
+  "server_block_c102.js 099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054"
   "app_block_c102.js dbed6c1ac0ca8181e44aa92ac3528cf9aa137b7a60f31d583e3efcef09c0a206"
 )
 DRY=0; DIR=""
@@ -119,7 +119,7 @@ got = hashlib.sha256(tail).hexdigest()
 new_tail = block.decode("utf-8").strip("\n") + "\n"
 new_hash = hashlib.sha256(new_tail.encode("utf-8")).hexdigest()
 if got == new_hash:
-    sys.exit("already chat102r4")
+    sys.exit("already chat102r5")
 if got != prev:
     sys.exit("server.js tail sha256 " + got + " is not the live chat102 block " + prev)
 idx = (root/"index.html.base").read_text(encoding="utf-8")
@@ -150,12 +150,12 @@ echo "scratch index.html sha256 $(sha256of "$S/index.html")"
 if [ "$DRY" = "1" ]; then say "DRY RUN complete: project-root files untouched. Scratch: $W"; exit 0; fi
 
 TS=$(date +%Y%m%d-%H%M%S)
-SUFF="bak-chat102r4"
+SUFF="bak-chat102r5"
 for f in "$SERVER" "$APP" "$INDEX"; do cp -p "$f" "$f.$TS.$SUFF" || die "backup failed for $f"
   [ "$(md5of "$f.$TS.$SUFF")" = "$(md5of "$f")" ] || die "backup verify failed for $f"; say "backup: $f.$TS.$SUFF"; done
-cp "$S/server.js" "$SERVER.new-chat102r4" && cp "$S/app.js" "$APP.new-chat102r4" && cp "$S/index.html" "$INDEX.new-chat102r4" || die "staging copy failed (project-root files untouched)"
+cp "$S/server.js" "$SERVER.new-chat102r5" && cp "$S/app.js" "$APP.new-chat102r5" && cp "$S/index.html" "$INDEX.new-chat102r5" || die "staging copy failed (project-root files untouched)"
 RB="restore server.js, app.js and index.html from their .$TS.$SUFF copies and DO NOT republish"
-mv -f "$SERVER.new-chat102r4" "$SERVER" && mv -f "$APP.new-chat102r4" "$APP" && mv -f "$INDEX.new-chat102r4" "$INDEX" || { echo "[deploy-chat102] ERROR during install; $RB" >&2; exit 1; }
+mv -f "$SERVER.new-chat102r5" "$SERVER" && mv -f "$APP.new-chat102r5" "$APP" && mv -f "$INDEX.new-chat102r5" "$INDEX" || { echo "[deploy-chat102] ERROR during install; $RB" >&2; exit 1; }
 node --check "$SERVER" && node --check "$APP" || { echo "[deploy-chat102] ERROR: node --check failed after install; $RB" >&2; exit 1; }
 [ "$(head -n 1 "$SERVER")" = "$NEW_L1" ] || { echo "[deploy-chat102] ERROR: line 1 is not maintenance=false; $RB" >&2; exit 1; }
 [ "$(md5of "$APP")" = "$NEW_APP_MD5" ] || { echo "[deploy-chat102] ERROR: app.js md5 changed unexpectedly; $RB" >&2; exit 1; }
