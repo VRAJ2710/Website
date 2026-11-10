@@ -1,0 +1,1372 @@
+// chat103 cpi day. Built from lib_c103.js and client_c103.js. Edit those, then run node build_block.js.
+(function () {
+  var module = { exports: {} };
+"use strict";
+// chat103 CPI day. Pure logic plus c103Install, which is appended onto the live chat102r4 server.
+// Request handlers do not wait on BLS or Yahoo. Figures come from a stored release or say "not loaded yet".
+
+const C103_UA = "The Dispatch Market research (https://thedispatch.uk)";
+const C103_BLS = "https://api.bls.gov/publicAPI/v2/timeseries/data/";
+const C103_ICS = "https://www.bls.gov/schedule/news_release/bls.ics";
+const C103_HTML = "https://www.bls.gov/schedule/news_release/cpi.htm";
+const C103_RI = "https://www.bls.gov/news.release/cpi.t01.htm";
+const C103_RI_HOME = "https://www.bls.gov/cpi/tables/relative-importance/";
+const C103_GOLD_LABEL = "Gold futures (COMEX, front month), Yahoo Finance delayed";
+const C103_CONTRIB_LABEL = "approx. contribution, our calculation from BLS data";
+const C103_SOURCE = "Source: U.S. Bureau of Labor Statistics";
+const C103_RECORD_FROM = "2026-12-10";
+const C103_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const C103_MON = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+
+// Item codes checked against download.bls.gov cu.item. Ids except SAR returned M09 2026 on 10 Nov 2026.
+const C103_CATALOG = [
+  ["headline", "All items", "CUSR0000SA0", "CUUR0000SA0", "All items", "The broad US city CPI for all urban consumers. The month move takes out the usual seasonal swing. The year move does not.", true],
+  ["core", "All items less food and energy", "CUSR0000SA0L1E", "CUUR0000SA0L1E", "All items less food and energy", "Food and energy jump around. Leaving them out shows the slower part of the basket.", true],
+  ["food", "Food", "CUSR0000SAF1", "CUUR0000SAF1", "Food", "Groceries and meals out. A large food move can shift the headline without saying much about other prices.", false],
+  ["foodHome", "Food at home", "CUSR0000SAF11", "CUUR0000SAF11", "Food at home", "Groceries. This is the part of food households buy in shops.", false],
+  ["foodAway", "Food away from home", "CUSR0000SEFV", "CUUR0000SEFV", "Food away from home", "Meals out. BLS often does not seasonally adjust this line.", false],
+  ["energy", "Energy", "CUSR0000SA0E", "CUUR0000SA0E", "Energy", "Petrol, heating and electricity. Energy is a small weight that can still dominate a single month.", false],
+  ["energyComm", "Energy commodities", "CUSR0000SACE", "CUUR0000SACE", "Energy commodities", "Fuels bought as goods, including motor fuel.", false],
+  ["energySvc", "Energy services", "CUSR0000SEHF", "CUUR0000SEHF", "Energy services", "Electricity and piped gas.", false],
+  ["gasoline", "Gasoline (all types)", "CUSR0000SETB01", "CUUR0000SETB01", "Gasoline (all types)", "Pump prices. In the September 2026 release this was more than half of the monthly headline move.", false],
+  ["shelter", "Shelter", "CUSR0000SAH1", "CUUR0000SAH1", "Shelter", "The largest weight in the basket, so a small shelter move can decide the headline.", false],
+  ["rent", "Rent of primary residence", "CUSR0000SEHA", "CUUR0000SEHA", "Rent of primary residence", "Rent that tenants actually pay. It moves more slowly than house prices.", false],
+  ["oer", "Owners' equivalent rent of residences", "CUSR0000SEHC", "CUUR0000SEHC", "Owners' equivalent rent of residences", "What BLS uses instead of house prices: the rent an owner would pay to live in their own home.", false],
+  ["apparel", "Apparel", "CUSR0000SAA", "CUUR0000SAA", "Apparel", "Clothing. It is seasonal, which is why the month figure uses the adjusted series.", false],
+  ["newVehicles", "New vehicles", "CUSR0000SETA01", "CUUR0000SETA01", "New vehicles", "New cars and trucks. A guide to goods prices outside food and energy.", false],
+  ["usedVehicles", "Used cars and trucks", "CUSR0000SETA02", "CUUR0000SETA02", "Used cars and trucks", "Used vehicles swing more than most goods lines.", false],
+  ["medical", "Medical care", "CUSR0000SAM", "CUUR0000SAM", "", "Doctors, hospitals and medicines together. Table 1 often has no single weight for this total, so the contribution stays unloaded.", false],
+  ["medicalComm", "Medical care commodities", "CUSR0000SAM1", "CUUR0000SAM1", "Medical care commodities", "Medicines and medical goods.", false],
+  ["medicalSvc", "Medical care services", "CUSR0000SAM2", "CUUR0000SAM2", "Medical care services", "Doctors and hospitals.", false],
+  ["transportSvc", "Transportation services", "CUSR0000SAS4", "CUUR0000SAS4", "Transportation services", "Insurance, repairs and fares. Not the price of the vehicle itself.", false],
+  ["coreGoods", "Commodities less food and energy commodities", "CUSR0000SACL1E", "CUUR0000SACL1E", "Commodities less food and energy commodities", "Goods with food and energy taken out.", false],
+  ["coreSvc", "Services less energy services", "CUSR0000SASLE", "CUUR0000SASLE", "Services less energy services", "Services with energy bills taken out. Shelter sits inside this line.", false],
+  ["recreation", "Recreation", "CUSR0000SAR", "CUUR0000SAR", "", "Tickets, kit and other leisure. Included because the news release treats it as a major index.", false]
+];
+
+const C103_FALLBACK = [
+  { y: 2026, m: 12, d: 10, h: 8, min: 30, source: "labelled-fallback", fallbackLabel: "Labelled fallback. This date was not in the cached BLS schedule." },
+  { y: 2027, m: 1, d: 13, h: 8, min: 30, source: "labelled-fallback", fallbackLabel: "Labelled fallback. This date was not in the cached BLS schedule." }
+];
+
+const C103_TABLES = ["cpi_releases", "cpi_series_values", "cpi_gold_reactions", "cpi_gold_snapshots", "cpi_notice_dismissals"];
+
+const C103_DDL = [
+  `CREATE TABLE IF NOT EXISTS cpi_releases (
+    period TEXT PRIMARY KEY,
+    release_at TIMESTAMPTZ,
+    release_source TEXT NOT NULL,
+    reference_label TEXT,
+    headline_mom DOUBLE PRECISION,
+    headline_yoy DOUBLE PRECISION,
+    core_mom DOUBLE PRECISION,
+    core_yoy DOUBLE PRECISION,
+    bls_fetched_at TIMESTAMPTZ,
+    payload JSONB,
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE TABLE IF NOT EXISTS cpi_series_values (
+    series_id TEXT NOT NULL,
+    period TEXT NOT NULL,
+    value DOUBLE PRECISION NOT NULL,
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (series_id, period)
+  )`,
+  `CREATE TABLE IF NOT EXISTS cpi_gold_reactions (
+    release_at TIMESTAMPTZ PRIMARY KEY,
+    reference_period TEXT,
+    anchor_at TIMESTAMPTZ,
+    anchor_price DOUBLE PRECISION,
+    plus_1h_at TIMESTAMPTZ,
+    plus_1h_price DOUBLE PRECISION,
+    plus_1h_pct DOUBLE PRECISION,
+    plus_1d_session TEXT,
+    plus_1d_price DOUBLE PRECISION,
+    plus_1d_pct DOUBLE PRECISION,
+    plus_5d_session TEXT,
+    plus_5d_price DOUBLE PRECISION,
+    plus_5d_pct DOUBLE PRECISION,
+    hourly_available BOOLEAN NOT NULL DEFAULT FALSE,
+    recorded BOOLEAN NOT NULL DEFAULT FALSE,
+    source_label TEXT NOT NULL,
+    computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+  `CREATE TABLE IF NOT EXISTS cpi_gold_snapshots (
+    id BIGSERIAL PRIMARY KEY,
+    release_at TIMESTAMPTZ NOT NULL,
+    observed_at TIMESTAMPTZ NOT NULL,
+    price DOUBLE PRECISION NOT NULL,
+    window_kind TEXT NOT NULL,
+    source_label TEXT NOT NULL,
+    UNIQUE (release_at, window_kind, observed_at)
+  )`,
+  `CREATE TABLE IF NOT EXISTS cpi_notice_dismissals (
+    user_id TEXT NOT NULL,
+    release_key TEXT NOT NULL,
+    dismissed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, release_key)
+  )`
+];
+
+function c103Esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" }[c]));
+}
+
+function c103Pad(n) { return String(n).padStart(2, "0"); }
+
+function c103Period(y, m) { return y + "-" + c103Pad(m); }
+
+function c103PeriodLabel(period) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(period || ""));
+  if (!m) return "";
+  return C103_MONTHS[Number(m[2]) - 1] + " " + m[1];
+}
+
+function c103Parts(ms, timeZone) {
+  const fmt = new Intl.DateTimeFormat("en-GB", {
+    timeZone: timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZoneName: "short"
+  });
+  const bag = {};
+  fmt.formatToParts(new Date(ms)).forEach((p) => { if (p.type !== "literal") bag[p.type] = p.value; });
+  return {
+    year: Number(bag.year),
+    month: Number(bag.month),
+    day: Number(bag.day),
+    hour: Number(bag.hour),
+    minute: Number(bag.minute),
+    second: Number(bag.second),
+    tzName: bag.timeZoneName || ""
+  };
+}
+
+function c103OffsetMs(utcMs, timeZone) {
+  const p = c103Parts(utcMs, timeZone);
+  const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+  return asUtc - utcMs;
+}
+
+function c103ZonedToUtc(y, m, d, h, min, timeZone) {
+  let utc = Date.UTC(y, m - 1, d, h, min, 0);
+  let off = c103OffsetMs(utc, timeZone);
+  utc = Date.UTC(y, m - 1, d, h, min, 0) - off;
+  off = c103OffsetMs(utc, timeZone);
+  return new Date(Date.UTC(y, m - 1, d, h, min, 0) - off);
+}
+
+function c103FormatUk(ms) {
+  if (typeof ms !== "number" || !isFinite(ms)) return "";
+  const p = c103Parts(ms, "Europe/London");
+  const weekday = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short" }).format(new Date(ms));
+  return weekday + ", " + p.day + " " + C103_MONTHS[p.month - 1] + " " + p.year + " at " + c103Pad(p.hour) + ":" + c103Pad(p.minute) + " " + p.tzName;
+}
+
+function c103EtDate(ms) {
+  const p = c103Parts(ms, "America/New_York");
+  return c103Period(p.year, p.month).slice(0, 8) && (p.year + "-" + c103Pad(p.month) + "-" + c103Pad(p.day));
+}
+
+function c103Ymd(ms, timeZone) {
+  const p = c103Parts(ms, timeZone || "America/New_York");
+  return p.year + "-" + c103Pad(p.month) + "-" + c103Pad(p.day);
+}
+
+function c103Round1(n) {
+  if (typeof n !== "number" || !isFinite(n)) return null;
+  const sign = n < 0 ? -1 : 1;
+  return sign * Math.round((Math.abs(n) + 1e-10) * 10) / 10;
+}
+
+function c103Pct(newer, older) {
+  if (typeof newer !== "number" || typeof older !== "number" || !isFinite(newer) || !isFinite(older) || older === 0) return null;
+  return (newer / older - 1) * 100;
+}
+
+function c103Contribution(weight, change) {
+  if (typeof weight !== "number" || typeof change !== "number" || !isFinite(weight) || !isFinite(change)) return null;
+  return (weight / 100) * change;
+}
+
+function c103MonNum(name) {
+  const key = String(name || "").slice(0, 3).toLowerCase();
+  return C103_MON[key] || 0;
+}
+
+function c103PrevMonth(y, m) {
+  return m === 1 ? { y: y - 1, m: 12 } : { y: y, m: m - 1 };
+}
+
+function c103ReleaseInstant(y, m, d, h, min) {
+  const when = c103ZonedToUtc(y, m, d, h == null ? 8 : h, min == null ? 30 : min, "America/New_York");
+  const et = c103Ymd(when.getTime(), "America/New_York");
+  const ref = c103PrevMonth(y, m);
+  return {
+    y: y, m: m, d: d, h: h == null ? 8 : h, min: min == null ? 30 : min,
+    startMs: when.getTime(),
+    etDate: et,
+    referencePeriod: c103Period(ref.y, ref.m),
+    releaseAtUtc: when.toISOString(),
+    releaseUk: c103FormatUk(when.getTime())
+  };
+}
+
+function c103Unfold(text) {
+  return String(text || "").replace(/\r\n/g, "\n").replace(/\n[ \t]/g, "");
+}
+
+function c103ParseIcs(text) {
+  const src = c103Unfold(text);
+  const out = [];
+  const chunks = src.split("BEGIN:VEVENT");
+  for (let i = 1; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const summary = (chunk.match(/^SUMMARY:(.*)$/m) || [])[1];
+    if (String(summary || "").trim() !== "Consumer Price Index") continue;
+    const stamp = chunk.match(/^DTSTART(?:;([^:]+))?:(\d{8}T\d{6})(Z?)/m);
+    if (!stamp) continue;
+    const params = stamp[1] || "";
+    const raw = stamp[2];
+    const zulu = stamp[3] === "Z";
+    const y = Number(raw.slice(0, 4));
+    const m = Number(raw.slice(4, 6));
+    const d = Number(raw.slice(6, 8));
+    const h = Number(raw.slice(9, 11));
+    const min = Number(raw.slice(11, 13));
+    let startMs;
+    if (zulu) startMs = Date.UTC(y, m - 1, d, h, min, 0);
+    else {
+      const zone = /TZID=([^;:]+)/.exec(params);
+      const tz = zone && /new_york|us-eastern|eastern/i.test(zone[1]) ? "America/New_York" : "America/New_York";
+      startMs = c103ZonedToUtc(y, m, d, h, min, tz).getTime();
+    }
+    const row = c103ReleaseInstant(y, m, d, h, min);
+    row.startMs = startMs;
+    row.releaseAtUtc = new Date(startMs).toISOString();
+    row.releaseUk = c103FormatUk(startMs);
+    row.etDate = c103Ymd(startMs, "America/New_York");
+    row.source = "bls-ics";
+    row.scheduleUrl = C103_ICS;
+    out.push(row);
+  }
+  return out;
+}
+
+function c103ParseHtmlSchedule(html) {
+  const out = [];
+  const rows = String(html || "").match(/<tr[\s\S]*?<\/tr>/gi) || [];
+  rows.forEach((row) => {
+    const cells = [];
+    const re = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
+    let cell;
+    while ((cell = re.exec(row))) {
+      const text = cell[1].replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+      if (text) cells.push(text);
+    }
+    if (cells.length < 2) return;
+    const ref = /^([A-Za-z]+)\s+(\d{4})$/.exec(cells[0]);
+    const rel = /^([A-Za-z]+)\.?\s+(\d{1,2}),\s+(\d{4})$/.exec(cells[1]);
+    if (!ref || !rel) return;
+    const rm = c103MonNum(ref[1]);
+    const relMonth = c103MonNum(rel[1]);
+    if (!rm || !relMonth) return;
+    let h = 8;
+    let min = 30;
+    const tm = /(\d{1,2}):(\d{2})\s*(AM|PM)/i.exec(cells[2] || "");
+    if (tm) {
+      h = Number(tm[1]) % 12;
+      if (/pm/i.test(tm[3])) h += 12;
+      min = Number(tm[2]);
+    } else return;
+    const rowOut = c103ReleaseInstant(Number(rel[3]), relMonth, Number(rel[2]), h, min);
+    rowOut.referencePeriod = c103Period(Number(ref[2]), rm);
+    rowOut.source = "bls-html";
+    rowOut.scheduleUrl = C103_HTML;
+    out.push(rowOut);
+  });
+  return out;
+}
+
+function c103MergeSchedule(icsEvents, htmlEvents) {
+  const byDay = new Map();
+  (icsEvents || []).forEach((ev) => { if (ev && ev.etDate) byDay.set(ev.etDate, Object.assign({}, ev)); });
+  (htmlEvents || []).forEach((ev) => {
+    if (!ev || !ev.etDate) return;
+    const cur = byDay.get(ev.etDate);
+    if (!cur) byDay.set(ev.etDate, Object.assign({}, ev));
+    else if (ev.referencePeriod) cur.referencePeriod = ev.referencePeriod;
+  });
+  C103_FALLBACK.forEach((fb) => {
+    const row = c103ReleaseInstant(fb.y, fb.m, fb.d, fb.h, fb.min);
+    row.source = "labelled-fallback";
+    row.fallbackLabel = fb.fallbackLabel;
+    row.scheduleUrl = C103_HTML;
+    if (!byDay.has(row.etDate)) byDay.set(row.etDate, row);
+  });
+  return Array.from(byDay.values()).sort((a, b) => a.startMs - b.startMs);
+}
+
+function c103Countdown(nowMs, events) {
+  const next = (events || []).find((ev) => ev.startMs > nowMs);
+  if (!next) return null;
+  let left = Math.max(0, next.startMs - nowMs);
+  const days = Math.floor(left / 86400000);
+  left -= days * 86400000;
+  const hours = Math.floor(left / 3600000);
+  left -= hours * 3600000;
+  const minutes = Math.floor(left / 60000);
+  const seconds = Math.floor((left - minutes * 60000) / 1000);
+  return {
+    releaseAtUtc: next.releaseAtUtc,
+    releaseUk: next.releaseUk,
+    zoneName: c103Parts(next.startMs, "Europe/London").tzName,
+    etDate: next.etDate,
+    referencePeriod: next.referencePeriod,
+    referenceLabel: c103PeriodLabel(next.referencePeriod),
+    source: next.source,
+    fallbackLabel: next.fallbackLabel || "",
+    scheduleUrl: next.scheduleUrl || C103_ICS,
+    days: days,
+    hours: hours,
+    minutes: minutes,
+    seconds: seconds,
+    what: "Time left until the next US CPI news release.",
+    why: "The Bureau of Labor Statistics puts the index out at 08:30 US Eastern. This clock shows that moment in UK time, including GMT or BST."
+  };
+}
+
+function c103IndexMap(points) {
+  const map = new Map();
+  (points || []).forEach((p) => {
+    if (!p || typeof p.value !== "number" || !isFinite(p.value)) return;
+    map.set(p.year + "-" + p.month, p.value);
+  });
+  return map;
+}
+
+function c103ParseBls(payload) {
+  const root = payload && typeof payload === "object" ? payload : null;
+  if (!root || root.status !== "REQUEST_SUCCEEDED" || !root.Results || !Array.isArray(root.Results.series)) {
+    return { ok: false, series: {} };
+  }
+  const series = {};
+  root.Results.series.forEach((s) => {
+    const id = s && s.seriesID;
+    if (!id || !C103_CATALOG.some((row) => row[2] === id || row[3] === id)) return;
+    const points = [];
+    (s.data || []).forEach((r) => {
+      const per = String(r && r.period || "");
+      if (!/^M(0[1-9]|1[0-2])$/.test(per)) return;
+      if (r.value == null || r.value === "" || r.value === "-") return;
+      const value = Number(r.value);
+      if (!isFinite(value)) return;
+      points.push({ year: Number(r.year), month: Number(per.slice(1)), value: value });
+    });
+    series[id] = points;
+  });
+  return { ok: Object.keys(series).length > 0, series: series };
+}
+
+function c103ParseRi(html) {
+  const rows = [];
+  const tr = String(html || "").match(/<tr[\s\S]*?<\/tr>/gi) || [];
+  let asOf = "";
+  const as = String(html || "").match(/Relative[\s\S]{0,120}?importance[\s\S]{0,80}?((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4})/i);
+  if (as) asOf = as[1].replace(/\s+/g, " ");
+  tr.forEach((row) => {
+    const cells = [];
+    const re = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
+    let m;
+    while ((m = re.exec(row))) {
+      const text = m[1].replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#160;/g, " ").replace(/\s+/g, " ").trim();
+      if (text) cells.push(text);
+    }
+    if (!cells.length) return;
+    const name = cells[0].replace(/\(\d+\)/g, "").replace(/\s+/g, " ").trim();
+    const weightText = cells.map((x) => x.replace(/,/g, "")).find((x) => /^\d+\.\d+$/.test(x) && Number(x) <= 100);
+    if (!name || !weightText || /expenditure category/i.test(name)) return;
+    rows.push({ name: name, weight: Number(weightText) });
+  });
+  const byName = {};
+  rows.forEach((r) => { if (byName[r.name] == null) byName[r.name] = r.weight; });
+  return {
+    ok: rows.length > 0,
+    asOf: asOf,
+    byName: byName,
+    sourceUrl: C103_RI,
+    homeUrl: C103_RI_HOME,
+    citation: "Relative importance: U.S. Bureau of Labor Statistics, CPI news release Table 1 (the weight for the month before this change). " + C103_RI + " . Annual tables: " + C103_RI_HOME
+  };
+}
+
+function c103ChangePair(saMap, nsaMap, y, m) {
+  const sa = saMap.get(y + "-" + m);
+  const nsa = nsaMap.get(y + "-" + m);
+  const prev = c103PrevMonth(y, m);
+  const saPrev = saMap.get(prev.y + "-" + prev.m);
+  const nsaPrevYear = nsaMap.get((y - 1) + "-" + m);
+  const mom = c103Pct(sa, saPrev);
+  const yoy = c103Pct(nsa, nsaPrevYear);
+  return {
+    saIndex: typeof sa === "number" ? sa : null,
+    nsaIndex: typeof nsa === "number" ? nsa : null,
+    mom: mom,
+    momRounded: c103Round1(mom),
+    yoy: yoy,
+    yoyRounded: c103Round1(yoy)
+  };
+}
+
+function c103BuildMonths(series, ri) {
+  const maps = {};
+  Object.keys(series || {}).forEach((id) => { maps[id] = c103IndexMap(series[id]); });
+  const keys = new Set();
+  C103_CATALOG.forEach((row) => {
+    const sa = maps[row[2]];
+    const nsa = maps[row[3]];
+    if (sa) sa.forEach((_, k) => keys.add(k));
+    if (nsa) nsa.forEach((_, k) => keys.add(k));
+  });
+  const months = Array.from(keys).map((k) => {
+    const [ys, ms] = k.split("-");
+    return { y: Number(ys), m: Number(ms) };
+  }).sort((a, b) => a.y === b.y ? a.m - b.m : a.y - b.y);
+  return months.map((slot) => {
+    const period = c103Period(slot.y, slot.m);
+    const cats = C103_CATALOG.map((row) => {
+      const pair = c103ChangePair(maps[row[2]] || new Map(), maps[row[3]] || new Map(), slot.y, slot.m);
+      const weight = row[4] && ri && ri.byName ? ri.byName[row[4]] : null;
+      const weightNum = typeof weight === "number" ? weight : null;
+      return {
+        key: row[0],
+        name: row[1],
+        momSeries: row[2],
+        yoySeries: row[3],
+        riName: row[4] || "",
+        why: row[5],
+        free: row[6],
+        period: period,
+        periodLabel: c103PeriodLabel(period),
+        saIndex: pair.saIndex,
+        nsaIndex: pair.nsaIndex,
+        mom: pair.mom,
+        momRounded: pair.momRounded,
+        yoy: pair.yoy,
+        yoyRounded: pair.yoyRounded,
+        weight: weightNum,
+        contribution: c103Contribution(weightNum, pair.momRounded),
+        contributionLabel: C103_CONTRIB_LABEL,
+        source: C103_SOURCE
+      };
+    });
+    const headline = cats[0];
+    const core = cats[1];
+    return { period: period, periodLabel: c103PeriodLabel(period), year: slot.y, month: slot.m, headline: headline, core: core, categories: cats };
+  });
+}
+
+function c103GoldUrl(interval, range) {
+  const id = ["GC", "=F"].join("");
+  return "https://query1.finance.yahoo.com/v8/finance/chart/" + encodeURIComponent(id) + "?range=" + range + "&interval=" + interval;
+}
+
+function c103GoldSymbol() { return ["GC", "=F"].join(""); }
+
+function c103ParseYahoo(payload, intervalMs) {
+  const result = payload && payload.chart && Array.isArray(payload.chart.result) ? payload.chart.result[0] : null;
+  const meta = result && result.meta;
+  if (!meta || meta.symbol !== c103GoldSymbol()) return { ok: false, bars: [], message: "The futures feed did not return the front-month contract. No number was filled in." };
+  if (meta.instrumentType && meta.instrumentType !== "FUTURE") return { ok: false, bars: [], message: "The feed was not a futures contract. No number was filled in." };
+  const name = String(meta.shortName || meta.longName || "");
+  if (!/gold/i.test(name)) return { ok: false, bars: [], message: "The futures name was not gold. No number was filled in." };
+  const quote = (result.indicators && result.indicators.quote && result.indicators.quote[0]) || {};
+  const ts = Array.isArray(result.timestamp) ? result.timestamp : [];
+  const tz = meta.exchangeTimezoneName || "America/New_York";
+  const bars = [];
+  for (let i = 0; i < ts.length; i++) {
+    const close = quote.close && quote.close[i];
+    if (typeof ts[i] !== "number" || typeof close !== "number" || !isFinite(close)) continue;
+    const startMs = ts[i] * 1000;
+    bars.push({
+      startMs: startMs,
+      endMs: startMs + intervalMs,
+      close: close,
+      timeUtc: new Date(startMs).toISOString(),
+      sessionDate: c103Ymd(startMs, tz)
+    });
+  }
+  bars.sort((a, b) => a.startMs - b.startMs);
+  return { ok: bars.length > 0, bars: bars, timezone: tz, message: bars.length ? "" : "The futures feed returned no completed bars. No number was filled in." };
+}
+
+function c103GoldReaction(release, hourlyBars, dailyBars) {
+  const row = {
+    releaseAtUtc: release.releaseAtUtc,
+    releaseUk: release.releaseUk,
+    referencePeriod: release.referencePeriod,
+    referenceLabel: c103PeriodLabel(release.referencePeriod),
+    hourlyAvailable: false,
+    anchorAtUtc: null,
+    anchorPrice: null,
+    plus1hAtUtc: null,
+    plus1hPrice: null,
+    plus1hPct: null,
+    plus1dSession: null,
+    plus1dPrice: null,
+    plus1dPct: null,
+    plus5dSession: null,
+    plus5dPrice: null,
+    plus5dPct: null,
+    recorded: false,
+    sourceLabel: C103_GOLD_LABEL,
+    what: "How the front-month gold future moved after this release, measured from the last completed bar before 08:30 US Eastern.",
+    why: "Past releases only. This is the move that already happened. It is not a view on the next release."
+  };
+  const hourly = (hourlyBars || []).filter((b) => b && typeof b.close === "number" && typeof b.endMs === "number");
+  const before = hourly.filter((b) => b.endMs <= release.startMs && release.startMs - b.endMs <= 3 * 3600000);
+  const anchor = before.length ? before[before.length - 1] : null;
+  const after = anchor ? hourly.filter((b) => b.endMs >= release.startMs + 3600000 && b.startMs >= release.startMs && b.endMs - (release.startMs + 3600000) <= 2.5 * 3600000) : [];
+  const plus = after.length ? after[0] : null;
+  if (anchor && plus) {
+    row.hourlyAvailable = true;
+    row.anchorAtUtc = new Date(anchor.endMs).toISOString();
+    row.anchorPrice = anchor.close;
+    row.plus1hAtUtc = new Date(plus.endMs).toISOString();
+    row.plus1hPrice = plus.close;
+    row.plus1hPct = c103Pct(plus.close, anchor.close);
+  }
+  const daily = (dailyBars || []).filter((b) => b && b.sessionDate && typeof b.close === "number");
+  const prior = daily.filter((b) => b.sessionDate < release.etDate);
+  const dayAnchor = prior.length ? prior[prior.length - 1] : null;
+  if (!row.anchorPrice && dayAnchor) {
+    row.anchorAtUtc = dayAnchor.timeUtc;
+    row.anchorPrice = dayAnchor.close;
+  }
+  if (dayAnchor && row.anchorPrice) {
+    const later = daily.filter((b) => b.sessionDate > dayAnchor.sessionDate);
+    const d1 = later[0];
+    const d5 = later[4];
+    if (d1) {
+      row.plus1dSession = d1.sessionDate;
+      row.plus1dPrice = d1.close;
+      row.plus1dPct = c103Pct(d1.close, row.anchorPrice);
+    }
+    if (d5) {
+      row.plus5dSession = d5.sessionDate;
+      row.plus5dPrice = d5.close;
+      row.plus5dPct = c103Pct(d5.close, row.anchorPrice);
+    }
+  }
+  return row;
+}
+
+function c103ApplySnapshots(row, snaps) {
+  const mine = (snaps || []).filter((s) => s && s.releaseAtUtc === row.releaseAtUtc);
+  const pre = mine.filter((s) => s.windowKind === "pre").sort((a, b) => String(a.observedAtUtc) < String(b.observedAtUtc) ? 1 : -1)[0];
+  const h1 = mine.filter((s) => s.windowKind === "plus_1h").sort((a, b) => String(a.observedAtUtc) < String(b.observedAtUtc) ? 1 : -1)[0];
+  if (pre && h1 && typeof pre.price === "number" && typeof h1.price === "number") {
+    row.anchorPrice = pre.price;
+    row.anchorAtUtc = pre.observedAtUtc;
+    row.plus1hPrice = h1.price;
+    row.plus1hAtUtc = h1.observedAtUtc;
+    row.plus1hPct = c103Pct(h1.price, pre.price);
+    row.hourlyAvailable = true;
+    row.recorded = true;
+    row.recordedNote = "Recorded by The Dispatch from that delayed feed at the times shown.";
+  }
+  return row;
+}
+
+function c103SnapshotDecision(nowMs, events) {
+  if (c103Ymd(nowMs, "America/New_York") < C103_RECORD_FROM) return null;
+  const et = c103Parts(nowMs, "America/New_York");
+  for (const ev of events || []) {
+    if (!ev || ev.etDate < C103_RECORD_FROM) continue;
+    if (nowMs >= ev.startMs - 20 * 60000 && nowMs < ev.startMs - 60000) return { releaseAtUtc: ev.releaseAtUtc, windowKind: "pre" };
+    if (nowMs >= ev.startMs + 60 * 60000 && nowMs < ev.startMs + 75 * 60000) return { releaseAtUtc: ev.releaseAtUtc, windowKind: "plus_1h" };
+    const day = et.year + "-" + c103Pad(et.month) + "-" + c103Pad(et.day);
+    const mins = et.hour * 60 + et.minute;
+    if (day >= ev.etDate && mins >= 16 * 60 + 45 && mins <= 17 * 60 + 15) {
+      const end = ev.startMs + 8 * 86400000;
+      if (nowMs <= end && et.hour !== 0) return { releaseAtUtc: ev.releaseAtUtc, windowKind: "session" };
+    }
+  }
+  return null;
+}
+
+function c103FreshBar(bars, nowMs) {
+  const ready = (bars || []).filter((b) => b && typeof b.close === "number" && b.endMs <= nowMs && nowMs - b.endMs <= 30 * 60000);
+  return ready.length ? ready[ready.length - 1] : null;
+}
+
+function c103LatestFigure(month, key) {
+  if (!month) return null;
+  const row = key === "core" ? month.core : month.headline;
+  if (!row || (row.saIndex == null && row.nsaIndex == null)) return null;
+  return {
+    period: month.period,
+    periodLabel: month.periodLabel,
+    name: row.name,
+    what: key === "core" ? "US CPI-U, all items less food and energy." : "US CPI-U, all items.",
+    why: row.why,
+    momSeries: row.momSeries,
+    yoySeries: row.yoySeries,
+    saIndex: row.saIndex,
+    nsaIndex: row.nsaIndex,
+    mom: row.mom,
+    momRounded: row.momRounded,
+    yoy: row.yoy,
+    yoyRounded: row.yoyRounded,
+    source: C103_SOURCE
+  };
+}
+
+function c103SeriesGood(points) {
+  return Array.isArray(points) && points.some((p) => p && typeof p.value === "number" && isFinite(p.value));
+}
+
+function c103CarryNote(when) {
+  return "Stored reading from " + (when || "the last good response") + ". It was not refreshed. It is not a new print.";
+}
+
+function c103PickSeries(nextMap, prevMap) {
+  const out = {};
+  const carried = {};
+  const ids = new Set(Object.keys(prevMap || {}).concat(Object.keys(nextMap || {})));
+  ids.forEach((id) => {
+    if (c103SeriesGood(nextMap && nextMap[id])) out[id] = nextMap[id];
+    else if (c103SeriesGood(prevMap && prevMap[id])) {
+      out[id] = prevMap[id];
+      carried[id] = true;
+    }
+  });
+  return { series: out, carried: carried };
+}
+
+function c103Compose(parts, nowMs) {
+  const prevMap = (parts && parts.previousSeries) || {};
+  const nextMap = parts && parts.series && parts.series.ok ? parts.series.series : {};
+  const picked = c103PickSeries(nextMap, prevMap);
+  const series = Object.keys(picked.series).length ? picked.series : null;
+  const carried = picked.carried;
+  const riFresh = parts && parts.ri && parts.ri.ok;
+  const ri = riFresh ? parts.ri : (parts && parts.previousRi && parts.previousRi.byName ? parts.previousRi : null);
+  const riCarried = !riFresh && !!(ri && ri.byName);
+  const kept = parts && parts.previousEvents || [];
+  const icsIn = parts && parts.icsOk ? (parts.ics || []) : kept.filter((ev) => ev && ev.source === "bls-ics");
+  const htmlIn = parts && parts.htmlOk ? (parts.html || []) : kept.filter((ev) => ev && ev.source === "bls-html");
+  const icsCarried = !(parts && parts.icsOk) && icsIn.length > 0;
+  const htmlCarried = !(parts && parts.htmlOk) && htmlIn.length > 0;
+  const events = c103MergeSchedule(icsIn, htmlIn);
+  const usedEvents = events;
+  const scheduleFromFetch = (parts && parts.icsOk) || (parts && parts.htmlOk);
+  const prevBars = (parts && parts.feedBars) || {};
+  const hourlyFresh = parts && Array.isArray(parts.hourly) && parts.hourly.length > 0;
+  const dailyFresh = parts && Array.isArray(parts.daily) && parts.daily.length > 0;
+  const hourly = hourlyFresh ? parts.hourly : (prevBars.hourly || []);
+  const daily = dailyFresh ? parts.daily : (prevBars.daily || []);
+  const hourlyCarried = !hourlyFresh && hourly.length > 0;
+  const dailyCarried = !dailyFresh && daily.length > 0;
+  const months = series ? c103BuildMonths(series, ri) : [];
+  const latest = months.length ? months[months.length - 1] : null;
+  const withYoy = months.filter((row) => row.headline && typeof row.headline.yoyRounded === "number");
+  const trend = withYoy.slice(-24).map((row) => ({
+    period: row.period,
+    periodLabel: row.periodLabel,
+    headlineYoy: row.headline.yoyRounded,
+    coreYoy: row.core && typeof row.core.yoyRounded === "number" ? row.core.yoyRounded : null,
+    headlineMom: row.headline.momRounded,
+    coreMom: row.core ? row.core.momRounded : null
+  }));
+  const archive = months.slice().reverse().map((row) => ({
+    period: row.period,
+    periodLabel: row.periodLabel,
+    headline: c103LatestFigure(row, "headline"),
+    core: c103LatestFigure(row, "core")
+  })).filter((row) => row.headline || row.core);
+  const past = usedEvents.filter((ev) => ev.startMs <= nowMs);
+  const gold = (hourly.length || daily.length)
+    ? past.slice().reverse().map((ev) => {
+      const row = c103ApplySnapshots(c103GoldReaction(ev, hourly, daily), parts && parts.snapshots);
+      if (!hourly.length) row.hourMessage = "No number was filled in.";
+      else if (hourlyCarried && row.hourlyAvailable) row.hourMessage = c103CarryNote(prevBars.hourlyAt || "");
+      else if (!row.hourlyAvailable) row.hourMessage = "Hourly bars do not cover this release.";
+      if (!daily.length) row.dayMessage = "No number was filled in.";
+      else if (dailyCarried && (row.plus1dPct != null || row.plus5dPct != null)) row.dayMessage = c103CarryNote(prevBars.dailyAt || "");
+      return row;
+    })
+    : [];
+  const countdown = c103Countdown(nowMs, usedEvents);
+  const blsWhen = (parts && parts.feedTimes && parts.feedTimes.bls) || (parts && parts.storedFetchedAt) || "";
+  const headlineCarried = !!(carried.CUSR0000SA0 || carried.CUUR0000SA0);
+  const coreCarried = !!(carried.CUSR0000SA0L1E || carried.CUUR0000SA0L1E);
+  let statusNote = "";
+  if (!latest) statusNote = "not loaded yet";
+  else if (headlineCarried) statusNote = c103CarryNote(blsWhen);
+  const candidate = latest && past.some((ev) => ev.referencePeriod === latest.period && ev.startMs <= nowMs);
+  const match = candidate ? past.filter((ev) => ev.referencePeriod === latest.period).slice(-1)[0] : null;
+  return {
+    ok: !!latest || !!countdown,
+    generatedAtUtc: new Date(nowMs).toISOString(),
+    generatedAtUk: c103FormatUk(nowMs),
+    source: C103_SOURCE,
+    statusNote: statusNote,
+    scheduleSource: scheduleFromFetch ? "bls" : (usedEvents.length ? "stored" : ""),
+    countdown: countdown,
+    latest: latest ? {
+      period: latest.period,
+      periodLabel: latest.periodLabel,
+      releaseUk: match ? match.releaseUk : "",
+      releaseAtUtc: match ? match.releaseAtUtc : "",
+      headline: Object.assign(c103LatestFigure(latest, "headline") || {}, headlineCarried ? { message: c103CarryNote(blsWhen), carried: true } : {}),
+      core: Object.assign(c103LatestFigure(latest, "core") || {}, coreCarried ? { message: c103CarryNote(blsWhen), carried: true } : {}),
+      fetchedAt: (headlineCarried || coreCarried) && blsWhen ? blsWhen : (parts && parts.fetchedAt || new Date(nowMs).toISOString())
+    } : null,
+    trend: trend,
+    archive: archive,
+    categories: latest ? latest.categories.filter((row) => !row.free) : [],
+    contributions: latest ? latest.categories.filter((row) => !row.free).map((row) => ({
+      key: row.key,
+      name: row.name,
+      weight: row.weight,
+      momRounded: row.momRounded,
+      contribution: row.contribution,
+      label: C103_CONTRIB_LABEL
+    })) : [],
+    gold: gold,
+    relativeImportance: ri && ri.ok ? { asOf: ri.asOf, citation: ri.citation, sourceUrl: ri.sourceUrl, homeUrl: ri.homeUrl } : (ri ? { asOf: ri.asOf || "", citation: ri.citation || "", sourceUrl: C103_RI, homeUrl: C103_RI_HOME, missing: !ri.ok } : null),
+    contributionLabel: C103_CONTRIB_LABEL,
+    goldLabel: C103_GOLD_LABEL,
+    noticeCandidate: match && latest ? { releaseKey: match.releaseAtUtc, periodLabel: latest.periodLabel, referencePeriod: latest.period } : null,
+    previousSeries: series,
+    previousRi: ri,
+    previousEvents: usedEvents,
+    previousMonths: months,
+    previousGold: gold,
+    feedBars: {
+      hourly: hourly,
+      daily: daily,
+      hourlyAt: hourlyFresh ? (parts.fetchedAt || new Date(nowMs).toISOString()) : (prevBars.hourlyAt || ""),
+      dailyAt: dailyFresh ? (parts.fetchedAt || new Date(nowMs).toISOString()) : (prevBars.dailyAt || "")
+    },
+    feedTimes: {
+      bls: (parts && parts.series && parts.series.ok && !headlineCarried) ? (parts.fetchedAt || new Date(nowMs).toISOString()) : blsWhen,
+      riCarried: riCarried,
+      icsCarried: icsCarried,
+      htmlCarried: htmlCarried,
+      hourlyCarried: hourlyCarried,
+      dailyCarried: dailyCarried
+    }
+  };
+}
+
+function c103Cold(nowMs) {
+  const now = nowMs || Date.now();
+  return {
+    ok: false,
+    cacheState: "cold",
+    generatedAtUtc: new Date(now).toISOString(),
+    generatedAtUk: c103FormatUk(now),
+    source: C103_SOURCE,
+    statusNote: "not loaded yet",
+    cacheNote: "No stored release yet. The feeds are being asked in the background. No number was filled in.",
+    countdown: null,
+    latest: null,
+    trend: [],
+    archive: [],
+    scheduleSource: ""
+  };
+}
+
+function c103WorthStoring(body) {
+  if (!body || body.cacheState === "cold") return false;
+  if (body.latest && body.latest.headline && typeof body.latest.headline.saIndex === "number") return true;
+  if (body.countdown && body.countdown.releaseAtUtc) return true;
+  return false;
+}
+
+function c103WithCache(body, at, state) {
+  const copy = Object.assign({}, body);
+  copy.cacheState = state;
+  copy.cachedAt = new Date(at).toISOString();
+  if (state === "stale") {
+    const age = Math.max(0, Math.round((Date.now() - at) / 1000));
+    copy.cacheNote = "Stored release from " + copy.cachedAt + ", " + age + " seconds ago. It was not refreshed for this response. It is not a new print.";
+  } else delete copy.cacheNote;
+  return copy;
+}
+
+const c103Flights = new Map();
+
+function c103Kick(store, key, producer) {
+  if (c103Flights.has(key)) return c103Flights.get(key);
+  const run = Promise.resolve().then(() => producer()).then((body) => {
+    const prev = store.get(key);
+    const next = prev && prev.ok && prev.body ? c103MergeModels(prev.body, body) : body;
+    if (c103WorthStoring(next)) {
+      const saved = Object.assign({}, next);
+      delete saved.cacheState;
+      delete saved.cacheNote;
+      delete saved.cachedAt;
+      store.set(key, { ok: true, at: Date.now(), body: saved });
+    }
+    return next;
+  }).catch(() => null).finally(() => { c103Flights.delete(key); });
+  c103Flights.set(key, run);
+  return run;
+}
+
+function c103Memo(store, key, ttl, producer, cold) {
+  const now = Date.now();
+  const hit = store.get(key);
+  const fresh = !!(hit && hit.ok && now - hit.at < ttl);
+  if (!fresh) c103Kick(store, key, producer);
+  if (fresh) return Promise.resolve(c103WithCache(hit.body, hit.at, "fresh"));
+  if (hit && hit.ok) return Promise.resolve(c103WithCache(hit.body, hit.at, "stale"));
+  return Promise.resolve(typeof cold === "function" ? cold() : c103Cold(now));
+}
+
+function c103IsPremium(user) {
+  try {
+    if (!user) return false;
+    if (user.tier === "premium") return true;
+    if (typeof isAdminUser === "function" && isAdminUser(user)) return true;
+  } catch (e) {}
+  return false;
+}
+
+function c103Notice(candidate, reader, dismissals) {
+  if (!reader || !reader.signedIn || !candidate || !candidate.releaseKey) return { show: false };
+  const gone = (dismissals || []).some((k) => k === candidate.releaseKey);
+  if (gone) return { show: false, releaseKey: candidate.releaseKey };
+  return {
+    show: true,
+    releaseKey: candidate.releaseKey,
+    text: "CPI is out. The " + candidate.periodLabel + " figures are on this page."
+  };
+}
+
+function c103Respond(model, reader, dismissals) {
+  const src = model || c103Cold();
+  const premium = !!(reader && reader.premium);
+  const base = {
+    ok: !!src.ok,
+    access: premium ? "premium" : "free",
+    cacheState: src.cacheState || "cold",
+    generatedAtUtc: src.generatedAtUtc,
+    generatedAtUk: src.generatedAtUk,
+    source: C103_SOURCE,
+    statusNote: src.statusNote || (src.latest ? "" : "not loaded yet"),
+    countdown: src.countdown || null,
+    latest: src.latest || null,
+    trend: Array.isArray(src.trend) ? src.trend : [],
+    archive: Array.isArray(src.archive) ? src.archive.map((row) => ({
+      period: row.period,
+      periodLabel: row.periodLabel,
+      headline: row.headline || null,
+      core: row.core || null
+    })) : [],
+    notice: c103Notice(src.noticeCandidate, reader, dismissals)
+  };
+  if (src.cacheNote) base.cacheNote = src.cacheNote;
+  if (src.cachedAt) base.cachedAt = src.cachedAt;
+  if (!premium) return base;
+  base.categories = Array.isArray(src.categories) ? src.categories : [];
+  base.contributions = Array.isArray(src.contributions) ? src.contributions : [];
+  base.gold = Array.isArray(src.gold) ? src.gold : [];
+  base.contributionLabel = C103_CONTRIB_LABEL;
+  base.goldLabel = C103_GOLD_LABEL;
+  base.relativeImportance = src.relativeImportance || null;
+  return base;
+}
+
+function c103DdlAudit(text) {
+  const alterW = ["alt", "er"].join("");
+  const dropW = ["dr", "op"].join("");
+  const tableW = ["tab", "le"].join("");
+  const indexW = ["ind", "ex"].join("");
+  const truncW = ["tru", "ncate"].join("");
+  const createW = ["cre", "ate"].join("");
+  const banned = new RegExp("\\b(?:" + alterW + "|" + dropW + ")\\s+(?:" + tableW + "|" + indexW + ")\\b|\\b" + truncW + "\\b|\\b" + createW + "\\s+" + indexW + "\\b", "i");
+  const createRe = new RegExp("create\\s+table(?:\\s+if\\s+not\\s+exists)?\\s+([a-z0-9_]+)", "gi");
+  const found = [];
+  let m;
+  const src = String(text || "");
+  if (banned.test(src)) return { ok: false, reason: "banned", tables: [] };
+  while ((m = createRe.exec(src))) {
+    const stmt = m[0];
+    const name = m[1].toLowerCase();
+    if (!/if\s+not\s+exists/i.test(stmt) || C103_TABLES.indexOf(name) < 0) return { ok: false, reason: stmt, tables: found };
+    found.push(name);
+  }
+  const uniq = Array.from(new Set(found));
+  const missing = C103_TABLES.filter((name) => uniq.indexOf(name) < 0);
+  if (missing.length) return { ok: false, reason: "missing " + missing.join(","), tables: uniq };
+  return { ok: true, tables: uniq };
+}
+
+function c103ItemPath(it) {
+  if (!it || !it.length) return "";
+  if (it.length >= 4 && typeof it[1] === "string" && it[1].charAt(0) === "/") return it[1];
+  if (typeof it[0] === "string" && it[0].charAt(0) === "/") return it[0];
+  return "";
+}
+
+function c103InsertInto(list) {
+  if (!Array.isArray(list) || list.some((it) => c103ItemPath(it) === "/cpi/")) return;
+  const sample = list.find((it) => Array.isArray(it));
+  const row = sample && sample.length >= 4
+    ? ["", "/cpi/", "CPI Day", "US inflation release, in UK time"]
+    : sample && sample.length === 3
+      ? ["/cpi/", "CPI Day", "US inflation release, in UK time"]
+      : ["/cpi/", "CPI Day"];
+  const at = list.findIndex((it) => c103ItemPath(it) === "/terminal/");
+  if (at >= 0) list.splice(at + 1, 0, row);
+  else list.push(row);
+}
+
+function c103InsertNav(nav, groups) {
+  if (Array.isArray(nav) && !nav.some((x) => x && x[0] === "/cpi/")) {
+    const markets = nav.findIndex((x) => x && x[0] === "/markets/");
+    const research = nav.findIndex((x) => x && x[0] === "/research/");
+    const item = ["/cpi/", "CPI Day"];
+    if (markets >= 0) nav.splice(markets + 1, 0, item);
+    else if (research >= 0) nav.splice(research, 0, item);
+    else nav.push(item);
+  }
+  if (Array.isArray(groups)) {
+    groups.forEach((g) => {
+      if (!g || g[0] !== "Gold and macro" || !Array.isArray(g[1])) return;
+      c103InsertInto(g[1]);
+    });
+  }
+  return { nav: nav, groups: groups };
+}
+
+function c103Paths(nav, groups) {
+  const out = [];
+  (nav || []).forEach((x) => { if (x && x[0]) out.push(x[0]); });
+  (groups || []).forEach((g) => (g[1] || []).forEach((it) => { const p = c103ItemPath(it); if (p) out.push(p); }));
+  return out;
+}
+
+function c103Deadline(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(Object.assign(new Error("timeout"), { name: "TimeoutError" })), ms);
+    Promise.resolve(promise).then((v) => { clearTimeout(t); resolve(v); }, (e) => { clearTimeout(t); reject(e); });
+  });
+}
+
+function c103RawGet(deps, url, ms, body) {
+  const limit = Math.min(2500, ms || 2500);
+  const headers = Object.assign({
+    "User-Agent": (deps && deps.ua) || C103_UA,
+    Accept: "application/json, text/calendar, text/html, */*"
+  }, (deps && deps.headers) || {});
+  if (body) headers["Content-Type"] = "application/json";
+  if (deps && typeof deps.fetch === "function" && !(deps && deps.request)) {
+    const Ctrl = deps.AbortController || (typeof AbortController === "function" ? AbortController : null);
+    const ctrl = Ctrl ? new Ctrl() : null;
+    const timer = setTimeout(() => { try { if (ctrl) ctrl.abort(); } catch (e) {} }, limit);
+    return c103Deadline(deps.fetch(url, {
+      method: body ? "POST" : "GET",
+      headers: headers,
+      body: body || undefined,
+      redirect: "follow",
+      signal: ctrl ? ctrl.signal : undefined
+    }).then(async (res) => {
+      const text = typeof res.text === "function" ? await res.text() : String(res.body || "");
+      if (!res || res.ok === false || (res.status && res.status >= 400)) throw new Error("http");
+      return text;
+    }), limit).finally(() => clearTimeout(timer));
+  }
+  const request = deps && deps.request;
+  if (typeof request !== "function") return Promise.reject(new Error("no-transport"));
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const req = request(url, { method: body ? "POST" : "GET", headers: headers });
+    const finish = (err, val) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      if (err) reject(err); else resolve(val);
+    };
+    const kill = () => {
+      try { if (req && typeof req.destroy === "function") req.destroy(); } catch (e) {}
+      finish(Object.assign(new Error("timeout"), { name: "TimeoutError" }));
+    };
+    const timer = setTimeout(kill, limit);
+    if (req && typeof req.setTimeout === "function") req.setTimeout(limit, kill);
+    if (req && typeof req.on === "function") {
+      req.on("error", (e) => finish(e.name === "AbortError" ? Object.assign(new Error("timeout"), { name: "TimeoutError" }) : e));
+      req.on("response", (res) => {
+        const chunks = [];
+        res.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(String(c))));
+        res.on("end", () => {
+          const code = res.statusCode || 0;
+          const text = Buffer.concat(chunks).toString("utf8");
+          if (code >= 400) finish(new Error("http"));
+          else finish(null, text);
+        });
+      });
+    }
+    try { if (body && req && req.write) req.write(body); if (req && req.end) req.end(); } catch (e) { finish(e); }
+  });
+}
+
+async function c103Job(fn) {
+  try { return { ok: true, value: await fn() }; }
+  catch (e) { return { ok: false, error: e && e.name === "TimeoutError" ? "timeout" : "failed" }; }
+}
+
+async function c103FetchAll(deps, nowMs) {
+  const ms = Math.min(2500, (deps && deps.timeoutMs) || 2500);
+  const year = c103Parts(nowMs, "America/New_York").year;
+  const endYear = String(year);
+  const startYear = String(deps && deps.apiKey ? year - 19 : year - 9);
+  const ids = [];
+  C103_CATALOG.forEach((row) => { ids.push(row[2], row[3]); });
+  const chunks = [];
+  const size = deps && deps.apiKey ? 50 : 25;
+  for (let i = 0; i < ids.length; i += size) chunks.push(ids.slice(i, i + size));
+  const blsBody = (list) => JSON.stringify({
+    seriesid: list,
+    startyear: startYear,
+    endyear: endYear,
+    registrationkey: deps && deps.apiKey ? deps.apiKey : undefined
+  });
+  const [ics, html, ri, hourly, daily, blsParts] = await Promise.all([
+    c103Job(() => c103RawGet(deps, C103_ICS, ms)),
+    c103Job(() => c103RawGet(deps, C103_HTML, ms)),
+    c103Job(() => c103RawGet(deps, C103_RI, ms)),
+    c103Job(() => c103RawGet(deps, c103GoldUrl("1h", "2y"), ms)),
+    c103Job(() => c103RawGet(deps, c103GoldUrl("1d", "5y"), ms)),
+    Promise.all(chunks.map((list) => c103Job(() => c103RawGet(Object.assign({}, deps, { headers: { "Content-Type": "application/json" } }), C103_BLS, ms, blsBody(list)))))
+  ]);
+  const series = {};
+  let seriesOk = false;
+  blsParts.forEach((part) => {
+    if (!part.ok) return;
+    let json = null;
+    try { json = JSON.parse(part.value); } catch (e) { json = null; }
+    const parsed = c103ParseBls(json);
+    if (!parsed.ok) return;
+    seriesOk = true;
+    Object.keys(parsed.series).forEach((id) => { series[id] = parsed.series[id]; });
+  });
+  let hourlyBars = [];
+  let dailyBars = [];
+  if (hourly.ok) {
+    try { hourlyBars = c103ParseYahoo(JSON.parse(hourly.value), 3600000).bars || []; } catch (e) { hourlyBars = []; }
+  }
+  if (daily.ok) {
+    try { dailyBars = c103ParseYahoo(JSON.parse(daily.value), 86400000).bars || []; } catch (e) { dailyBars = []; }
+  }
+  return {
+    icsOk: ics.ok,
+    htmlOk: html.ok,
+    ics: ics.ok ? c103ParseIcs(ics.value) : [],
+    html: html.ok ? c103ParseHtmlSchedule(html.value) : [],
+    ri: ri.ok ? c103ParseRi(ri.value) : { ok: false },
+    series: { ok: seriesOk, series: series },
+    hourly: hourlyBars,
+    daily: dailyBars,
+    fetchedAt: new Date(nowMs).toISOString(),
+    errors: {
+      ics: ics.ok ? "" : ics.error,
+      html: html.ok ? "" : html.error,
+      ri: ri.ok ? "" : ri.error,
+      bls: seriesOk ? "" : "failed",
+      hourly: hourly.ok ? "" : hourly.error,
+      daily: daily.ok ? "" : daily.error
+    }
+  };
+}
+
+function c103Carry(previous) {
+  if (!previous) return {};
+  return {
+    previousSeries: previous.previousSeries || null,
+    previousRi: previous.previousRi || null,
+    previousEvents: previous.previousEvents || null,
+    previousMonths: previous.previousMonths || null,
+    previousGold: previous.previousGold || previous.gold || null,
+    feedBars: previous.feedBars || null,
+    feedTimes: previous.feedTimes || null,
+    storedFetchedAt: previous.latest && previous.latest.fetchedAt || previous.cachedAt || "",
+    snapshots: previous.snapshots || []
+  };
+}
+
+function c103MergeModels(prev, next) {
+  if (!prev || !next) return next || prev;
+  if (!prev.latest && !prev.countdown) return next;
+  return next;
+}
+
+async function c103Refresh(deps, nowMs, previous) {
+  const fetched = await c103FetchAll(deps, nowMs);
+  const model = c103Compose(Object.assign({}, fetched, c103Carry(previous), { snapshots: (deps && deps.snapshots) || (previous && previous.snapshots) || [] }), nowMs);
+  if (!model.latest) model.statusNote = "not loaded yet";
+  const decision = c103SnapshotDecision(nowMs, model.previousEvents || []);
+  const bar = c103FreshBar(fetched.hourly || [], nowMs);
+  model.snapshotToSave = decision && bar ? {
+    releaseAtUtc: decision.releaseAtUtc,
+    observedAtUtc: new Date(bar.endMs).toISOString(),
+    price: bar.close,
+    windowKind: decision.windowKind,
+    sourceLabel: C103_GOLD_LABEL
+  } : null;
+  return model;
+}
+
+function c103CacheControl(body) {
+  if (!body || body.cacheState === "cold") return "no-store";
+  if (body.cacheState === "stale") return "private, max-age=0, stale-while-revalidate=120";
+  return "private, max-age=15, stale-while-revalidate=120";
+}
+
+const C103_CSS = "<style id=\"c103-css\">.c103{box-sizing:border-box;max-width:100%;overflow-x:clip;font:15px/1.45 var(--sans,Inter,system-ui,sans-serif);color:var(--ink,#1b1b1b);min-width:0}.c103 *,.c103 *::before,.c103 *::after{box-sizing:border-box}.c103 h2,.c103 h3{font-family:var(--serif,Georgia,serif);line-height:1.2;margin:0 0 8px}.c103 h2{font-size:1.45rem}.c103 p{overflow-wrap:anywhere}.c103 a{text-decoration-thickness:1px;text-underline-offset:3px}.c103 a:focus-visible,.c103 button:focus-visible,#c103-canvas:focus-visible{outline:2px solid var(--gold,#1f3a5f);outline-offset:3px}.c103-k{color:var(--ink-2,#5c6570);font-size:14px}.c103-v{font:600 1.6rem/1.2 var(--serif,Georgia,serif);margin:4px 0;font-variant-numeric:tabular-nums}.c103-miss{border-left:3px solid var(--gold,#8a6a12);padding:4px 0 4px 10px;margin:8px 0}.c103-banner{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;border:1px solid var(--rule,rgba(0,0,0,.14));padding:10px 12px;margin:0 0 14px;background:var(--paper-2,transparent)}.c103-banner button{min-height:44px;min-width:44px;padding:8px 12px;background:transparent;color:inherit;border:1px solid var(--rule,rgba(0,0,0,.14));border-radius:4px;cursor:pointer}.c103-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:12px 0}.c103-card{min-width:0;border-top:2px solid var(--ink,#1b1b1b);padding:10px 2px}.c103-card h3{font:600 14px/1.3 var(--sans,Inter,sans-serif);margin:0 0 6px}.c103-count{border-top:2px solid var(--ink,#1b1b1b);padding:12px 0;margin:8px 0 4px}.c103-count strong{font:600 1.8rem/1.1 var(--serif,Georgia,serif);font-variant-numeric:tabular-nums}.c103-chart{min-width:0;margin:8px 0 16px}#c103-canvas{display:block;width:100%;height:420px;max-width:100%;touch-action:pan-y;background:transparent}.c103-scroll{display:block;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}.c103 table{border-collapse:collapse;width:max-content;min-width:100%;font-size:15px}.c103 caption{caption-side:top;text-align:left;padding:0 0 8px;font-size:15px}.c103 th,.c103 td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule,rgba(0,0,0,.14));white-space:nowrap;font-weight:400;vertical-align:top}.c103 thead th{font-weight:600}.c103-live{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}.c103-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:22px;min-width:0}.c103-lock{border:1px solid var(--rule,rgba(0,0,0,.14));padding:12px;margin:12px 0}@media (max-width:899px){.c103-stats{grid-template-columns:1fr 1fr}.c103-grid{grid-template-columns:1fr}#c103-canvas{height:300px}}@media (max-width:479px){.c103-stats{grid-template-columns:1fr}#c103-canvas{height:240px}.c103{font-size:15px}}@media (prefers-reduced-motion:reduce){.c103 *{transition:none!important;animation:none!important}}</style>";
+
+function c103Install() {
+  if (c103Install.done) return;
+  try { c103InsertNav(typeof C93_NAV !== "undefined" ? C93_NAV : null, typeof C101B_GROUPS !== "undefined" ? C101B_GROUPS : null); } catch (e) {}
+  const store = new Map();
+  const depsOf = () => ({
+    request: typeof c103Install.request === "function" ? c103Install.request : defaultRequest,
+    fetch: null,
+    ua: C103_UA,
+    apiKey: typeof process !== "undefined" && process.env ? process.env.BLS_API_KEY : "",
+    timeoutMs: 2500,
+    sql: typeof sql === "function" ? sql : null
+  });
+  function defaultRequest(url, options) {
+    const lib = /^https:/.test(url) ? require("https") : require("http");
+    return lib.request(url, options);
+  }
+  async function produce() {
+    const prev = store.get("model");
+    const deps = depsOf();
+    deps.snapshots = await c103LoadSnapshots(deps).catch(() => []);
+    const body = await c103Refresh(deps, Date.now(), prev && prev.body);
+    c103Persist(deps, body).catch(() => {});
+    return body;
+  }
+  function read() {
+    return c103Memo(store, "model", 15 * 60 * 1000, produce, () => c103Cold(Date.now()));
+  }
+  function send(res, code, body, cache) {
+    const payload = JSON.stringify(body);
+    res.writeHead(code, {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": cache || c103CacheControl(body),
+      "X-Content-Type-Options": "nosniff",
+      "X-Frame-Options": "DENY",
+      "Referrer-Policy": "strict-origin-when-cross-origin"
+    });
+    res.end(payload);
+  }
+  async function readerOf(req) {
+    let user = null;
+    try { user = typeof c96UserOf === "function" ? await c96UserOf(req) : null; } catch (e) { user = null; }
+    return { user: user, premium: c103IsPremium(user), signedIn: !!(user && user.id), userId: user && user.id };
+  }
+  async function page(req, res) {
+    try { if (typeof c97Hook === "function") c97Hook(req, res); } catch (e) {}
+    const reader = await readerOf(req);
+    const origin = (typeof PUBLIC_ORIGIN === "string" && PUBLIC_ORIGIN) || "https://thedispatch.uk";
+    const client = c103Install.clientJs || "";
+    const css = C103_CSS;
+    const body = css + "<section><div class=\"kicker\">Markets</div><h1>CPI day</h1><p class=\"dek\">The US consumer price index, shown in UK time. Headline and core are free. Members also get the category breakdown and how gold futures moved after past releases. No forecast.</p><p class=\"byline\">Edited by Vraj Patel</p></section><section id=\"c103-mount\" aria-busy=\"true\"><p>Loading the stored release…</p></section><script>" + client + "</script><script>document.getElementById(\"c103-mount\").setAttribute(\"aria-busy\",\"false\");if(window.c103ui){window.c103ui.mount(document.getElementById(\"c103-mount\"));}else{document.getElementById(\"c103-mount\").innerHTML=\"<p>The CPI script did not start. No number was filled in. <a href=\\\"/calendar/\\\">Calendar</a></p>\";}</script><noscript><p>Figures load in the browser from the stored release. Nothing is estimated while that is off. <a href=\"https://www.bls.gov/cpi/\">U.S. Bureau of Labor Statistics CPI</a>.</p></noscript>";
+    const shell = {
+      title: "CPI day | The Dispatch Market",
+      path: "/cpi/",
+      desc: "US CPI in UK time: the next release, headline and core, and a 24-month trend. Category weights and gold futures after past releases are for members.",
+      user: reader.user,
+      extraHead: "<link rel=\"canonical\" href=\"" + origin + "/cpi/\"><meta property=\"og:title\" content=\"CPI day | The Dispatch Market\"><meta property=\"og:description\" content=\"US CPI in UK time, with the source and the release date on every figure.\">",
+      body: body
+    };
+    const html = typeof c93Shell === "function" ? c93Shell(shell) : "<!doctype html><title>CPI day | The Dispatch Market</title>" + body;
+    if (typeof c93Html === "function") return c93Html(req, res, html, "private, max-age=60");
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, max-age=60", "X-Content-Type-Options": "nosniff" });
+    res.end(req.method === "HEAD" ? undefined : html);
+  }
+  async function api(req, res) {
+    const reader = await readerOf(req);
+    const model = await read();
+    let dismissals = [];
+    if (reader.signedIn) {
+      try { dismissals = await c103Deadline(c103LoadDismissals(depsOf(), reader.userId), 400); }
+      catch (e) { dismissals = []; }
+    }
+    return send(res, 200, c103Respond(model, reader, dismissals));
+  }
+  function readBody(req) {
+    return new Promise((resolve) => {
+      const chunks = [];
+      let size = 0;
+      req.on("data", (c) => {
+        size += c.length;
+        if (size < 4000) chunks.push(c);
+      });
+      req.on("end", () => {
+        try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}")); }
+        catch (e) { resolve({}); }
+      });
+      req.on("error", () => resolve({}));
+    });
+  }
+  async function dismiss(req, res) {
+    const reader = await readerOf(req);
+    if (!reader.signedIn) return send(res, 401, { error: "Sign in required" }, "no-store");
+    const body = await readBody(req);
+    const key = String(body && body.releaseKey || "");
+    if (!/^\d{4}-\d{2}-\d{2}T/.test(key)) return send(res, 400, { error: "Unknown release" }, "no-store");
+    try { await c103SaveDismissal(depsOf(), reader.userId, key); }
+    catch (e) { return send(res, 200, { ok: false, statusNote: "not loaded yet" }, "no-store"); }
+    return send(res, 200, { ok: true, releaseKey: key }, "no-store");
+  }
+  if (typeof handle === "function" && !handle.__c103) {
+    const prev = handle;
+    const wrapped = async function (req, res) {
+      try {
+        if (typeof BB10I_MAINTENANCE_ON !== "undefined" && BB10I_MAINTENANCE_ON) return prev.apply(this, arguments);
+        let u = null;
+        try { u = new URL(req.url || "/", "http://localhost"); } catch (e) { u = null; }
+        const p = u ? u.pathname : "";
+        if (req.method === "GET" || req.method === "HEAD") {
+          if (p === "/cpi") { res.writeHead(301, { Location: "/cpi/" }); return res.end(); }
+          if (p === "/cpi/") return page(req, res);
+          if (p === "/api/c103/cpi") return api(req, res);
+        }
+        if (req.method === "POST" && p === "/api/c103/notice/dismiss") return dismiss(req, res);
+      } catch (e) { console.error("[c103]", e && e.message); }
+      return prev.apply(this, arguments);
+    };
+    wrapped.__c103 = 1;
+    handle = wrapped;
+  }
+  if (typeof renderPublicSitemap === "function" && !renderPublicSitemap.__c103) {
+    const prevMap = renderPublicSitemap;
+    const wrappedMap = async function () {
+      let x = await prevMap.apply(this, arguments);
+      const origin = (typeof PUBLIC_ORIGIN === "string" && PUBLIC_ORIGIN) || "https://thedispatch.uk";
+      if (typeof x !== "string" || x.indexOf("</urlset>") < 0 || x.indexOf(origin + "/cpi/") >= 0) return x;
+      return x.replace("</urlset>", "  <url><loc>" + origin + "/cpi/</loc><changefreq>daily</changefreq><priority>0.7</priority></url>\n</urlset>");
+    };
+    wrappedMap.__c103 = 1;
+    renderPublicSitemap = wrappedMap;
+  }
+  try {
+    const warm = setTimeout(() => {
+      const deps = depsOf();
+      c103EnsureSchema(deps).catch(() => {});
+      read().catch(() => {});
+    }, 50);
+    if (warm && typeof warm.unref === "function") warm.unref();
+  } catch (e) {}
+  c103Install.done = 1;
+  c103Install._store = store;
+}
+
+async function c103EnsureSchema(deps) {
+  if (!deps || typeof deps.sql !== "function") return;
+  const audit = c103DdlAudit(C103_DDL.join("\n"));
+  if (!audit.ok) return;
+  for (const stmt of C103_DDL) {
+    const one = stmt.match(/create\s+table\s+if\s+not\s+exists\s+([a-z0-9_]+)/i);
+    if (!one || C103_TABLES.indexOf(one[1].toLowerCase()) < 0) return;
+    if (typeof deps.sql.query === "function") await deps.sql.query(stmt);
+    else await deps.sql([stmt]);
+  }
+}
+
+async function c103LoadDismissals(deps, userId) {
+  if (!deps || typeof deps.sql !== "function" || !userId) return [];
+  const result = await deps.sql`SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS data FROM (
+    SELECT release_key FROM cpi_notice_dismissals WHERE user_id = ${userId}
+  ) t`;
+  const rows = result && result[0] && Array.isArray(result[0].data) ? result[0].data : [];
+  return rows.map((r) => r.release_key).filter(Boolean);
+}
+
+async function c103SaveDismissal(deps, userId, key) {
+  if (!deps || typeof deps.sql !== "function") throw new Error("no-db");
+  await deps.sql`INSERT INTO cpi_notice_dismissals (user_id, release_key) VALUES (${userId}, ${key}) ON CONFLICT DO NOTHING`;
+}
+
+async function c103LoadSnapshots(deps) {
+  if (!deps || typeof deps.sql !== "function") return [];
+  const result = await deps.sql`SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS data FROM (
+    SELECT release_at, observed_at, price, window_kind, source_label FROM cpi_gold_snapshots
+    WHERE release_at >= ${C103_RECORD_FROM} ORDER BY observed_at DESC LIMIT 400
+  ) t`;
+  const rows = result && result[0] && Array.isArray(result[0].data) ? result[0].data : [];
+  return rows.map((r) => ({
+    releaseAtUtc: new Date(r.release_at).toISOString(),
+    observedAtUtc: new Date(r.observed_at).toISOString(),
+    price: Number(r.price),
+    windowKind: r.window_kind,
+    sourceLabel: C103_GOLD_LABEL
+  })).filter((r) => isFinite(r.price));
+}
+
+async function c103Persist(deps, model) {
+  if (!deps || typeof deps.sql !== "function" || !model) return;
+  if (model.snapshotToSave && model.snapshotToSave.price != null) {
+    const s = model.snapshotToSave;
+    await deps.sql`INSERT INTO cpi_gold_snapshots (release_at, observed_at, price, window_kind, source_label)
+      VALUES (${s.releaseAtUtc}, ${s.observedAtUtc}, ${s.price}, ${s.windowKind}, ${C103_GOLD_LABEL})
+      ON CONFLICT DO NOTHING`;
+  }
+  if (model.latest && model.latest.headline && typeof model.latest.headline.saIndex === "number") {
+    const latest = model.latest;
+    const releaseAt = latest.releaseAtUtc || null;
+    const source = model.countdown && model.countdown.source ? model.countdown.source : "stored";
+    await deps.sql`INSERT INTO cpi_releases (period, release_at, release_source, reference_label, headline_mom, headline_yoy, core_mom, core_yoy, bls_fetched_at, payload)
+      VALUES (${latest.period}, ${releaseAt}, ${source}, ${latest.periodLabel}, ${latest.headline.momRounded}, ${latest.headline.yoyRounded},
+        ${latest.core ? latest.core.momRounded : null}, ${latest.core ? latest.core.yoyRounded : null}, ${latest.fetchedAt}, ${JSON.stringify({ period: latest.period })})
+      ON CONFLICT (period) DO UPDATE SET headline_mom = EXCLUDED.headline_mom, headline_yoy = EXCLUDED.headline_yoy,
+        core_mom = EXCLUDED.core_mom, core_yoy = EXCLUDED.core_yoy, bls_fetched_at = EXCLUDED.bls_fetched_at, fetched_at = NOW()`;
+  }
+  const series = model.previousSeries || {};
+  for (const id of Object.keys(series)) {
+    for (const point of series[id] || []) {
+      if (typeof point.value !== "number") continue;
+      const period = c103Period(point.year, point.month);
+      await deps.sql`INSERT INTO cpi_series_values (series_id, period, value) VALUES (${id}, ${period}, ${point.value})
+        ON CONFLICT (series_id, period) DO UPDATE SET value = EXCLUDED.value, fetched_at = NOW()`;
+    }
+  }
+  for (const g of model.gold || []) {
+    if (!g || !g.releaseAtUtc) continue;
+    await deps.sql`INSERT INTO cpi_gold_reactions (release_at, reference_period, anchor_at, anchor_price, plus_1h_at, plus_1h_price, plus_1h_pct, plus_1d_session, plus_1d_price, plus_1d_pct, plus_5d_session, plus_5d_price, plus_5d_pct, hourly_available, recorded, source_label)
+      VALUES (${g.releaseAtUtc}, ${g.referencePeriod || null}, ${g.anchorAtUtc}, ${g.anchorPrice}, ${g.plus1hAtUtc}, ${g.plus1hPrice}, ${g.plus1hPct}, ${g.plus1dSession}, ${g.plus1dPrice}, ${g.plus1dPct}, ${g.plus5dSession}, ${g.plus5dPrice}, ${g.plus5dPct}, ${!!g.hourlyAvailable}, ${!!g.recorded}, ${C103_GOLD_LABEL})
+      ON CONFLICT (release_at) DO UPDATE SET anchor_price = EXCLUDED.anchor_price, plus_1h_pct = EXCLUDED.plus_1h_pct, plus_1d_pct = EXCLUDED.plus_1d_pct, plus_5d_pct = EXCLUDED.plus_5d_pct, hourly_available = EXCLUDED.hourly_available, recorded = EXCLUDED.recorded, computed_at = NOW()`;
+  }
+}
+
+const api = {
+  C103_GOLD_LABEL, C103_CONTRIB_LABEL, C103_SOURCE, C103_CATALOG, C103_DDL, C103_TABLES, C103_FALLBACK, C103_RECORD_FROM,
+  c103Esc, c103ZonedToUtc, c103FormatUk, c103Parts, c103Ymd, c103Round1, c103Pct, c103Contribution,
+  c103ParseIcs, c103ParseHtmlSchedule, c103MergeSchedule, c103Countdown, c103ReleaseInstant,
+  c103ParseBls, c103ParseRi, c103BuildMonths, c103ParseYahoo, c103GoldReaction, c103ApplySnapshots,
+  c103SnapshotDecision, c103Compose, c103Cold, c103Memo, c103Respond, c103IsPremium, c103DdlAudit,
+  c103InsertNav, c103Paths, c103RawGet, c103Refresh, c103FetchAll, c103CacheControl, c103Install,
+  c103MergeModels, c103CarryNote, c103SeriesGood, c103PickSeries,
+  c103WorthStoring, c103GoldUrl
+};
+
+if (typeof module !== "undefined" && module.exports) module.exports = api;
+
+  var c103api = module.exports;
+  c103api.c103Install.clientJs = "/* chat103 CPI day client. One request, then one retry only when the server has no stored release yet. */\n(function (root) {\n  \"use strict\";\n  var GOLD = \"Gold futures (COMEX, front month), Yahoo Finance delayed\";\n  var CONTRIB = \"approx. contribution, our calculation from BLS data\";\n  function esc(s) {\n    return String(s == null ? \"\" : s).replace(/[&<>\"]/g, function (c) {\n      return { \"&\": \"&amp;\", \"<\": \"&lt;\", \">\": \"&gt;\", \"\\\"\": \"&quot;\" }[c];\n    });\n  }\n  function num(n, d) {\n    if (typeof n !== \"number\" || !isFinite(n)) return \"\";\n    return n.toLocaleString(\"en-GB\", { minimumFractionDigits: d, maximumFractionDigits: d });\n  }\n  function pct(n) {\n    if (typeof n !== \"number\" || !isFinite(n)) return \"\";\n    if (n === 0) return \"0.0%\";\n    return (n > 0 ? \"+\" : \"\\u2212\") + Math.abs(n).toFixed(1) + \"%\";\n  }\n  function pct2(n) {\n    if (typeof n !== \"number\" || !isFinite(n)) return \"\";\n    if (n === 0) return \"0.00%\";\n    return (n > 0 ? \"+\" : \"\\u2212\") + Math.abs(n).toFixed(2) + \"%\";\n  }\n  function miss(text) {\n    return \"<p class=\\\"c103-miss\\\">\" + esc(text || \"not loaded yet\") + \"</p>\";\n  }\n  function figure(row, kind) {\n    if (!row) return miss(\"not loaded yet\");\n    var value = kind === \"yoy\" ? row.yoyRounded : row.momRounded;\n    var index = kind === \"yoy\" ? row.nsaIndex : row.saIndex;\n    var series = kind === \"yoy\" ? row.yoySeries : row.momSeries;\n    var label = kind === \"yoy\" ? \"Year change, not seasonally adjusted\" : \"Month change, seasonally adjusted\";\n    if (typeof value !== \"number\") return miss(\"not loaded yet\");\n    var carried = row.message ? miss(row.message) : \"\";\n    return \"<p class=\\\"c103-v\\\">\" + esc(pct(value)) + \"</p><p>\" + esc(label) + \".</p><p class=\\\"c103-k\\\">Index \" + esc(num(index, 3)) + \" \\u00b7 \" + esc(series || \"\") + \"</p><p class=\\\"c103-k\\\">\" + esc(row.source || \"Source: U.S. Bureau of Labor Statistics\") + \" \\u00b7 \" + esc(row.periodLabel || \"\") + \"</p><p>\" + esc(row.why || \"\") + \"</p>\" + carried;\n  }\n  function card(title, body) {\n    return \"<article class=\\\"c103-card\\\"><h3>\" + esc(title) + \"</h3>\" + body + \"</article>\";\n  }\n  function countdown(c) {\n    if (!c || !c.releaseAtUtc) return \"<section class=\\\"c103-count\\\" aria-labelledby=\\\"c103-count\\\"><h2 id=\\\"c103-count\\\">Next release</h2>\" + miss(\"not loaded yet\") + \"</section>\";\n    var clock = c.days + \"d \" + c.hours + \"h \" + c.minutes + \"m\";\n    var src = c.source === \"labelled-fallback\"\n      ? (c.fallbackLabel || \"Labelled fallback. This date was not in the cached BLS schedule.\")\n      : \"Schedule: U.S. Bureau of Labor Statistics.\";\n    return \"<section class=\\\"c103-count\\\" aria-labelledby=\\\"c103-count\\\"><h2 id=\\\"c103-count\\\">Next release</h2><p><strong data-c103-left=\\\"\" + esc(c.releaseAtUtc) + \"\\\">\" + esc(clock) + \"</strong></p><p>\" + esc(c.what || \"\") + \"</p><p>Release \" + esc(c.releaseUk || \"\") + (c.zoneName ? \" (\" + esc(c.zoneName) + \")\" : \"\") + \".</p><p class=\\\"c103-k\\\">Reference month \" + esc(c.referenceLabel || \"\") + \".</p><p>\" + esc(c.why || \"\") + \"</p><p class=\\\"c103-k\\\">\" + esc(src) + \" <a href=\\\"\" + esc(c.scheduleUrl || \"https://www.bls.gov/schedule/news_release/cpi.htm\") + \"\\\">BLS schedule</a></p></section>\";\n  }\n  function banner(notice) {\n    if (!notice || !notice.show) return \"\";\n    return \"<div class=\\\"c103-banner\\\" role=\\\"status\\\"><p><strong>\" + esc(notice.text || \"CPI is out.\") + \"</strong> This notice stays on the site. It is not an email.</p><button type=\\\"button\\\" data-c103-dismiss=\\\"\" + esc(notice.releaseKey || \"\") + \"\\\">Dismiss</button></div>\";\n  }\n  function trendTable(rows) {\n    var body = (rows || []).map(function (r) {\n      return \"<tr><th scope=\\\"row\\\">\" + esc(r.periodLabel || r.period || \"\") + \"</th><td>\" + esc(pct(r.headlineYoy)) + \"</td><td>\" + esc(pct(r.coreYoy)) + \"</td></tr>\";\n    }).join(\"\");\n    if (!body) return miss(\"not loaded yet\");\n    return \"<div class=\\\"c103-scroll\\\" tabindex=\\\"0\\\" role=\\\"region\\\" aria-label=\\\"24-month trend. This box scrolls sideways on a narrow screen. The rest of the page does not.\\\"><table><caption>Headline and core, change from a year earlier, last 24 stored months. Source: U.S. Bureau of Labor Statistics.</caption><thead><tr><th scope=\\\"col\\\">Month</th><th scope=\\\"col\\\">Headline year change</th><th scope=\\\"col\\\">Core year change</th></tr></thead><tbody>\" + body + \"</tbody></table></div>\";\n  }\n  function archiveTable(rows) {\n    var body = (rows || []).map(function (r) {\n      var h = r.headline || {};\n      var c = r.core || {};\n      return \"<tr><th scope=\\\"row\\\">\" + esc(r.periodLabel || r.period || \"\") + \"</th><td>\" + esc(typeof h.momRounded === \"number\" ? pct(h.momRounded) : \"not loaded yet\") + \"</td><td>\" + esc(typeof h.yoyRounded === \"number\" ? pct(h.yoyRounded) : \"not loaded yet\") + \"</td><td>\" + esc(typeof c.momRounded === \"number\" ? pct(c.momRounded) : \"not loaded yet\") + \"</td><td>\" + esc(typeof c.yoyRounded === \"number\" ? pct(c.yoyRounded) : \"not loaded yet\") + \"</td></tr>\";\n    }).join(\"\");\n    if (!body) return miss(\"not loaded yet\");\n    return \"<div class=\\\"c103-scroll\\\" tabindex=\\\"0\\\" role=\\\"region\\\" aria-label=\\\"Archive of stored CPI months. This box scrolls sideways. The rest of the page does not.\\\"><table><caption>Every stored month. Headline and core only. Source: U.S. Bureau of Labor Statistics. A blank cell was not in the stored release.</caption><thead><tr><th scope=\\\"col\\\">Month</th><th scope=\\\"col\\\">Headline month</th><th scope=\\\"col\\\">Headline year</th><th scope=\\\"col\\\">Core month</th><th scope=\\\"col\\\">Core year</th></tr></thead><tbody>\" + body + \"</tbody></table></div>\";\n  }\n  function catTable(rows, ri) {\n    var body = (rows || []).map(function (r) {\n      var contrib = typeof r.contribution === \"number\" ? num(r.contribution, 3) : \"not loaded yet\";\n      var weight = typeof r.weight === \"number\" ? num(r.weight, 3) : \"not loaded yet\";\n      return \"<tr><th scope=\\\"row\\\">\" + esc(r.name) + \"</th><td>\" + esc(typeof r.momRounded === \"number\" ? pct(r.momRounded) : \"not loaded yet\") + \"</td><td>\" + esc(typeof r.yoyRounded === \"number\" ? pct(r.yoyRounded) : \"not loaded yet\") + \"</td><td>\" + esc(weight) + \"</td><td>\" + esc(contrib) + \"</td><td>\" + esc(r.momSeries || \"\") + \"</td></tr>\";\n    }).join(\"\");\n    if (!body) return miss(\"not loaded yet\");\n    var cite = ri && ri.citation ? ri.citation : \"Relative importance source: U.S. Bureau of Labor Statistics.\";\n    return \"<div class=\\\"c103-scroll\\\" tabindex=\\\"0\\\" role=\\\"region\\\" aria-label=\\\"Category breakdown. This box scrolls sideways. The rest of the page does not.\\\"><table><caption>Category breakdown for the latest stored month. \" + esc(CONTRIB) + \". \" + esc(cite) + \"</caption><thead><tr><th scope=\\\"col\\\">Category</th><th scope=\\\"col\\\">Month</th><th scope=\\\"col\\\">Year</th><th scope=\\\"col\\\">Weight</th><th scope=\\\"col\\\">Approx. contribution</th><th scope=\\\"col\\\">Month series</th></tr></thead><tbody>\" + body + \"</tbody></table></div>\";\n  }\n  function goldTable(rows) {\n    var body = (rows || []).map(function (r) {\n      var hour = r.hourlyAvailable && typeof r.plus1hPct === \"number\" ? pct2(r.plus1hPct) : \"Hourly bars do not cover this release\";\n      return \"<tr><th scope=\\\"row\\\">\" + esc(r.releaseUk || r.releaseAtUtc || \"\") + \"</th><td>\" + esc(r.referenceLabel || \"\") + \"</td><td>\" + esc(hour) + \"</td><td>\" + esc(typeof r.plus1dPct === \"number\" ? pct2(r.plus1dPct) : \"not loaded yet\") + \"</td><td>\" + esc(typeof r.plus5dPct === \"number\" ? pct2(r.plus5dPct) : \"not loaded yet\") + \"</td><td>\" + esc(r.anchorAtUtc || \"\") + \"</td><td>\" + esc(r.plus1hAtUtc || \"\") + \"</td></tr>\";\n    }).join(\"\");\n    if (!body) return miss(\"not loaded yet\");\n    return \"<div class=\\\"c103-scroll\\\" tabindex=\\\"0\\\" role=\\\"region\\\" aria-label=\\\"Gold futures after past CPI releases. This box scrolls sideways. The rest of the page does not.\\\"><table><caption>\" + esc(GOLD) + \". Move from the last bar before 08:30 US Eastern. History only.</caption><thead><tr><th scope=\\\"col\\\">Release, UK time</th><th scope=\\\"col\\\">Reference month</th><th scope=\\\"col\\\">To +1 hour</th><th scope=\\\"col\\\">To +1 trading day</th><th scope=\\\"col\\\">To +5 trading days</th><th scope=\\\"col\\\">Anchor time</th><th scope=\\\"col\\\">+1 hour bar end</th></tr></thead><tbody>\" + body + \"</tbody></table></div>\";\n  }\n  function render(model) {\n    model = model || {};\n    var latest = model.latest || {};\n    var h = latest.headline;\n    var c = latest.core;\n    var note = model.statusNote ? \"<p class=\\\"c103-miss\\\">\" + esc(model.statusNote) + \"</p>\" : \"\";\n    var cache = model.cacheNote ? \"<p class=\\\"c103-miss\\\">\" + esc(model.cacheNote) + \"</p>\" : \"\";\n    var when = latest.periodLabel ? \"<p class=\\\"c103-k\\\">Latest stored month \" + esc(latest.periodLabel) + (latest.releaseUk ? \" \\u00b7 release \" + esc(latest.releaseUk) : \"\") + \". \" + esc(model.source || \"Source: U.S. Bureau of Labor Statistics\") + \".</p>\" : \"<p class=\\\"c103-k\\\">\" + esc(model.source || \"Source: U.S. Bureau of Labor Statistics\") + \".</p>\";\n    var stats = \"<div class=\\\"c103-stats\\\">\" + [\n      card(\"Headline, month\", figure(h, \"mom\")),\n      card(\"Headline, year\", figure(h, \"yoy\")),\n      card(\"Core, month\", figure(c, \"mom\")),\n      card(\"Core, year\", figure(c, \"yoy\"))\n    ].join(\"\") + \"</div>\";\n    var chart = \"<section class=\\\"c103-chart\\\" aria-labelledby=\\\"c103-trend\\\"><h2 id=\\\"c103-trend\\\">24-month trend</h2><p>Year change in headline and core. Each point is a stored BLS month, not a forecast.</p><p id=\\\"c103-read\\\" class=\\\"c103-k\\\">The table under the chart lists the same numbers.</p><div id=\\\"c103-live\\\" class=\\\"c103-live\\\" aria-live=\\\"polite\\\"></div><canvas id=\\\"c103-canvas\\\" tabindex=\\\"0\\\" role=\\\"img\\\" aria-label=\\\"Headline and core year change over the last 24 stored months\\\" aria-describedby=\\\"c103-read\\\"></canvas>\" + trendTable(model.trend) + \"</section>\";\n    var archive = \"<section aria-labelledby=\\\"c103-arch\\\"><h2 id=\\\"c103-arch\\\">Archive</h2><p>Every month in the stored BLS response, newest first. Built from the index levels, not typed in.</p>\" + archiveTable(model.archive) + \"</section>\";\n    var premium = \"\";\n    if (model.access === \"premium\") {\n      premium = \"<div class=\\\"c103-grid\\\"><section aria-labelledby=\\\"c103-cat\\\"><h2 id=\\\"c103-cat\\\">Categories</h2><p>What moved inside the basket. \" + esc(CONTRIB) + \".</p>\" + catTable(model.categories, model.relativeImportance) + \"</section><section aria-labelledby=\\\"c103-gold\\\"><h2 id=\\\"c103-gold\\\">Gold after past releases</h2><p>\" + esc(GOLD) + \". The hour column is only filled when hourly bars exist. No view on the next release.</p>\" + goldTable(model.gold) + \"</section></div>\";\n    } else {\n      premium = \"<section class=\\\"c103-lock\\\" aria-labelledby=\\\"c103-lock\\\"><h2 id=\\\"c103-lock\\\">Members</h2><p>The category breakdown, the approximate contributions and the gold-futures history are part of membership. Headline, core, the countdown and the trend above stay available.</p><p><a href=\\\"/pricing\\\">See plans</a></p></section>\";\n    }\n    return \"<div class=\\\"c103\\\" id=\\\"c103\\\">\" + banner(model.notice) + note + cache + when + countdown(model.countdown) + stats + chart + archive + premium + \"<p class=\\\"c103-k\\\">\" + esc(model.source || \"Source: U.S. Bureau of Labor Statistics\") + \". Not investment advice. Capital at risk.</p><p><a href=\\\"/terminal/\\\">Terminal</a> \\u00b7 <a href=\\\"/calendar/\\\">Calendar</a> \\u00b7 <a href=\\\"/methodology\\\">Methodology</a></p></div>\";\n  }\n  function cssColor(name, fallback) {\n    try {\n      var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();\n      return v || fallback;\n    } catch (e) { return fallback; }\n  }\n  function draw(canvas, trend) {\n    if (!canvas || !canvas.getContext) return;\n    var ctx = canvas.getContext(\"2d\");\n    var rows = trend || [];\n    var dpr = root.devicePixelRatio || 1;\n    var w = canvas.clientWidth || 320;\n    var h = canvas.clientHeight || 240;\n    canvas.width = Math.max(1, Math.floor(w * dpr));\n    canvas.height = Math.max(1, Math.floor(h * dpr));\n    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);\n    ctx.clearRect(0, 0, w, h);\n    var ink = cssColor(\"--ink\", \"#1b1b1b\");\n    var paper = cssColor(\"--paper\", \"#fbfaf7\");\n    var muted = cssColor(\"--ink-3\", \"#5c6570\");\n    var rule = cssColor(\"--rule\", \"rgba(0,0,0,.14)\");\n    var a = cssColor(\"--gold\", \"#1f3a5f\");\n    var b = cssColor(\"--pos\", \"#2f6b47\");\n    ctx.fillStyle = paper;\n    ctx.fillRect(0, 0, w, h);\n    if (!rows.length) {\n      ctx.fillStyle = ink;\n      ctx.font = \"15px sans-serif\";\n      ctx.fillText(\"not loaded yet\", 12, 28);\n      return;\n    }\n    var vals = [];\n    rows.forEach(function (r) {\n      if (typeof r.headlineYoy === \"number\") vals.push(r.headlineYoy);\n      if (typeof r.coreYoy === \"number\") vals.push(r.coreYoy);\n    });\n    var min = Math.min.apply(null, vals.concat([0]));\n    var max = Math.max.apply(null, vals.concat([1]));\n    if (!(max > min)) { max += 1; min -= 1; }\n    var padL = 36, padR = 8, padT = 12, padB = 24;\n    function y(v) { return padT + (max - v) / (max - min) * (h - padT - padB); }\n    function x(i) { return padL + (rows.length === 1 ? 0 : i * (w - padL - padR) / (rows.length - 1)); }\n    ctx.strokeStyle = rule;\n    ctx.fillStyle = muted;\n    ctx.font = \"14px sans-serif\";\n    ctx.beginPath();\n    ctx.moveTo(padL, y(0));\n    ctx.lineTo(w - padR, y(0));\n    ctx.stroke();\n    ctx.fillText(num(max, 1), 2, y(max) + 4);\n    ctx.fillText(num(min, 1), 2, y(min));\n    function line(key, color) {\n      ctx.strokeStyle = color;\n      ctx.lineWidth = 1.6;\n      ctx.beginPath();\n      var started = false;\n      rows.forEach(function (r, i) {\n        if (typeof r[key] !== \"number\") return;\n        var xx = x(i), yy = y(r[key]);\n        if (!started) { ctx.moveTo(xx, yy); started = true; } else ctx.lineTo(xx, yy);\n      });\n      ctx.stroke();\n    }\n    line(\"headlineYoy\", a);\n    line(\"coreYoy\", b);\n    ctx.fillStyle = muted;\n    ctx.fillText(rows[0].period || \"\", padL, h - 6);\n    var right = rows[rows.length - 1].period || \"\";\n    ctx.fillText(right, Math.max(padL, w - padR - 72), h - 6);\n  }\n  function bind(rootEl, model) {\n    var canvas = rootEl.querySelector(\"#c103-canvas\");\n    var live = rootEl.querySelector(\"#c103-live\");\n    var read = rootEl.querySelector(\"#c103-read\");\n    var trend = model.trend || [];\n    var index = trend.length - 1;\n    function paint() { draw(canvas, trend); }\n    function speak(fromUser) {\n      var row = trend[index];\n      if (!row) return;\n      var text = (row.periodLabel || row.period || \"Month\") + \". Headline year change \" + (typeof row.headlineYoy === \"number\" ? pct(row.headlineYoy) : \"not loaded\") + \". Core year change \" + (typeof row.coreYoy === \"number\" ? pct(row.coreYoy) : \"not loaded\") + \".\";\n      if (read) read.textContent = text;\n      if (fromUser && live) live.textContent = text;\n    }\n    if (canvas) {\n      canvas.addEventListener(\"keydown\", function (e) {\n        if (e.key !== \"ArrowLeft\" && e.key !== \"ArrowRight\" && e.key !== \"Home\" && e.key !== \"End\") return;\n        e.preventDefault();\n        if (e.key === \"ArrowLeft\") index -= 1;\n        if (e.key === \"ArrowRight\") index += 1;\n        if (e.key === \"Home\") index = 0;\n        if (e.key === \"End\") index = trend.length - 1;\n        if (index < 0) index = 0;\n        if (index >= trend.length) index = trend.length - 1;\n        speak(true);\n      });\n    }\n    var btn = rootEl.querySelector(\"[data-c103-dismiss]\");\n    if (btn) {\n      btn.addEventListener(\"click\", function () {\n        var key = btn.getAttribute(\"data-c103-dismiss\");\n        fetch(\"/api/c103/notice/dismiss\", {\n          method: \"POST\",\n          headers: { \"Content-Type\": \"application/json\", Accept: \"application/json\" },\n          body: JSON.stringify({ releaseKey: key })\n        }).then(function () {\n          var box = btn.closest(\".c103-banner\");\n          if (box) box.remove();\n        }).catch(function () {});\n      });\n    }\n    var left = rootEl.querySelector(\"[data-c103-left]\");\n    if (left) {\n      var target = Date.parse(left.getAttribute(\"data-c103-left\"));\n      var timer = setInterval(function () {\n        if (!isFinite(target)) return;\n        var ms = Math.max(0, target - Date.now());\n        var days = Math.floor(ms / 86400000);\n        ms -= days * 86400000;\n        var hours = Math.floor(ms / 3600000);\n        ms -= hours * 3600000;\n        var minutes = Math.floor(ms / 60000);\n        left.textContent = days + \"d \" + hours + \"h \" + minutes + \"m\";\n      }, 30000);\n      root.addEventListener(\"pagehide\", function () { clearInterval(timer); }, { once: true });\n    }\n    paint();\n    speak(false);\n    if (typeof ResizeObserver === \"function\" && canvas) {\n      var ro = new ResizeObserver(function () { paint(); });\n      ro.observe(canvas);\n    }\n    if (typeof MutationObserver === \"function\") {\n      var mo = new MutationObserver(function () { paint(); });\n      mo.observe(document.documentElement, { attributes: true, attributeFilter: [\"class\", \"data-theme\"] });\n    }\n    try {\n      var mq = root.matchMedia && root.matchMedia(\"(prefers-color-scheme: dark)\");\n      if (mq && mq.addEventListener) mq.addEventListener(\"change\", paint);\n    } catch (e) {}\n  }\n  function mount(el) {\n    if (!el) return;\n    var ctrl = typeof AbortController === \"function\" ? new AbortController() : null;\n    function show(model) {\n      el.innerHTML = render(model);\n      el.setAttribute(\"aria-busy\", \"false\");\n      bind(el, model || {});\n    }\n    function fail() {\n      show({ statusNote: \"not loaded yet\", source: \"Source: U.S. Bureau of Labor Statistics\", access: \"free\" });\n    }\n    var timer = setTimeout(function () { if (ctrl) ctrl.abort(); fail(); }, 12000);\n    function pull(attempt) {\n      fetch(\"/api/c103/cpi\", { signal: ctrl ? ctrl.signal : undefined, headers: { Accept: \"application/json\" } }).then(function (r) {\n        if (!r.ok) throw new Error(\"http\");\n        return r.json();\n      }).then(function (model) {\n        clearTimeout(timer);\n        show(model);\n        if (attempt === 0 && model && model.cacheState === \"cold\") {\n          setTimeout(function () { if (ctrl && ctrl.signal && ctrl.signal.aborted) return; pull(1); }, 1500);\n        }\n      }).catch(function () {\n        clearTimeout(timer);\n        if (el.getAttribute(\"aria-busy\") === \"false\" && el.querySelector(\".c103\")) return;\n        fail();\n      });\n    }\n    pull(0);\n  }\n  root.c103ui = { render: render, mount: mount, draw: draw };\n})(typeof globalThis !== \"undefined\" ? globalThis : this);\n";
+  if (typeof globalThis !== "undefined") globalThis.c103 = c103api;
+  if (!globalThis.C103_NO_INSTALL) c103api.c103Install();
+})();
