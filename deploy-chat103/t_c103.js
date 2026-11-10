@@ -345,8 +345,37 @@ test("countdown is recomputed and the cache stops at the release", () => {
   assert.equal(lib.c103CacheMs(model, after), 60 * 1000);
   const moved = lib.c103ForNow(model, after);
   assert.equal(moved.countdown.releaseAtUtc, later.releaseAtUtc);
-  const arrived = { previousEvents: [release, later], latest: { period: release.referencePeriod } };
+  const period = release.referencePeriod;
+  const [ys, ms] = period.split("-");
+  const point = [{ year: Number(ys), month: Number(ms), value: 1 }];
+  const series = {};
+  lib.C103_CATALOG.forEach((row) => { series[row[2]] = point; series[row[3]] = point; });
+  const arrived = { previousEvents: [release, later], latest: { period: period }, previousSeries: series, previousRi: { weightMonth: "Sep. 2026" } };
   assert.ok(lib.c103CacheMs(arrived, after) > 60 * 1000);
+});
+
+test("the cache stays at 60s until the second batch and the weights catch up", () => {
+  const release = lib.c103ReleaseInstant(2026, 11, 10, 8, 30);
+  const later = lib.c103ReleaseInstant(2026, 12, 10, 8, 30);
+  const period = release.referencePeriod;
+  const [ys, ms] = period.split("-");
+  const point = [{ year: Number(ys), month: Number(ms), value: 1 }];
+  const series = {};
+  lib.C103_CATALOG.forEach((row) => { series[row[2]] = point; series[row[3]] = point; });
+  const at = release.startMs + 2 * 60 * 1000;
+  const partial = Object.assign({}, series);
+  delete partial[lib.C103_CATALOG[lib.C103_CATALOG.length - 1][2]];
+  const pendingBatch = { previousEvents: [release, later], latest: { period: period }, previousSeries: partial, previousRi: { weightMonth: "Sep. 2026" } };
+  assert.equal(lib.c103CacheMs(pendingBatch, at), 60 * 1000);
+  const pendingWeights = { previousEvents: [release, later], latest: { period: period }, previousSeries: series, previousRi: { weightMonth: "Aug. 2026" } };
+  assert.equal(lib.c103CacheMs(pendingWeights, at), 60 * 1000);
+  const held = lib.c103BlsPlan({ calls: 4, dayKey: "2026-11-10", lastBlsAt: at - 60 * 1000 }, at, { apiKey: "", hasStored: true, inReleaseWindow: true, hasNewMonth: true, needsSecondBatch: true });
+  assert.equal(held.call, false);
+  assert.equal(held.reason, "poll-wait");
+  const once = lib.c103BlsPlan({ calls: 4, dayKey: "2026-11-10", lastBlsAt: at - 6 * 60 * 1000 }, at, { apiKey: "", hasStored: true, inReleaseWindow: true, hasNewMonth: true, needsSecondBatch: true });
+  assert.equal(once.call, true);
+  assert.equal(once.batches, 1);
+  assert.equal(once.offset, 25);
 });
 
 test("relative importance uses the weight column and the prior month", () => {

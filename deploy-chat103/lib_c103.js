@@ -1304,7 +1304,12 @@ function c103HasNewMonth(model, nowMs) {
 function c103CacheMs(model, nowMs) {
   const events = model && model.previousEvents || [];
   const next = events.filter((ev) => ev && ev.startMs > nowMs).sort((a, b) => a.startMs - b.startMs)[0];
-  if (c103InReleaseWindow(events, nowMs) && !c103HasNewMonth(model, nowMs)) return 60 * 1000;
+  const inWindow = c103InReleaseWindow(events, nowMs);
+  if (inWindow && !c103HasNewMonth(model, nowMs)) return 60 * 1000;
+  const follow = inWindow || events.some((ev) => ev && nowMs >= ev.startMs && nowMs - ev.startMs < 6 * 3600 * 1000);
+  const weightsOk = !!(model && model.latest && model.previousRi && c103WeightsMatch(model.previousRi.weightMonth || model.previousRi.asOf, model.latest.period));
+  if (follow && c103NeedsSecondBatch(model)) return 60 * 1000;
+  if (inWindow && model && model.latest && !weightsOk) return 60 * 1000;
   if (next) return Math.max(1000, Math.min(15 * 60 * 1000, next.startMs - nowMs));
   return 15 * 60 * 1000;
 }

@@ -81,7 +81,7 @@ Sitemap gains `/cpi/` the same way Terminal was added.
 
 Same shape as chat102r4. The page and the JSON read an in-memory model and return. They do not wait on BLS or Yahoo.
 
-- The countdown is recomputed on every response. The cache ends at the next release instant. From that instant until the new month is stored, the cache is 60 seconds. Otherwise it is up to 15 minutes, then the stored model is served with `Cache-Control: private, max-age=0, stale-while-revalidate=120`.
+- The countdown is recomputed on every response. The cache ends at the next release instant. From that instant the cache stays at 60 seconds while the new month is missing, while the second series batch is still outstanding, or while the weight month is not yet the month before the data month. Those extra passes do not add a BLS call: the series batch and Table 1 still wait 5 minutes between fetches. Once both have caught up, the cache is up to 15 minutes, and the stored model is served with `Cache-Control: private, max-age=0, stale-while-revalidate=120`.
 - A missing model returns `not loaded yet`, `Cache-Control: no-store`, and starts one background refresh.
 - One refresh per key (single-flight). A second request does not start a second fetch.
 - Each upstream attempt dies at 2.5 seconds. The production path uses `https.request` and calls `req.destroy()` so the socket is aborted, not only the promise.
