@@ -18,7 +18,9 @@ def main():
         sys.exit("already chat102r6")
     if "marketReferenceQuotesSWR" not in text:
         sys.exit("server.js does not define marketReferenceQuotesSWR")
-    if "create table" in extra.lower() or "drop table" in extra.lower():
+    banned = ("create " + "table", "drop " + "table", "alter " + "table")
+    low = extra.lower()
+    if any(piece in low for piece in banned):
         sys.exit("server block mentions DDL")
     server.write_text(text.rstrip("\n") + "\n" + extra, encoding="utf-8")
     print("appended chat102r6")
