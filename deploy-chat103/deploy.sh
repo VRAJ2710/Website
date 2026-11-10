@@ -19,7 +19,7 @@ BASE_SERVER_MD5=2bf82d174263fd4b5bf224b611eb1777
 NEW_L1='const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)'
 MARKER='// chat102 terminal. Built from lib_c102.js and client_c102.js. Edit those, then run node build_block.js.'
 MANIFEST=(
-  "patch_c103.py 1fe3b2e092126c3773fcdbc0b1eeb7b59d654c063f6017d4bc1204dd4758f9b4"
+  "patch_c103.py 85b2027cfde0ab80a913e16273446b7010815e7c2077b425dde1e63546efd179"
   "server_block_c103.js b6c5bbf806044db699284416e829e4e1ad3790396452b845c2650706edb28ac6"
   "ddl_c103.sql 90e84a3513161531846a52350f815f88c261a7e6540ac42e9b5e888862820794"
 )
@@ -137,9 +137,15 @@ if "c103CalendarCpi" not in new or "rows[i - 12]" in new:
 if new[len(new) - len(suffix):] != suffix:
     sys.exit("bytes after the chat103 block changed")
 if new[new.find(r6c):] != old[old.find(r6c):]:
-    sys.exit("chat102r6c last-write block changed")
+    sys.exit("last-write scrub block changed")
+logs = ns["SCRUB_LOG"].findall(new)
+if len(logs) != 1:
+    sys.exit("scrub attach log is not intact")
+log_at = new.rfind(logs[0])
+if log_at < new.find(r6c) or ns["NEXT"].search(new, log_at):
+    sys.exit("scrub block is not last")
 if new.count("proto.end = end") != old.count("proto.end = end"):
-    sys.exit("a response-end wrapper was added after r6c")
+    sys.exit("a response-end wrapper was added after the scrub")
 tail = old[old.find(marker):cut + 1]
 if hashlib.sha256(tail.encode("utf-8")).hexdigest() != expect:
     sys.exit("chat102r5 tail changed")

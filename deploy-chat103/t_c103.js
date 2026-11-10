@@ -632,6 +632,46 @@ test("the CPI splice keeps a chat104 block that sits outside it", () => {
   assert.equal(fs.readFileSync(path.join(root, "index.html"), "utf8"), index);
 });
 
+test("the scrub log accepts r6h and r6i and stays the last block", () => {
+  const block = fs.readFileSync(path.join(dir, "../deploy-chat102/server_block_c102.js"), "utf8");
+  const cal = "  const yoy = (rows, i) => i >= 12 ? (rows[i][1] / rows[i - 12][1] - 1) * 100 : null;\n  for (const [k, id] of [[\"us_cpi\", \"CPIAUCSL\"], [\"us_pce\", \"PCEPI\"]]) {\n    const r = await fr(id); const i = r.length - 1;\n    if (i > 13) out[k] = { period: r[i][0].slice(0, 7), actual: c97N(yoy(r, i), 1) + \"% a year\", prevPeriod: r[i - 1][0].slice(0, 7), previous: c97N(yoy(r, i - 1), 1) + \"% a year\", how: \"Year-on-year change in the index (FRED \" + id + \")\" };\n  }\n";
+  function scrub(letter) {
+    return "// chat102r6 market-reference cache.\nr6();\n// chat104 rename.\nchat104();\n// chat102r6c last-write scrub.\nproto.end = end;\nconsole.log(\"[c102r6" + letter + "] scrub attached\");\n";
+  }
+  ["h", "i", "c"].forEach((letter) => {
+    const root = fs.mkdtempSync("/tmp/c103-r6" + letter + "-");
+    const tail = scrub(letter);
+    const server = "const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)\n" + cal + block + "// chat103 cpi day. old\nold();\n" + tail;
+    fs.writeFileSync(path.join(root, "server.js"), server);
+    fs.writeFileSync(path.join(root, "app.js"), "app\n");
+    fs.writeFileSync(path.join(root, "index.html"), "<html>chat104</html>\n");
+    const run = spawnSync("python3", [path.join(dir, "patch_c103.py"), path.join(root, "server.js"), path.join(root, "app.js"), path.join(root, "index.html"), path.join(dir, "server_block_c103.js")], { encoding: "utf8" });
+    assert.equal(run.status, 0, letter + " " + run.stderr);
+    const next = fs.readFileSync(path.join(root, "server.js"), "utf8");
+    assert.equal(next.slice(next.indexOf("\n// chat102r6 market-reference cache.")), "\n" + tail);
+    assert.equal((next.match(/\[c102r6[a-z]?\] scrub attached/g) || []).length, 1);
+    assert.match(next, new RegExp("\\[c102r6" + letter + "\\] scrub attached"));
+    assert.equal(next.slice(next.indexOf("[c102r6" + letter + "] scrub attached")).includes("\n// chat"), false);
+  });
+  const root = fs.mkdtempSync("/tmp/c103-r6-bad-");
+  const doubled = scrub("h") + "console.log(\"[c102r6i] scrub attached\");\n";
+  const server = "const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)\n" + cal + block + "// chat103 cpi day. old\nold();\n" + doubled;
+  fs.writeFileSync(path.join(root, "server.js"), server);
+  fs.writeFileSync(path.join(root, "app.js"), "app\n");
+  fs.writeFileSync(path.join(root, "index.html"), "<html></html>\n");
+  const run = spawnSync("python3", [path.join(dir, "patch_c103.py"), path.join(root, "server.js"), path.join(root, "app.js"), path.join(root, "index.html"), path.join(dir, "server_block_c103.js")], { encoding: "utf8" });
+  assert.notEqual(run.status, 0);
+  assert.match(run.stderr, /scrub attach log is not intact/);
+  const later = fs.mkdtempSync("/tmp/c103-r6-later-");
+  const after = scrub("i") + "// chat102r6j later.\nlater();\n";
+  fs.writeFileSync(path.join(later, "server.js"), "const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)\n" + cal + block + "// chat103 cpi day. old\nold();\n" + after);
+  fs.writeFileSync(path.join(later, "app.js"), "app\n");
+  fs.writeFileSync(path.join(later, "index.html"), "<html></html>\n");
+  const refused = spawnSync("python3", [path.join(dir, "patch_c103.py"), path.join(later, "server.js"), path.join(later, "app.js"), path.join(later, "index.html"), path.join(dir, "server_block_c103.js")], { encoding: "utf8" });
+  assert.notEqual(refused.status, 0);
+  assert.match(refused.stderr, /scrub block is not last/);
+});
+
 test("labelled fallback is used only when the schedule does not already have that date", () => {
   const ics = "BEGIN:VEVENT\nSUMMARY:Consumer Price Index\nDTSTART;TZID=US-Eastern:20261210T083000\nEND:VEVENT\n";
   const html = "<tr><td>December 2026</td><td>Jan. 13, 2027</td><td>08:30 AM</td></tr>";

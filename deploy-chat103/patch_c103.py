@@ -12,6 +12,8 @@ import sys
 START = "// chat103 cpi day"
 R6C = "// chat102r6c last-write scrub."
 NEXT = re.compile(r"\n// chat(?!103\b)")
+# r6c logged [c102r6c]. r6h logs [c102r6h]. r6i will log [c102r6i].
+SCRUB_LOG = re.compile(r"\[c102r6[a-z]?\] scrub attached")
 CAL_YOY_OLD = "  const yoy = (rows, i) => i >= 12 ? (rows[i][1] / rows[i - 12][1] - 1) * 100 : null;"
 CAL_YOY_NEW = """  const yoy = (rows, i) => {
     const api = typeof globalThis !== "undefined" && globalThis.c103;
@@ -51,6 +53,26 @@ def next_chat(text, start):
     return -1 if match is None else match.start()
 
 
+def scrub_comment(text):
+    at = text.rfind("\n" + R6C)
+    if at < 0 or text.count("\n" + R6C) != 1:
+        sys.exit("missing or repeated anchor " + R6C)
+    return at
+
+
+def assert_one_scrub(text, label):
+    logs = SCRUB_LOG.findall(text)
+    if len(logs) != 1:
+        sys.exit(label + " scrub attach log is not intact")
+    comment = scrub_comment(text)
+    log_at = text.rfind(logs[0])
+    if log_at < comment:
+        sys.exit(label + " scrub log is outside the last-write block")
+    if NEXT.search(text, log_at):
+        sys.exit(label + " scrub block is not last")
+    return comment
+
+
 def main():
     if len(sys.argv) != 5:
         sys.exit("usage: patch_c103.py server.js app.js index.html server_block")
@@ -66,14 +88,13 @@ def main():
         sys.exit("server block wraps res.end; that would sit after the r6c scrub")
     if text.count("\n" + START) != 1:
         sys.exit("chat103 block is missing or not unique")
-    if text.count("\n" + R6C) != 1:
-        sys.exit("missing or repeated anchor " + R6C)
+    old_comment = assert_one_scrub(text, "base")
     start = text.find("\n" + START)
     end = next_chat(text, start)
     if end < 0 or end < start:
         sys.exit("no later // chat block after chat103")
     if R6C in text[start:end]:
-        sys.exit("r6c sits inside the chat103 block")
+        sys.exit("the last-write scrub sits inside the chat103 block")
     suffix = text[end:]
     new = text[: start + 1] + block + suffix
     orig_cut = original.find("\n" + START)
@@ -81,14 +102,11 @@ def main():
         sys.exit("bytes in front of chat103 changed besides the calendar CPI anchor")
     if new[len(new) - len(suffix):] != suffix:
         sys.exit("bytes after the chat103 block changed")
-    old_c = text[text.find("\n" + R6C):]
-    new_c = new[new.find("\n" + R6C):]
-    if old_c != new_c:
-        sys.exit("chat102r6c last-write block changed")
+    new_comment = assert_one_scrub(new, "patched")
+    if new[new_comment:] != text[old_comment:]:
+        sys.exit("last-write scrub block changed")
     if new.count("proto.end = end") != text.count("proto.end = end"):
         sys.exit("a response-end wrapper was added")
-    if new.count("[c102r6c] scrub attached") != 1:
-        sys.exit("r6c attach log is not intact")
     region = new[start:len(new) - len(suffix)]
     if "proto.end" in region:
         sys.exit("replacement chat103 block wraps res.end")
