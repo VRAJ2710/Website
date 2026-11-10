@@ -445,6 +445,13 @@ function c103WeightsMatch(weightMonth, latestPeriod) {
   return c103MonthNameToNum(label[1]) === prev.m && Number(label[2]) === prev.y;
 }
 
+function c103IndexGapNote(kind, y, m) {
+  const label = C103_MONTHS[m - 1] + " " + y;
+  const lead = kind === "yoy" ? "Year-on-year not published: " : "Month change not published: ";
+  if (y === 2025 && m === 10) return lead + "BLS has no October 2025 index because of the 2025 US government shutdown.";
+  return lead + "BLS has no " + label + " index.";
+}
+
 function c103ChangePair(saMap, nsaMap, y, m) {
   const sa = saMap.get(y + "-" + m);
   const nsa = nsaMap.get(y + "-" + m);
@@ -458,8 +465,10 @@ function c103ChangePair(saMap, nsaMap, y, m) {
     nsaIndex: typeof nsa === "number" ? nsa : null,
     mom: mom,
     momRounded: c103Round1(mom),
+    momNote: typeof sa === "number" && typeof saPrev !== "number" ? c103IndexGapNote("mom", prev.y, prev.m) : "",
     yoy: yoy,
-    yoyRounded: c103Round1(yoy)
+    yoyRounded: c103Round1(yoy),
+    yoyNote: typeof nsa === "number" && typeof nsaPrevYear !== "number" ? c103IndexGapNote("yoy", y - 1, m) : ""
   };
 }
 
@@ -498,15 +507,17 @@ function c103BuildMonths(series, ri) {
         nsaIndex: pair.nsaIndex,
         mom: pair.mom,
         momRounded: pair.momRounded,
+        momNote: pair.momNote,
         yoy: pair.yoy,
         yoyRounded: pair.yoyRounded,
+        yoyNote: pair.yoyNote,
         weight: weightNum,
         weightMonth: ri && (ri.weightMonth || ri.asOf) || "",
         weightsMatch: weightsOk,
-        contribution: weightsOk ? c103Contribution(weightNum, pair.mom) : null,
+        contribution: weightsOk && typeof pair.mom === "number" ? c103Contribution(weightNum, pair.mom) : null,
         contributionUnit: "pp",
         contributionLabel: C103_CONTRIB_LABEL,
-        contributionNote: weightsOk ? "" : "The weight month is not the month before this figure. Contributions are not shown.",
+        contributionNote: !weightsOk ? "The weight month is not the month before this figure. Contributions are not shown." : (typeof pair.mom === "number" ? "" : (pair.momNote || "Month change is not available, so no contribution is calculated.")),
         source: C103_SOURCE
       };
     });
@@ -715,6 +726,7 @@ function c103LatestFigure(month, key) {
     momRounded: row.momRounded,
     yoy: row.yoy,
     yoyRounded: row.yoyRounded,
+    yoyNote: row.yoyNote || "",
     source: C103_SOURCE
   };
 }
@@ -773,12 +785,14 @@ function c103Compose(parts, nowMs) {
   const dailyCarried = !dailyFresh && daily.length > 0;
   const months = series ? c103BuildMonths(series, ri) : [];
   const latest = months.length ? months[months.length - 1] : null;
-  const withYoy = months.filter((row) => row.headline && typeof row.headline.yoyRounded === "number");
-  const trend = withYoy.slice(-24).map((row) => ({
+  const trendMonths = months.filter((row) => row.headline && (row.headline.nsaIndex != null || row.headline.saIndex != null));
+  const trend = trendMonths.slice(-24).map((row) => ({
     period: row.period,
     periodLabel: row.periodLabel,
     headlineYoy: row.headline.yoyRounded,
     coreYoy: row.core && typeof row.core.yoyRounded === "number" ? row.core.yoyRounded : null,
+    headlineYoyNote: row.headline.yoyNote || "",
+    coreYoyNote: row.core && row.core.yoyNote || "",
     headlineMom: row.headline.momRounded,
     coreMom: row.core ? row.core.momRounded : null
   }));

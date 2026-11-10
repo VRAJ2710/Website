@@ -43,7 +43,7 @@
     var value = kind === "yoy" ? row.yoyRounded : row.momRounded;
     var index = kind === "yoy" ? row.nsaIndex : row.saIndex;
     var label = kind === "yoy" ? "Year change, not seasonally adjusted" : "Month change, seasonally adjusted";
-    if (typeof value !== "number") return miss("not loaded yet");
+    if (typeof value !== "number") return miss(kind === "yoy" && row.yoyNote ? row.yoyNote : "not loaded yet");
     var carried = row.message ? miss(row.message) : "";
     return "<p class=\"c103-v\">" + esc(pct(value)) + "</p><p>" + esc(label) + ".</p><p class=\"c103-k\">Index " + esc(num(index, 3)) + " \u00b7 " + blsLink() + "</p><p class=\"c103-k\">" + esc(row.source || "Source: U.S. Bureau of Labor Statistics") + " \u00b7 " + esc(row.periodLabel || "") + "</p><p>" + esc(row.why || "") + "</p>" + carried;
   }
@@ -62,9 +62,13 @@
     if (!notice || !notice.show) return "";
     return "<div class=\"c103-banner\" role=\"status\"><p><strong>" + esc(notice.text || "CPI is out.") + "</strong> This notice stays on the site. It is not an email.</p><button type=\"button\" data-c103-dismiss=\"" + esc(notice.releaseKey || "") + "\">Dismiss</button></div>";
   }
+  function yoyText(value, note) {
+    if (typeof value === "number") return pct(value);
+    return note || "not loaded yet";
+  }
   function trendTable(rows) {
     var body = (rows || []).map(function (r) {
-      return "<tr><th scope=\"row\">" + esc(r.periodLabel || r.period || "") + "</th><td>" + esc(pct(r.headlineYoy)) + "</td><td>" + esc(pct(r.coreYoy)) + "</td></tr>";
+      return "<tr><th scope=\"row\">" + esc(r.periodLabel || r.period || "") + "</th><td>" + esc(yoyText(r.headlineYoy, r.headlineYoyNote)) + "</td><td>" + esc(yoyText(r.coreYoy, r.coreYoyNote)) + "</td></tr>";
     }).join("");
     if (!body) return miss("not loaded yet");
     return "<div class=\"c103-scroll\" tabindex=\"0\" role=\"region\" aria-label=\"24-month trend. This box scrolls sideways on a narrow screen. The rest of the page does not.\"><table><caption>Headline and core, change from a year earlier, last 24 stored months. Source: U.S. Bureau of Labor Statistics.</caption><thead><tr><th scope=\"col\">Month</th><th scope=\"col\">Headline year change</th><th scope=\"col\">Core year change</th></tr></thead><tbody>" + body + "</tbody></table></div>";
@@ -73,7 +77,7 @@
     var body = (rows || []).map(function (r) {
       var h = r.headline || {};
       var c = r.core || {};
-      return "<tr><th scope=\"row\">" + esc(r.periodLabel || r.period || "") + "</th><td>" + esc(typeof h.momRounded === "number" ? pct(h.momRounded) : "not loaded yet") + "</td><td>" + esc(typeof h.yoyRounded === "number" ? pct(h.yoyRounded) : "not loaded yet") + "</td><td>" + esc(typeof c.momRounded === "number" ? pct(c.momRounded) : "not loaded yet") + "</td><td>" + esc(typeof c.yoyRounded === "number" ? pct(c.yoyRounded) : "not loaded yet") + "</td></tr>";
+      return "<tr><th scope=\"row\">" + esc(r.periodLabel || r.period || "") + "</th><td>" + esc(typeof h.momRounded === "number" ? pct(h.momRounded) : "not loaded yet") + "</td><td>" + esc(yoyText(h.yoyRounded, h.yoyNote)) + "</td><td>" + esc(typeof c.momRounded === "number" ? pct(c.momRounded) : "not loaded yet") + "</td><td>" + esc(yoyText(c.yoyRounded, c.yoyNote)) + "</td></tr>";
     }).join("");
     if (!body) return miss("not loaded yet");
     return "<div class=\"c103-scroll\" tabindex=\"0\" role=\"region\" aria-label=\"Archive of stored CPI months. This box scrolls sideways. The rest of the page does not.\"><table><caption>Every stored month. Headline and core only. Source: U.S. Bureau of Labor Statistics. A blank cell was not in the stored release.</caption><thead><tr><th scope=\"col\">Month</th><th scope=\"col\">Headline month</th><th scope=\"col\">Headline year</th><th scope=\"col\">Core month</th><th scope=\"col\">Core year</th></tr></thead><tbody>" + body + "</tbody></table></div>";
@@ -82,7 +86,7 @@
     var body = (rows || []).map(function (r) {
       var weight = typeof r.weight === "number" ? num(r.weight, 3) : "not loaded yet";
       var pp = typeof r.contribution === "number" ? num(r.contribution, 3) + " pp" : (r.contributionNote || "not loaded yet");
-      return "<tr><th scope=\"row\">" + esc(r.name) + "</th><td class=\"c103-why\">" + esc(r.why || "") + "</td><td>" + esc(typeof r.momRounded === "number" ? pct(r.momRounded) : "not loaded yet") + "</td><td>" + esc(typeof r.yoyRounded === "number" ? pct(r.yoyRounded) : "not loaded yet") + "</td><td>" + esc(weight) + (r.weightMonth ? " <span class=\"c103-k\">" + esc(r.weightMonth) + "</span>" : "") + "</td><td>" + esc(pp) + "</td><td>" + blsLink() + "</td></tr>";
+      return "<tr><th scope=\"row\">" + esc(r.name) + "</th><td class=\"c103-why\">" + esc(r.why || "") + "</td><td>" + esc(typeof r.momRounded === "number" ? pct(r.momRounded) : (r.momNote || "not loaded yet")) + "</td><td>" + esc(yoyText(r.yoyRounded, r.yoyNote)) + "</td><td>" + esc(weight) + (r.weightMonth ? " <span class=\"c103-k\">" + esc(r.weightMonth) + "</span>" : "") + "</td><td>" + esc(pp) + "</td><td>" + blsLink() + "</td></tr>";
     }).join("");
     if (!body) return miss("not loaded yet");
     var cite = ri && ri.citation ? ri.citation : "Relative importance source: U.S. Bureau of Labor Statistics.";
@@ -179,7 +183,7 @@
       ctx.beginPath();
       var started = false;
       rows.forEach(function (r, i) {
-        if (typeof r[key] !== "number") return;
+        if (typeof r[key] !== "number") { started = false; return; }
         var xx = x(i), yy = y(r[key]);
         if (!started) { ctx.moveTo(xx, yy); started = true; } else ctx.lineTo(xx, yy);
       });
@@ -203,7 +207,7 @@
     function speak(fromUser) {
       var row = trend[index];
       if (!row) return;
-      var text = (row.periodLabel || row.period || "Month") + ". Headline year change " + (typeof row.headlineYoy === "number" ? pct(row.headlineYoy) : "not loaded") + ". Core year change " + (typeof row.coreYoy === "number" ? pct(row.coreYoy) : "not loaded") + ".";
+      var text = (row.periodLabel || row.period || "Month") + ". Headline year change " + yoyText(row.headlineYoy, row.headlineYoyNote) + ". Core year change " + yoyText(row.coreYoy, row.coreYoyNote) + ".";
       if (read) read.textContent = text;
       if (fromUser && live) live.textContent = text;
     }

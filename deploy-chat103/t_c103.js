@@ -44,6 +44,66 @@ test("m/m and y/y match the September 2026 BLS print", () => {
   assert.equal(sep.core.yoyRounded, 2.6);
 });
 
+test("a missing year-ago index is named and not replaced", () => {
+  const series = {
+    CUSR0000SA0: [{ year: 2026, month: 9, value: 336.298 }, { year: 2026, month: 10, value: 337.643 }],
+    CUUR0000SA0: [{ year: 2025, month: 9, value: 324.8 }, { year: 2026, month: 10, value: 338 }],
+    CUSR0000SA0L1E: [{ year: 2026, month: 9, value: 338.896 }, { year: 2026, month: 10, value: 339.913 }],
+    CUUR0000SA0L1E: [{ year: 2025, month: 9, value: 330.804 }, { year: 2026, month: 10, value: 341 }],
+    CUSR0000SAH1: [{ year: 2026, month: 9, value: 100 }, { year: 2026, month: 10, value: 100.4 }],
+    CUUR0000SAH1: [{ year: 2025, month: 9, value: 98 }, { year: 2026, month: 10, value: 101 }]
+  };
+  const months = lib.c103BuildMonths(series, { byName: { Shelter: 35.323 }, weightMonth: "Sep. 2026" });
+  const oct = months.find((row) => row.period === "2026-10");
+  assert.equal(oct.headline.momRounded, 0.4);
+  assert.equal(oct.core.momRounded, 0.3);
+  assert.equal(oct.headline.yoyRounded, null);
+  assert.equal(oct.core.yoyRounded, null);
+  assert.equal(oct.headline.yoy, null);
+  assert.match(oct.headline.yoyNote, /Year-on-year not published: BLS has no October 2025 index because of the 2025 US government shutdown\./);
+  assert.match(oct.core.yoyNote, /October 2025/);
+  const shelter = oct.categories.find((row) => row.key === "shelter");
+  assert.equal(shelter.yoyRounded, null);
+  assert.equal(shelter.contribution, lib.c103Contribution(35.323, shelter.mom));
+  assert.equal(shelter.contributionNote, "");
+  const gap = lib.c103BuildMonths({
+    CUSR0000SA0: [{ year: 2024, month: 3, value: 110 }],
+    CUUR0000SA0: [{ year: 2022, month: 3, value: 90 }, { year: 2024, month: 3, value: 100 }]
+  }, { byName: { "All items": 100 }, weightMonth: "Feb. 2024" });
+  const mar = gap.find((row) => row.period === "2024-03");
+  assert.equal(mar.headline.yoy, null);
+  assert.match(mar.headline.yoyNote, /BLS has no March 2023 index\./);
+  assert.equal(/shutdown/.test(mar.headline.yoyNote), false);
+  assert.equal(mar.headline.contribution, null);
+  assert.match(mar.headline.contributionNote, /February 2024/);
+  const model = lib.c103Compose({
+    series: { ok: true, series: series },
+    ri: { ok: true, byName: { Shelter: 35.323 }, weightMonth: "Sep. 2026" },
+    icsOk: false,
+    htmlOk: false,
+    hourly: [],
+    daily: []
+  }, Date.parse("2026-11-13T16:00:00.000Z"));
+  const trend = model.trend.find((row) => row.period === "2026-10");
+  const arch = model.archive.find((row) => row.period === "2026-10");
+  assert.equal(trend.headlineYoy, null);
+  assert.match(trend.headlineYoyNote, /October 2025/);
+  assert.match(arch.headline.yoyNote, /October 2025/);
+  const ui = { document: { documentElement: {} }, devicePixelRatio: 1, encodeURIComponent: encodeURIComponent };
+  ui.getComputedStyle = () => ({ getPropertyValue: () => "" });
+  vm.createContext(ui);
+  vm.runInContext(fs.readFileSync(path.join(dir, "client_c103.js"), "utf8"), ui);
+  const free = lib.c103Respond(model, { premium: false }, []);
+  const html = ui.c103ui.render(free);
+  assert.match(html, /Year-on-year not published: BLS has no October 2025 index because of the 2025 US government shutdown\./);
+  assert.equal((html.match(/October 2025/g) || []).length >= 2, true);
+  const premium = lib.c103Respond(model, { premium: true }, []);
+  const member = ui.c103ui.render(premium);
+  assert.match(member, /October 2025/);
+  assert.match(member, /pp/);
+  assert.equal(premium.categories.find((row) => row.key === "shelter").contribution, shelter.contribution);
+});
+
 test("contribution is the weight times the category change", () => {
   assert.equal(lib.c103Contribution(35.323, 0.4), 35.323 * 0.4 / 100);
   assert.equal(lib.c103Contribution(13.507, 0), 0);

@@ -54,6 +54,8 @@ Approximate contribution is `(relative importance ÷ 100) × category month chan
 
 September 2026 checks, from the API indexes and the news release: headline SA 334.131 → 336.298 is 0.6 percent; headline NSA 324.800 → 336.940 is 3.7 percent; core SA 337.765 → 338.896 is 0.3 percent; core NSA 330.804 → 339.287 is 2.6 percent.
 
+A year change needs the same month one year earlier. If that index was not published, the card, the trend table and the archive name that month and do not fill in another one. October 2025 is the known case: BLS did not publish it because of the 2025 US government shutdown, so October 2026 has no year change. The month change and the contribution still use the previous month when that index exists.
+
 ## Schema
 
 New tables only. `CREATE TABLE IF NOT EXISTS`. No foreign keys into existing tables, so nothing about `dispatch_users` changes.
