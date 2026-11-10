@@ -7,7 +7,7 @@
 set -u
 # Payload commit is the commit that already contains these blobs.
 # Do not point this at a commit that only changes deploy.sh.
-PAYLOAD_COMMIT=ccdf77debe0f9e9cb13c904394275c239b3bd855
+PAYLOAD_COMMIT=f692baf6aef0fedb9f8a5a3767bc94fb2e5c8995
 BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/${PAYLOAD_COMMIT}/deploy-chat103"
 
 # Staged root the October 2025 gap patch is applied to.
