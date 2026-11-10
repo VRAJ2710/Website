@@ -136,6 +136,36 @@ test("the app anchors become plain names and the cache tag moves to chat103c", (
   assert.match(again.stderr + again.stdout, /already chat102r6c/);
 });
 
+test("deploy.sh bytes match EXPECTED_SHA256 on their own", () => {
+  const spec = fs.readFileSync(path.join(dir, "EXPECTED_SHA256"), "utf8");
+  const sha = (spec.match(/sha256 ([a-f0-9]{64})/) || [])[1];
+  const bytes = Number((spec.match(/bytes (\d+)/) || [])[1]);
+  const buf = fs.readFileSync(path.join(dir, "deploy.sh"));
+  assert.equal(buf.length, bytes);
+  assert.equal(require("crypto").createHash("sha256").update(buf).digest("hex"), sha);
+});
+
+test("remote payload is fetched and a non-matching root is refused", () => {
+  const root = fs.mkdtempSync("/tmp/c102r6c-root-");
+  fs.writeFileSync(path.join(root, "server.js"), "// chat102r6b reader-facing scrub.\n");
+  fs.writeFileSync(path.join(root, "app.js"), "nope");
+  fs.writeFileSync(path.join(root, "index.html"), '<script src="/app.js?v=chat103b"></script>\n');
+  const before = fs.readFileSync(path.join(root, "server.js"));
+  const run = spawnSync("bash", [path.join(dir, "deploy.sh"), "--dry-run", "--dir", root], { encoding: "utf8" });
+  const spec = fs.readFileSync(path.join(dir, "deploy.sh"), "utf8");
+  const payload = (spec.match(/PAYLOAD_COMMIT=([a-f0-9]{40})/) || [])[1];
+  const blockHash = (spec.match(/server_block_c102r6c\.js ([a-f0-9]{64})/) || [])[1];
+  const out = run.stdout + run.stderr;
+  assert.notEqual(run.status, 0);
+  assert.match(out, new RegExp("remote payload ok: server_block_c102r6c.js " + blockHash));
+  assert.match(out, new RegExp(payload));
+  assert.match(out, /replace refused/);
+  assert.match(out, /aba3ab8b407bafb610911d8e2cef5fb5/);
+  assert.deepEqual(fs.readFileSync(path.join(root, "server.js")), before);
+  assert.equal(fs.readFileSync(path.join(root, "index.html"), "utf8").includes("chat103c"), false);
+  assert.equal(fs.readdirSync(root).some((n) => n.includes("bak-chat102r6c")), false);
+});
+
 test("the known gold-label anchors are unique in the chat102 app generation", () => {
   const src = "/tmp/c102hash/app.js";
   if (!fs.existsSync(src)) return;
