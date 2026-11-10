@@ -85,6 +85,7 @@ const C103_DDL = [
     plus_5d_pct DOUBLE PRECISION,
     hourly_available BOOLEAN NOT NULL DEFAULT FALSE,
     recorded BOOLEAN NOT NULL DEFAULT FALSE,
+    hour_label TEXT,
     source_label TEXT NOT NULL,
     computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   )`,
@@ -636,8 +637,21 @@ function c103RollJump(prev, next) {
 
 function c103MergeGold(computed, stored) {
   const by = new Map();
-  (stored || []).forEach((row) => { if (row && row.releaseAtUtc) by.set(row.releaseAtUtc, row); });
-  (computed || []).forEach((row) => { if (row && row.releaseAtUtc) by.set(row.releaseAtUtc, row); });
+  (stored || []).forEach((row) => { if (row && row.releaseAtUtc) by.set(row.releaseAtUtc, Object.assign({}, row)); });
+  (computed || []).forEach((row) => {
+    if (!row || !row.releaseAtUtc) return;
+    const old = by.get(row.releaseAtUtc);
+    const next = Object.assign({}, row);
+    if (old) {
+      if (next.plus1hPct == null && old.plus1hPct != null) next.plus1hPct = old.plus1hPct;
+      if (!next.hourlyAvailable && old.hourlyAvailable) {
+        next.hourlyAvailable = true;
+        if (/Daily windows only/.test(next.hourMessage || "")) next.hourMessage = old.hourMessage || "";
+      }
+      if (!next.hourLabel && old.hourLabel) next.hourLabel = old.hourLabel;
+    }
+    by.set(row.releaseAtUtc, next);
+  });
   return Array.from(by.values()).sort((a, b) => String(a.releaseAtUtc) < String(b.releaseAtUtc) ? 1 : -1);
 }
 
@@ -645,7 +659,8 @@ function c103ApplySnapshots(row, snaps) {
   const mine = (snaps || []).filter((s) => s && s.releaseAtUtc === row.releaseAtUtc);
   const pick = (kind) => mine.filter((s) => s.windowKind === kind).sort((a, b) => String(a.observedAtUtc) < String(b.observedAtUtc) ? 1 : -1)[0];
   const pre = pick("pre");
-  const post = pick("plus_1h") || pick("post");
+  const target = Date.parse(row.releaseAtUtc) + 60 * 60 * 1000;
+  const post = mine.filter((s) => s.windowKind === "plus_1h" || s.windowKind === "post").sort((a, b) => Math.abs(Date.parse(a.observedAtUtc) - target) - Math.abs(Date.parse(b.observedAtUtc) - target))[0];
   if (pre && typeof pre.price === "number") {
     row.recordedPreUk = c103FormatUk(Date.parse(pre.observedAtUtc));
     row.recordedPrePrice = pre.price;
@@ -744,7 +759,9 @@ function c103Compose(parts, nowMs) {
   const archiveIn = archiveFresh ? parts.archive : kept.filter((ev) => ev && ev.source === "bls-archive");
   const icsCarried = !icsFresh && icsIn.length > 0;
   const htmlCarried = !htmlFresh && htmlIn.length > 0;
-  const events = c103MergeSchedule(icsIn.concat(archiveIn), htmlIn);
+  const primary = c103MergeSchedule(icsIn, htmlIn);
+  const haveDay = new Set(primary.map((ev) => ev.etDate));
+  const events = primary.concat(archiveIn.filter((ev) => ev && ev.etDate && !haveDay.has(ev.etDate))).sort((a, b) => a.startMs - b.startMs);
   const usedEvents = events;
   const scheduleFromFetch = (parts && parts.icsOk) || (parts && parts.htmlOk);
   const prevBars = (parts && parts.feedBars) || {};
@@ -1143,13 +1160,15 @@ async function c103FetchAll(deps, nowMs) {
     apiKey: deps && deps.apiKey,
     hasStored: !!(deps && deps.hasStored),
     inReleaseWindow: !!(deps && deps.inReleaseWindow),
-    hasNewMonth: !!(deps && deps.hasNewMonth)
+    hasNewMonth: !!(deps && deps.hasNewMonth),
+    needsSecondBatch: !!(deps && deps.needsSecondBatch)
   };
   const plan = c103BlsPlan(deps && deps.blsBudget, nowMs, info);
   const chunks = [];
   if (plan.call) {
     const size = plan.batch;
-    for (let i = 0; i < ids.length && chunks.length < plan.batches; i += size) chunks.push(ids.slice(i, i + size));
+    const startAt = plan.offset || 0;
+    for (let i = startAt; i < ids.length && chunks.length < plan.batches; i += size) chunks.push(ids.slice(i, i + size));
   }
   const blsBody = (list) => {
     const payload = { seriesid: list, startyear: startYear, endyear: endYear };
@@ -1158,10 +1177,11 @@ async function c103FetchAll(deps, nowMs) {
   };
   const scheduleDue = !(deps && deps.scheduleFresh);
   const yahooDue = !(deps && deps.yahooFresh);
+  const riDue = scheduleDue || !!(deps && deps.riDue);
   const [ics, html, ri, archive, hourly, daily, blsParts] = await Promise.all([
     scheduleDue ? c103Job(() => c103RawGet(deps, C103_ICS, ms)) : Promise.resolve({ ok: false, error: "skipped" }),
     scheduleDue ? c103Job(() => c103RawGet(deps, C103_HTML, ms)) : Promise.resolve({ ok: false, error: "skipped" }),
-    scheduleDue ? c103Job(() => c103RawGet(deps, C103_RI, ms)) : Promise.resolve({ ok: false, error: "skipped" }),
+    riDue ? c103Job(() => c103RawGet(deps, C103_RI, ms)) : Promise.resolve({ ok: false, error: "skipped" }),
     scheduleDue ? c103Job(() => c103RawGet(deps, "https://www.bls.gov/bls/news-release/cpi.htm", ms)) : Promise.resolve({ ok: false, error: "skipped" }),
     yahooDue ? c103Job(() => c103RawGet(deps, c103GoldUrl("1h", "2y"), ms)) : Promise.resolve({ ok: false, error: "skipped" }),
     yahooDue ? c103Job(() => c103RawGet(deps, c103GoldUrl("1d", "5y"), ms)) : Promise.resolve({ ok: false, error: "skipped" }),
@@ -1245,8 +1265,12 @@ function c103BlsPlan(budget, nowMs, info) {
   if (room <= 0) return Object.assign(base, { call: false, reason: "budget", batches: 0 });
   if (!(info && info.hasStored)) return Object.assign(base, { call: true, reason: "empty", batches: room });
   if (info.inReleaseWindow && !info.hasNewMonth) {
-    if (last && nowMs - last < 5 * 60 * 1000) return Object.assign(base, { call: false, reason: "poll-wait", batches: 0 });
-    return Object.assign(base, { call: true, reason: "release-window", batches: 1 });
+    if (last && nowMs - last < 5 * 60 * 1000) return Object.assign(base, { call: false, reason: "poll-wait", batches: 0, offset: 0 });
+    return Object.assign(base, { call: true, reason: "release-window", batches: 1, offset: 0 });
+  }
+  if (info.needsSecondBatch && room > 0) {
+    if (last && nowMs - last < 5 * 60 * 1000) return Object.assign(base, { call: false, reason: "poll-wait", batches: 0, offset: 0 });
+    return Object.assign(base, { call: true, reason: "second-batch", batches: 1, offset: batch });
   }
   if (last && nowMs - last < 24 * 3600 * 1000) return Object.assign(base, { call: false, reason: "daily", batches: 0 });
   return Object.assign(base, { call: true, reason: "daily", batches: room });
@@ -1258,6 +1282,16 @@ function c103BlsCharge(plan, made, nowMs) {
 
 function c103InReleaseWindow(events, nowMs) {
   return (events || []).some((ev) => ev && nowMs >= ev.startMs && nowMs - ev.startMs <= 90 * 60 * 1000);
+}
+
+function c103NeedsSecondBatch(model) {
+  if (!model || !model.latest || !model.latest.period) return false;
+  const bits = /^(\d{4})-(\d{2})$/.exec(model.latest.period);
+  if (!bits) return false;
+  const y = Number(bits[1]);
+  const m = Number(bits[2]);
+  const series = model.previousSeries || {};
+  return C103_CATALOG.some((row) => [row[2], row[3]].some((id) => !(series[id] || []).some((p) => p.year === y && p.month === m)));
 }
 
 function c103HasNewMonth(model, nowMs) {
@@ -1288,12 +1322,19 @@ async function c103Refresh(deps, nowMs, previous) {
   deps.inReleaseWindow = c103InReleaseWindow(events, nowMs);
   deps.hasNewMonth = c103HasNewMonth(previous, nowMs);
   deps.blsBudget = (previous && previous.blsBudget) || (deps && deps.blsBudget) || { calls: 0, dayKey: "", lastBlsAt: 0 };
-  deps.scheduleFresh = !!(previous && previous.previousEvents && previous.previousEvents.length && previous.feedTimes && nowMs - Date.parse(previous.feedTimes.schedule || 0) < 24 * 3600 * 1000);
+  deps.needsSecondBatch = c103NeedsSecondBatch(previous) && (deps.inReleaseWindow || (events.some((ev) => ev && nowMs >= ev.startMs && nowMs - ev.startMs < 6 * 3600 * 1000)));
+  deps.scheduleFresh = !!(previous && previous.previousEvents && previous.previousEvents.some((ev) => ev && ev.source === "bls-ics") && previous.feedTimes && nowMs - Date.parse(previous.feedTimes.schedule || 0) < 24 * 3600 * 1000);
+  const weightsOk = previous && previous.latest && previous.previousRi && c103WeightsMatch(previous.previousRi.weightMonth || previous.previousRi.asOf, previous.latest.period);
+  const lastRi = previous && previous.feedTimes && Date.parse(previous.feedTimes.ri || 0);
+  deps.riDue = !!(deps.inReleaseWindow && previous && previous.latest && !weightsOk && (!lastRi || nowMs - lastRi >= 5 * 60 * 1000));
   deps.yahooFresh = !!(yahooAt && nowMs - yahooAt < 15 * 60 * 1000);
   const fetched = await c103FetchAll(deps, nowMs);
   const model = c103Compose(Object.assign({}, fetched, c103Carry(previous), { snapshots: (deps && deps.snapshots) || (previous && previous.snapshots) || [] }), nowMs);
   model.blsBudget = fetched.blsBudget;
-  if (model.feedTimes) model.feedTimes.schedule = deps.scheduleFresh ? (previous.feedTimes && previous.feedTimes.schedule) : new Date(nowMs).toISOString();
+  if (model.feedTimes) {
+    model.feedTimes.schedule = deps.scheduleFresh ? (previous.feedTimes && previous.feedTimes.schedule) : new Date(nowMs).toISOString();
+    model.feedTimes.ri = fetched.ri && fetched.ri.ok ? new Date(nowMs).toISOString() : (previous && previous.feedTimes && previous.feedTimes.ri);
+  }
   if (!model.latest) model.statusNote = "not loaded yet";
   model.countdown = c103Countdown(nowMs, model.previousEvents || []);
   return model;
@@ -1305,7 +1346,7 @@ function c103CacheControl(body) {
   return "private, max-age=15, stale-while-revalidate=120";
 }
 
-const C103_CSS = "<style id=\"c103-css\">.c103{box-sizing:border-box;max-width:100%;overflow-x:clip;font:15px/1.45 var(--sans,Inter,system-ui,sans-serif);color:var(--ink);background:var(--paper);min-width:0}.c103 *,.c103 *::before,.c103 *::after{box-sizing:border-box}.c103 h2,.c103 h3{font-family:var(--serif,Georgia,serif);line-height:1.2;margin:0 0 8px;color:var(--ink)}.c103 h2{font-size:1.45rem}.c103 p,.c103 caption,.c103 caption a{overflow-wrap:anywhere}.c103 a{color:var(--ink);text-decoration-thickness:1px;text-underline-offset:3px}.c103 a:focus-visible,.c103 button:focus-visible,#c103-canvas:focus-visible{outline:3px solid var(--ink);outline-offset:3px}.c103-k{color:var(--ink);font-size:14px}.c103-v{font:600 1.6rem/1.2 var(--serif,Georgia,serif);margin:4px 0;font-variant-numeric:tabular-nums;color:var(--ink)}.c103-miss{border-left:3px solid var(--gold);padding:4px 0 4px 10px;margin:8px 0;color:var(--ink)}.c103-banner{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;border:1px solid var(--rule);padding:10px 12px;margin:0 0 14px;background:var(--paper);color:var(--ink)}.c103-banner button,.c103-tools button{min-height:44px;min-width:44px;padding:8px 12px;background:var(--paper);color:var(--ink);border:1px solid var(--rule);border-radius:4px;cursor:pointer}.c103-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:12px 0}.c103-card{min-width:0;border-top:2px solid var(--ink);padding:10px 2px}.c103-card h3{font:600 14px/1.3 var(--sans,Inter,sans-serif);margin:0 0 6px;color:var(--ink)}.c103-count{border-top:2px solid var(--ink);padding:12px 0;margin:8px 0 4px}.c103-count strong{font:600 1.8rem/1.1 var(--serif,Georgia,serif);font-variant-numeric:tabular-nums}.c103-chart{min-width:0;margin:8px 0 16px}#c103-canvas{display:block;width:100%;height:420px;max-width:100%;touch-action:pan-y;background:var(--paper)}.c103-legend{display:flex;flex-wrap:wrap;gap:12px 18px;list-style:none;margin:8px 0;padding:0;color:var(--ink)}.c103-swatch{display:inline-block;width:28px;height:0;border-top:3px solid var(--ink);margin-right:6px;vertical-align:middle}.c103-swatch-core{border-top-style:dashed;border-top-color:var(--pos)}.c103-scroll{display:block;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}.c103 table{border-collapse:collapse;width:max-content;min-width:100%;font-size:15px;color:var(--ink)}.c103 caption{caption-side:top;text-align:left;padding:0 0 8px;font-size:15px;white-space:normal;color:var(--ink)}.c103 th,.c103 td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);white-space:nowrap;font-weight:400;vertical-align:top;color:var(--ink);background:var(--paper)}.c103 thead th{font-weight:600}.c103 td.c103-why{white-space:normal;min-width:14rem}.c103-live{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}.c103-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:22px;min-width:0}.c103-lock{border:1px solid var(--rule);padding:12px;margin:12px 0;color:var(--ink);background:var(--paper)}@media (max-width:899px){.c103-stats{grid-template-columns:1fr 1fr}.c103-grid{grid-template-columns:1fr}#c103-canvas{height:300px}}@media (max-width:479px){.c103-stats{grid-template-columns:1fr}#c103-canvas{height:240px}.c103{font-size:15px}}@media (prefers-reduced-motion:reduce){.c103 *{transition:none!important;animation:none!important}}</style>";
+const C103_CSS = "<style id=\"c103-css\">.c103{box-sizing:border-box;max-width:100%;overflow-x:clip;font:15px/1.45 var(--sans,Inter,system-ui,sans-serif);color:var(--ink);background:var(--paper);min-width:0}.c103 *,.c103 *::before,.c103 *::after{box-sizing:border-box}.c103 h2,.c103 h3{font-family:var(--serif,Georgia,serif);line-height:1.2;margin:0 0 8px;color:var(--ink)}.c103 h2{font-size:1.45rem}.c103 p,.c103 caption,.c103 caption a{overflow-wrap:anywhere}.c103 a{color:var(--ink);text-decoration-thickness:1px;text-underline-offset:3px}.c103 a:focus-visible,.c103 button:focus-visible,#c103-canvas:focus-visible{outline:3px solid var(--ink);outline-offset:3px}.c103-k{color:var(--ink);font-size:14px}.c103-v{font:600 1.6rem/1.2 var(--serif,Georgia,serif);margin:4px 0;font-variant-numeric:tabular-nums;color:var(--ink)}.c103-miss{border-left:3px solid var(--amber);padding:4px 0 4px 10px;margin:8px 0;color:var(--ink)}.c103-banner{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;border:1px solid var(--rule);padding:10px 12px;margin:0 0 14px;background:var(--paper);color:var(--ink)}.c103-banner button,.c103-tools button{min-height:44px;min-width:44px;padding:8px 12px;background:var(--paper);color:var(--ink);border:1px solid var(--rule);border-radius:4px;cursor:pointer}.c103-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:12px 0}.c103-card{min-width:0;border-top:2px solid var(--ink);padding:10px 2px}.c103-card h3{font:600 14px/1.3 var(--sans,Inter,sans-serif);margin:0 0 6px;color:var(--ink)}.c103-count{border-top:2px solid var(--ink);padding:12px 0;margin:8px 0 4px}.c103-count strong{font:600 1.8rem/1.1 var(--serif,Georgia,serif);font-variant-numeric:tabular-nums}.c103-chart{min-width:0;margin:8px 0 16px}#c103-canvas{display:block;width:100%;height:420px;max-width:100%;touch-action:pan-y;background:var(--paper)}.c103-legend{display:flex;flex-wrap:wrap;gap:12px 18px;list-style:none;margin:8px 0;padding:0;color:var(--ink)}.c103-swatch{display:inline-block;width:28px;height:0;border-top:3px solid var(--ink);margin-right:6px;vertical-align:middle}.c103-swatch-core{border-top-style:dashed;border-top-color:var(--up)}.c103-scroll{display:block;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}.c103 table{border-collapse:collapse;width:max-content;min-width:100%;font-size:15px;color:var(--ink)}.c103 caption{caption-side:top;text-align:left;padding:0 0 8px;font-size:15px;white-space:normal;color:var(--ink)}.c103 th,.c103 td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);white-space:nowrap;font-weight:400;vertical-align:top;color:var(--ink);background:var(--paper)}.c103 thead th{font-weight:600}.c103 td.c103-why{white-space:normal;min-width:14rem}.c103-live{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}.c103-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:22px;min-width:0}.c103-lock{border:1px solid var(--rule);padding:12px;margin:12px 0;color:var(--ink);background:var(--paper)}@media (max-width:899px){.c103-stats{grid-template-columns:1fr 1fr}.c103-grid{grid-template-columns:1fr}#c103-canvas{height:300px}}@media (max-width:479px){.c103-stats{grid-template-columns:1fr}#c103-canvas{height:240px}.c103{font-size:15px}}@media (prefers-reduced-motion:reduce){.c103 *{transition:none!important;animation:none!important}}</style>";
 
 function c103DismissGate(req, key, known, limiter, nowMs, userId) {
   const headers = (req && req.headers) || {};
@@ -1343,13 +1384,24 @@ async function c103RecordTick(deps, nowMs) {
   const text = await c103RawGet(deps, c103GoldUrl("5m", "1d"), Math.min(2500, (deps && deps.timeoutMs) || 2500));
   const parsed = c103ParseYahoo(JSON.parse(text), 5 * 60000);
   const fresh = c103CompletedBars(parsed.bars || [], nowMs, false).filter((b) => nowMs - b.endMs <= 10 * 60000);
-  const bar = fresh.length ? fresh[fresh.length - 1] : null;
+  const target = hit.startMs + 60 * 60 * 1000;
+  let bar = null;
+  let kind = "pre";
+  if (nowMs < hit.startMs) {
+    const pres = fresh.filter((b) => b.endMs <= hit.startMs);
+    bar = pres.length ? pres[pres.length - 1] : null;
+    kind = "pre";
+  } else {
+    bar = fresh.slice().sort((a, b) => Math.abs(a.endMs - target) - Math.abs(b.endMs - target))[0] || null;
+    if (!bar || Math.abs(bar.endMs - target) > 10 * 60 * 1000) return null;
+    kind = "post";
+  }
   if (!bar) return null;
   return {
     releaseAtUtc: hit.releaseAtUtc,
     observedAtUtc: new Date(bar.endMs).toISOString(),
     price: bar.close,
-    windowKind: bar.endMs <= hit.startMs ? "pre" : "post",
+    windowKind: kind,
     sourceLabel: C103_GOLD_LABEL
   };
 }
@@ -1371,8 +1423,9 @@ async function c103LoadStored(deps) {
     return result && result[0] && Array.isArray(result[0].data) ? result[0].data : [];
   };
   const seriesRows = await one("SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS data FROM (SELECT series_id, period, value FROM cpi_series_values) t");
-  const goldRows = await one("SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS data FROM (SELECT release_at, reference_period, plus_1h_pct, plus_1d_pct, plus_5d_pct, hourly_available, recorded, source_label FROM cpi_gold_reactions) t");
+  const goldRows = await one("SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS data FROM (SELECT release_at, reference_period, plus_1h_pct, plus_1d_pct, plus_5d_pct, hourly_available, recorded, hour_label, source_label FROM cpi_gold_reactions) t");
   const budgetRows = await one("SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS data FROM (SELECT payload FROM cpi_releases WHERE period = '__bls_budget') t");
+  const scheduleRows = await one("SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS data FROM (SELECT payload, bls_fetched_at FROM cpi_releases WHERE period = '__schedule') t");
   const series = {};
   seriesRows.forEach((row) => {
     const m = /^(\d{4})-(\d{2})$/.exec(row.period || "");
@@ -1387,24 +1440,32 @@ async function c103LoadStored(deps) {
     plus1dPct: row.plus_1d_pct,
     plus5dPct: row.plus_5d_pct,
     hourlyAvailable: !!row.hourly_available,
+    hourLabel: row.hour_label || "",
     recorded: !!row.recorded,
     sourceLabel: C103_GOLD_LABEL,
     releaseUk: c103FormatUk(new Date(row.release_at).getTime())
   }));
   const budget = budgetRows[0] && budgetRows[0].payload ? budgetRows[0].payload : null;
-  if (!Object.keys(series).length && !storedGold.length) return null;
+  const schedule = scheduleRows[0] && scheduleRows[0].payload ? scheduleRows[0].payload : null;
+  const savedEvents = schedule && Array.isArray(schedule.events) ? schedule.events : [];
+  const savedAt = (schedule && schedule.fetchedAt) || (scheduleRows[0] && scheduleRows[0].bls_fetched_at) || "";
+  if (!Object.keys(series).length && !storedGold.length && !savedEvents.length) return null;
   const model = c103Compose({
     series: { ok: Object.keys(series).length > 0, series: series },
     ri: { ok: false },
     icsOk: false,
     htmlOk: false,
+    previousEvents: savedEvents,
     hourly: [],
     daily: [],
     storedGold: storedGold,
-    fetchedAt: new Date().toISOString()
-  }, Date.now());
+    fetchedAt: savedAt,
+    storedFetchedAt: savedAt,
+    feedTimes: { bls: savedAt, schedule: savedAt }
+  }, savedAt ? Date.parse(savedAt) : Date.now());
   model.storedGold = storedGold;
   model.blsBudget = budget;
+  if (savedAt && model.latest) model.latest.fetchedAt = savedAt;
   model.statusNote = model.latest ? "Stored release loaded from the database." : "not loaded yet";
   return model;
 }
@@ -1434,7 +1495,7 @@ function c103Install() {
     if (!prev) {
       const loaded = await c103LoadStored(deps).catch(() => null);
       if (loaded && loaded.latest) {
-        store.set("model", { ok: true, at: Date.now() - 60 * 1000, body: loaded });
+        store.set("model", { ok: true, at: 0, body: loaded });
         prev = store.get("model");
       }
     }
@@ -1541,7 +1602,7 @@ function c103Install() {
     const warm = setTimeout(() => {
       const deps = depsOf();
       c103EnsureSchema(deps).then(() => c103LoadStored(deps)).then((loaded) => {
-        if (loaded && loaded.latest) store.set("model", { ok: true, at: Date.now(), body: loaded });
+        if (loaded && (loaded.latest || (loaded.previousEvents && loaded.previousEvents.length))) store.set("model", { ok: true, at: 0, body: loaded });
       }).catch(() => {}).finally(() => { read().catch(() => {}); });
     }, 50);
     if (warm && typeof warm.unref === "function") warm.unref();
@@ -1631,7 +1692,7 @@ async function c103Persist(deps, model) {
   const goldRows = c103ChangedGold(deps.knownGold || [], model.gold || []);
   if (goldRows.length && typeof deps.sql.query === "function") {
     await deps.sql.query(
-      "INSERT INTO cpi_gold_reactions (release_at, reference_period, plus_1h_pct, plus_1d_pct, plus_5d_pct, hourly_available, recorded, source_label) SELECT release_at, reference_period, plus_1h_pct, plus_1d_pct, plus_5d_pct, hourly_available, recorded, source_label FROM jsonb_to_recordset($1::jsonb) AS x(release_at timestamptz, reference_period text, plus_1h_pct double precision, plus_1d_pct double precision, plus_5d_pct double precision, hourly_available boolean, recorded boolean, source_label text) ON CONFLICT (release_at) DO UPDATE SET plus_1h_pct = EXCLUDED.plus_1h_pct, plus_1d_pct = EXCLUDED.plus_1d_pct, plus_5d_pct = EXCLUDED.plus_5d_pct, hourly_available = EXCLUDED.hourly_available, recorded = EXCLUDED.recorded, computed_at = NOW()",
+      "INSERT INTO cpi_gold_reactions (release_at, reference_period, plus_1h_pct, plus_1d_pct, plus_5d_pct, hourly_available, recorded, hour_label, source_label) SELECT release_at, reference_period, plus_1h_pct, plus_1d_pct, plus_5d_pct, hourly_available, recorded, hour_label, source_label FROM jsonb_to_recordset($1::jsonb) AS x(release_at timestamptz, reference_period text, plus_1h_pct double precision, plus_1d_pct double precision, plus_5d_pct double precision, hourly_available boolean, recorded boolean, hour_label text, source_label text) ON CONFLICT (release_at) DO UPDATE SET plus_1h_pct = COALESCE(EXCLUDED.plus_1h_pct, cpi_gold_reactions.plus_1h_pct), plus_1d_pct = COALESCE(EXCLUDED.plus_1d_pct, cpi_gold_reactions.plus_1d_pct), plus_5d_pct = COALESCE(EXCLUDED.plus_5d_pct, cpi_gold_reactions.plus_5d_pct), hourly_available = cpi_gold_reactions.hourly_available OR EXCLUDED.hourly_available, recorded = EXCLUDED.recorded, hour_label = COALESCE(EXCLUDED.hour_label, cpi_gold_reactions.hour_label), computed_at = NOW()",
       [JSON.stringify(goldRows.map((g) => ({
         release_at: g.releaseAtUtc,
         reference_period: g.referencePeriod || null,
@@ -1640,8 +1701,20 @@ async function c103Persist(deps, model) {
         plus_5d_pct: g.plus5dPct,
         hourly_available: !!g.hourlyAvailable,
         recorded: !!g.recorded,
+        hour_label: g.hourLabel || null,
         source_label: C103_GOLD_LABEL
       })))]
+    );
+  }
+  if (model.previousEvents && model.previousEvents.length && typeof deps.sql.query === "function") {
+    const slim = model.previousEvents.map((ev) => ({
+      etDate: ev.etDate, startMs: ev.startMs, releaseAtUtc: ev.releaseAtUtc, releaseUk: ev.releaseUk,
+      source: ev.source, referencePeriod: ev.referencePeriod, dailyOnly: !!ev.dailyOnly, y: ev.y, m: ev.m, d: ev.d
+    }));
+    const when = (model.feedTimes && model.feedTimes.schedule) || (model.latest && model.latest.fetchedAt) || null;
+    await deps.sql.query(
+      "INSERT INTO cpi_releases (period, release_source, bls_fetched_at, payload) VALUES ('__schedule', 'schedule', $2, $1::jsonb) ON CONFLICT (period) DO UPDATE SET payload = EXCLUDED.payload, bls_fetched_at = EXCLUDED.bls_fetched_at",
+      [JSON.stringify({ events: slim, fetchedAt: when }), when]
     );
   }
   if (model.blsBudget && typeof deps.sql.query === "function") {

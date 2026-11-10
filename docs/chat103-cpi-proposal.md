@@ -1,6 +1,6 @@
 # CPI day (chat103) — design proposal
 
-Public page at `/cpi/` on The Dispatch Market. Release tag `chat103`. This sits on the chat102r4 root (installer commit `bde7d247`, payload `cd0161a`). It does not publish, does not touch Replit, and does not change Stripe.
+Public page at `/cpi/` on The Dispatch Market. Release tag `chat103`. This sits on the chat102r5 root (installer `5fe33d23`, payload `023165d`). It does not publish, does not touch Replit, and does not change Stripe.
 
 Checked against the BLS public API and the BLS news-release calendar on 10 November 2026. The latest index month in that pull was September 2026. The ICS lists CPI at 08:30 US Eastern from 15 January 2025 through 10 December 2026. The HTML schedule adds 13 January 2027, 08:30, as the December 2026 reference month.
 
@@ -8,7 +8,7 @@ Checked against the BLS public API and the BLS news-release calendar on 10 Novem
 
 | Reading | Source | What we refuse |
 | --- | --- | --- |
-| Release instants | BLS calendar `https://www.bls.gov/schedule/news_release/bls.ics` (`DTSTART;TZID=US-Eastern`, summary exactly `Consumer Price Index`). On 10 Nov 2026 that file runs from 15 Jan 2025 through 10 Dec 2026. The CPI HTML schedule `https://www.bls.gov/schedule/news_release/cpi.htm` adds the reference month and the 2027 dates, including 13 Jan 2027 08:30. A date in both uses the ICS instant. | PPI and import-price rows. A date typed in by us, except the labelled fallback below. |
+| Release instants | BLS calendar `https://www.bls.gov/schedule/news_release/bls.ics` (`DTSTART;TZID=US-Eastern`, summary exactly `Consumer Price Index`). On 10 Nov 2026 that file runs from 15 Jan 2025 through 10 Dec 2026. The CPI HTML schedule `https://www.bls.gov/schedule/news_release/cpi.htm` adds the reference month and the 2027 dates, including 13 Jan 2027 08:30. The archive index `https://www.bls.gov/bls/news-release/cpi.htm` adds older dates that are missing from both, back about five years, and those extra dates are daily-only. A date already on the ICS or the HTML schedule is kept as that calendar row. | PPI and import-price rows. A date typed in by us, except the labelled fallback below. An archive row that replaces a calendar row. |
 | Headline and core indexes, category indexes | BLS Public API `https://api.bls.gov/publicAPI/v2/timeseries/data/`, POST, no registration key unless `BLS_API_KEY` is already in the environment. v1 is the same host with `/v1/` if v2 refuses. | FRED. Any number not present in the response or in a stored release. |
 | Month and year percent changes | Computed here from those index levels. Month change uses the seasonally adjusted series. Year change uses the not-seasonally-adjusted series. Shown to 1 decimal, half away from zero, which matches the September 2026 news release (0.6 / 3.7 headline, 0.3 / 2.6 core). | BLS `calculations=true` (the keyless API disabled it on 10 Nov 2026). A rounded figure with no index behind it. |
 | Relative importance | BLS CPI news release Table 1, `https://www.bls.gov/news.release/cpi.t01.htm`, which prints the prior-month weight. Citation also names `https://www.bls.gov/cpi/tables/relative-importance/`. | A weight we added up ourselves. A contribution when the weight did not parse. |
@@ -48,7 +48,7 @@ CPI-U, US city average. `CUUR` is not seasonally adjusted (year change). `CUSR` 
 | Services less energy services | CUSR0000SASLE | CUUR0000SASLE |
 | Recreation | CUSR0000SAR | CUUR0000SAR |
 
-Keyless v2 allows 25 series per query and 25 queries a day. This page hard-stops at 20 keyless calls a day, counted in `cpi_releases` under period `__bls_budget`. BLS is called only when nothing is stored, otherwise once a day, except in the 90 minutes after 08:30 US Eastern while the new month is missing, when one batch is sent every 5 minutes. A key already in `BLS_API_KEY` raises the cap to 50 series and 500 calls a day. No new secret is added.
+Keyless v2 allows 25 series per query and 25 queries a day. This page hard-stops at 20 keyless calls a day, counted in `cpi_releases` under period `__bls_budget`. BLS is called only when nothing is stored, otherwise once a day, except in the 90 minutes after 08:30 US Eastern while the new month is missing, when one batch of 25 series is sent every 5 minutes. Once that new month is in the first batch, one further batch fetches the remaining series, still inside the 20-call cap. Table 1 is re-read every 5 minutes in that window until its weight month is the month before the data month. A key already in `BLS_API_KEY` raises the cap to 50 series and 500 calls a day. No new secret is added.
 
 Approximate contribution is `(relative importance ÷ 100) × category month change`, in index percentage points. The weight is the Table 1 weight for the month before the change (August 2026 weights beside the September change). The line on the page is exactly `approx. contribution, our calculation from BLS data`. Medical care as a whole has an index but, in the September 2026 Table 1, no single weight row; its contribution stays unloaded. The commodities and services rows have weights and can show a contribution.
 
@@ -58,10 +58,10 @@ September 2026 checks, from the API indexes and the news release: headline SA 33
 
 New tables only. `CREATE TABLE IF NOT EXISTS`. No foreign keys into existing tables, so nothing about `dispatch_users` changes.
 
-- `cpi_releases` — one row per reference month (`period` `YYYY-MM`). Release instant, whether that instant came from the calendar or the labelled fallback, headline and core changes, BLS fetch time, and the JSON we are willing to serve again.
+- `cpi_releases` — one row per reference month (`period` `YYYY-MM`). Release instant, whether that instant came from the calendar or the labelled fallback, headline and core changes, BLS fetch time, and the JSON we are willing to serve again. Period `__schedule` stores the parsed calendar (ICS, HTML, and archive-only dates) with the schedule’s own fetch time. Period `__bls_budget` stores the daily call counter. A restart reads `__schedule` and keeps that fetch time. The loaded model is stale, so the next request starts a refresh at once and the countdown still uses the stored dates.
 - `cpi_series_values` — `(series_id, period)` and the index level. Archive months are rebuilt from these rows.
-- `cpi_gold_reactions` — one row per release instant. Anchor price (last completed bar before 08:30 US Eastern), the +1 hour bar where hourly data exists, the +1 trading day close and the +5 trading day close. Nulls stay null.
-- `cpi_gold_snapshots` — observations this process saved on or after 10 December 2026. `window_kind` is `pre`, `plus_1h`, or `session`. Unique on release instant, kind, and observed time.
+- `cpi_gold_reactions` — one row per release instant. Anchor price (last completed bar before 08:30 US Eastern), the +1 hour bar where hourly data exists, the +1 trading day close and the +5 trading day close, and `hour_label` (the intraday window, such as `08:00→10:00 ET (hourly bars)`). A later write uses `COALESCE`, so a missing recomputation leaves the stored intraday figure, the daily figures, and the hour label in place. A cell stays empty only when nothing was ever stored.
+- `cpi_gold_snapshots` — observations this process saved on or after 10 December 2026. `window_kind` is `pre` before the release, or `post` for the bar nearest 60 minutes after it. A bar more than 10 minutes away from that hour is not saved as `post`. The row shows that bar’s UK time. Unique on release instant, kind, and observed time.
 - `cpi_notice_dismissals` — `(user_id, release_key)` for the in-app banner. No email table and no mail call.
 
 Gold windows. Hourly bars are timestamped at the start of the hour. The anchor is the last bar that ends at or before 08:30 US Eastern, and only if that bar ended within three hours of 08:30. The +1 hour price is the close of the first later bar that ends at or after 09:30 US Eastern. Daily bars use the session date in `America/New_York`. The anchor session is the last session before the release date. +1 trading day is one session after that anchor (the release day’s close, when the market was open). +5 trading days is five sessions after the anchor. Older than the hourly feed (about two years) leaves the hour cell empty and still shows the daily cells when those bars exist.
@@ -86,7 +86,7 @@ Same shape as chat102r4. The page and the JSON read an in-memory model and retur
 - One refresh per key (single-flight). A second request does not start a second fetch.
 - Each upstream attempt dies at 2.5 seconds. The production path uses `https.request` and calls `req.destroy()` so the socket is aborted, not only the promise.
 - A refresh that fails does not replace a stored release. The stored row keeps its fetch time.
-- Schedule is refreshed in the background about daily. Series are refreshed in the background about every six hours, and sooner when a release instant has passed and that reference month is not stored yet. Gold history is refreshed about hourly. Monthly CPI does not need a call per page view.
+- The schedule is refreshed about daily, and immediately after a restart because the database-loaded model is marked stale. Series follow the call budget above. Gold history is refreshed about hourly. Monthly CPI does not need a call per page view.
 - Database reads are not on the BLS/Yahoo path. Boot hydrates memory from the new tables. A request never runs DDL. DDL runs once, off the request, and only the five statements above.
 - Empty Neon lookups use `json_agg`, so a missing row comes back as `[]`.
 
@@ -100,7 +100,7 @@ The “CPI is out” banner is for any signed-in reader, once per release, and o
 
 ## Layout
 
-Terminal density: 15px body, site type and the c97 variables (`--ink`, `--paper`, `--rule`, `--pos`, `--neg`, `--gold`). Light, dark, and system all come from those variables, including `prefers-color-scheme` on `html.c93.c97-system`. The canvas reads the computed colours and redraws when the theme class changes.
+Terminal density: 15px body, site type, and only the variables the server pages define in both themes: `--paper`, `--ink`, `--muted`, `--rule`, `--accent`, `--down`, `--up`, `--amber`, `--serif`, `--sans`. The core line and its dashed legend swatch use `--up`. The missed-card border uses `--amber`. Light, dark, and system all come from those variables, including `prefers-color-scheme` on `html.c93.c97-system`. The canvas reads the computed colours and redraws when the theme class changes.
 
 - 1280: four figure cards in a row, the trend chart full width, then the archive. Premium adds the category table and the gold table beside each other.
 - 390 and 320: one column. Cards stack. Nothing on the page scrolls sideways.

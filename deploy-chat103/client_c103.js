@@ -145,7 +145,7 @@
     var paper = cssColor("--paper", "#EFEEE9");
     var rule = cssColor("--rule", "rgba(22,23,26,.14)");
     var a = cssColor("--ink", "#16171A");
-    var b = cssColor("--pos", "#1F6B4B");
+    var b = cssColor("--up", "#2f6b47");
     ctx.fillStyle = paper;
     ctx.fillRect(0, 0, w, h);
     if (!rows.length) {

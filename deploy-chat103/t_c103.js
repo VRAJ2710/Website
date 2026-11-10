@@ -503,6 +503,178 @@ test("archive dates older than the ICS are daily-only", () => {
   assert.equal(ancient.length, 0);
 });
 
+test("an archive duplicate does not replace an ICS release or its intraday figure", () => {
+  const ics = lib.c103ReleaseInstant(2026, 1, 14, 8, 30);
+  ics.source = "bls-ics";
+  const archive = Object.assign({}, ics, { source: "bls-archive", dailyOnly: true });
+  const hourly = [{ startMs: ics.startMs - 3600000, endMs: ics.startMs - 60 * 1000, close: 2000, sessionDate: "2026-01-14" }, { startMs: ics.startMs, endMs: ics.startMs + 3600000, close: 2060, sessionDate: "2026-01-14" }];
+  const model = lib.c103Compose({
+    series: { ok: false },
+    icsOk: true,
+    ics: [ics],
+    htmlOk: false,
+    archiveOk: true,
+    archive: [archive],
+    hourly: hourly,
+    daily: [{ startMs: 1, endMs: 2, close: 1900, open: 1900, sessionDate: "2026-01-13" }, { startMs: 3, endMs: 4, close: 2100, open: 1910, sessionDate: "2026-01-14" }],
+    storedGold: [{ releaseAtUtc: ics.releaseAtUtc, plus1hPct: 1.25, hourlyAvailable: true, hourLabel: "08:00\u219210:00 ET (hourly bars)", sourceLabel: lib.C103_GOLD_LABEL }]
+  }, Date.parse("2026-11-10T16:00:00.000Z"));
+  const ev = model.previousEvents.find((row) => row.etDate === ics.etDate);
+  assert.equal(ev.source, "bls-ics");
+  assert.equal(ev.dailyOnly, undefined);
+  const gold = model.gold.find((row) => row.releaseAtUtc === ics.releaseAtUtc);
+  assert.equal(gold.hourlyAvailable, true);
+  assert.equal(typeof gold.plus1hPct, "number");
+  assert.match(gold.hourLabel, /hourly bars/);
+  const kept = lib.c103Compose({
+    series: { ok: false },
+    icsOk: true,
+    ics: [ics],
+    htmlOk: false,
+    archiveOk: true,
+    archive: [archive],
+    hourly: [],
+    daily: [],
+    storedGold: [{ releaseAtUtc: ics.releaseAtUtc, plus1hPct: 1.25, hourlyAvailable: true, hourLabel: "08:00\u219210:00 ET (hourly bars)", sourceLabel: lib.C103_GOLD_LABEL }]
+  }, Date.parse("2026-11-10T16:00:00.000Z"));
+  const stored = kept.gold.find((row) => row.releaseAtUtc === ics.releaseAtUtc);
+  assert.equal(stored.plus1hPct, 1.25);
+  assert.equal(stored.hourlyAvailable, true);
+  assert.match(stored.hourLabel, /hourly bars/);
+});
+
+test("the second BLS batch and Table 1 run once the new month is in", () => {
+  const second = lib.c103BlsPlan({ calls: 4, dayKey: "2026-11-10", lastBlsAt: NOW - 6 * 60 * 1000 }, NOW, { apiKey: "", hasStored: true, inReleaseWindow: true, hasNewMonth: true, needsSecondBatch: true });
+  assert.equal(second.reason, "second-batch");
+  assert.equal(second.batches, 1);
+  assert.equal(second.offset, 25);
+  assert.equal(second.batch, 25);
+});
+
+test("a restart keeps the stored schedule and is stale enough to refresh", async () => {
+  const release = lib.c103ReleaseInstant(2026, 11, 10, 8, 30);
+  release.source = "bls-ics";
+  const fetchedAt = "2026-11-09T18:00:00.000Z";
+  const sql = async () => [];
+  sql.query = async (text) => {
+    if (text.includes("__schedule")) return [{ data: [{ payload: { events: [release], fetchedAt: fetchedAt }, bls_fetched_at: fetchedAt }] }];
+    if (text.includes("cpi_series_values")) return [{ data: [{ series_id: "CUSR0000SA0", period: "2026-09", value: 336.298 }, { series_id: "CUUR0000SA0", period: "2026-09", value: 336.94 }, { series_id: "CUUR0000SA0", period: "2025-09", value: 324.8 }] }];
+    if (text.includes("hour_label")) return [{ data: [{ release_at: release.releaseAtUtc, reference_period: "2026-10", plus_1h_pct: 0.4, plus_1d_pct: null, plus_5d_pct: null, hourly_available: true, recorded: false, hour_label: "08:00\u219210:00 ET (hourly bars)", source_label: lib.C103_GOLD_LABEL }] }];
+    return [{ data: [] }];
+  };
+  const loaded = await lib.c103LoadStored({ sql: sql });
+  assert.equal(loaded.latest.fetchedAt, fetchedAt);
+  assert.ok(loaded.previousEvents.some((ev) => ev.etDate === "2026-11-10" && ev.source === "bls-ics"));
+  assert.equal(loaded.storedGold[0].hourLabel, "08:00\u219210:00 ET (hourly bars)");
+  const at = Date.parse("2026-11-10T13:25:00.000Z");
+  const view = lib.c103ForNow(loaded, at);
+  assert.equal(view.countdown.releaseAtUtc, release.releaseAtUtc);
+  const store = new Map();
+  store.set("m", { ok: true, at: 0, body: loaded });
+  let started = 0;
+  await lib.c103Memo(store, "m", (body) => lib.c103CacheMs(body, at), () => { started += 1; return loaded; }, () => lib.c103Cold(at));
+  assert.equal(started, 1);
+});
+
+test("the post snapshot is the bar nearest an hour after the release", async () => {
+  const release = lib.c103ReleaseInstant(2026, 12, 10, 8, 30);
+  const target = release.startMs + 60 * 60 * 1000;
+  function bar(deltaMin, close) {
+    const end = target + deltaMin * 60 * 1000;
+    return { t: (end - 5 * 60 * 1000) / 1000, c: close };
+  }
+  const payload = {
+    chart: { result: [{
+      meta: { symbol: "GC=F", instrumentType: "FUTURE", shortName: "Gold", exchangeTimezoneName: "America/New_York" },
+      timestamp: [bar(-30, 4000).t, bar(0, 4100).t, bar(30, 4200).t],
+      indicators: { quote: [{ close: [4000, 4100, 4200], open: [3990, 4090, 4190] }] }
+    }] }
+  };
+  const at90 = target + 30 * 60 * 1000;
+  const late = await lib.c103RecordTick({ events: [release], timeoutMs: 1000, fetch: async () => ({ ok: true, text: async () => JSON.stringify(payload) }) }, at90);
+  assert.equal(late, null);
+  const at62 = target + 2 * 60 * 1000;
+  const post = await lib.c103RecordTick({ events: [release], timeoutMs: 1000, fetch: async () => ({ ok: true, text: async () => JSON.stringify(payload) }) }, at62);
+  assert.equal(post.windowKind, "post");
+  assert.equal(post.price, 4100);
+  assert.match(lib.c103FormatUk(Date.parse(post.observedAtUtc)), /GMT|BST/);
+});
+
+test("CPI CSS uses only variables the server pages define", () => {
+  const src = fs.readFileSync(path.join(dir, "lib_c103.js"), "utf8");
+  const css = src.slice(src.indexOf("<style"), src.indexOf("</style>"));
+  const allowed = new Set(["--paper", "--ink", "--muted", "--rule", "--accent", "--down", "--up", "--amber", "--serif", "--sans"]);
+  const used = [...css.matchAll(/var\(\s*(--[a-z0-9-]+)/g)].map((m) => m[1]);
+  used.forEach((name) => assert.equal(allowed.has(name), true, name));
+  assert.ok(css.includes("var(--up)"));
+  assert.ok(css.includes("var(--amber)"));
+  assert.equal(css.includes("--gold"), false);
+  assert.equal(css.includes("--pos"), false);
+});
+
+test("release-day simulation", async () => {
+  const REL = Date.parse("2026-11-10T13:30:00.000Z");
+  const ids = [];
+  lib.C103_CATALOG.forEach((row) => { ids.push(row[2], row[3]); });
+  const base = {};
+  ids.forEach((id, i) => { base[id] = [{ year: "2026", period: "M09", value: String(300 + i) }, { year: "2025", period: "M09", value: String(280 + i) }, { year: "2026", period: "M08", value: String(299 + i) }]; });
+  const ics = "BEGIN:VEVENT\nSUMMARY:Consumer Price Index\nDTSTART;TZID=US-Eastern:20250115T083000\nEND:VEVENT\nBEGIN:VEVENT\nSUMMARY:Consumer Price Index\nDTSTART;TZID=US-Eastern:20261110T083000\nEND:VEVENT\n";
+  const arch = '<a href="/news.release/archives/cpi_01152025.htm">Jan 2025</a><a href="/news.release/archives/cpi_11102026.htm">Nov 2026</a><a href="/news.release/archives/cpi_01122022.htm">Jan 2022</a>';
+  const ri = (month) => `<table><tr><th id="w">Relative<br/>importance<br/>${month}<br/>2026</th></tr><tr><th>Shelter</th><td headers="w">35.323</td><td>0.4</td></tr></table>`;
+  const hourly = { chart: { result: [{ meta: { symbol: "GC=F", instrumentType: "FUTURE", shortName: "Gold", exchangeTimezoneName: "America/New_York" }, timestamp: [Date.parse("2025-01-15T12:00:00.000Z") / 1000, Date.parse("2025-01-15T14:00:00.000Z") / 1000], indicators: { quote: [{ close: [2600, 2620], open: [2590, 2610] }] } }] } };
+  const daily = { chart: { result: [{ meta: { symbol: "GC=F", instrumentType: "FUTURE", shortName: "Gold", exchangeTimezoneName: "America/New_York" }, timestamp: [Date.parse("2025-01-14T05:00:00.000Z") / 1000, Date.parse("2025-01-15T05:00:00.000Z") / 1000], indicators: { quote: [{ close: [2590, 2630], open: [2588, 2592] }] } }] } };
+  let riCalls = 0;
+  const blsCalls = [];
+  let now = 0;
+  const deps = () => ({ timeoutMs: 2500, fetch: async (url, opt) => {
+    let text;
+    if (String(url).includes("api.bls.gov")) {
+      const want = JSON.parse(opt.body).seriesid;
+      blsCalls.push(want.length);
+      const series = want.map((id) => {
+        const data = base[id].slice();
+        if (now >= REL + 3 * 60 * 1000) data.unshift({ year: "2026", period: "M10", value: String(Number(data[0].value) + 1) });
+        return { seriesID: id, data: data };
+      });
+      text = JSON.stringify({ status: "REQUEST_SUCCEEDED", Results: { series: series } });
+    } else if (String(url).includes("bls.ics")) text = ics;
+    else if (String(url).includes("schedule/news_release/cpi.htm")) text = "<tr><td>October 2026</td><td>Nov. 10, 2026</td><td>08:30 AM</td></tr>";
+    else if (String(url).includes("cpi.t01")) { riCalls += 1; text = ri(now >= REL + 3 * 60 * 1000 ? "Sep." : "Aug."); }
+    else if (String(url).includes("news-release/cpi.htm")) text = arch;
+    else if (String(url).includes("interval=1h")) text = JSON.stringify(hourly);
+    else if (String(url).includes("interval=1d")) text = JSON.stringify(daily);
+    else throw new Error(String(url));
+    return { ok: true, status: 200, text: async () => text };
+  } });
+  let model = null;
+  let at = 0;
+  const log = [];
+  for (now = Date.parse("2026-11-10T12:00:00.000Z"); now < Date.parse("2026-11-10T16:00:00.000Z"); now += 60000) {
+    const ttl = model ? lib.c103CacheMs(model, now) : 0;
+    if (!model || now - at >= ttl) {
+      model = await lib.c103Refresh(deps(), now, model);
+      at = now;
+      if (now >= REL - 60000 && now <= REL + 40 * 60000) {
+        const cats = (model.categories || []).filter((c) => c.period === "2026-10" && c.saIndex != null).length;
+        log.push(new Date(now).toISOString().slice(11, 16) + " latest=" + (model.latest && model.latest.period) + " cats_oct=" + cats + "/" + (model.categories || []).length + " contrib=" + (model.contributions || []).filter((c) => typeof c.contribution === "number").length);
+      }
+    }
+  }
+  console.log(log.join("\n"));
+  console.log("BLS calls", blsCalls.length, blsCalls.join(" "));
+  console.log("RI fetches", riCalls);
+  const premium = model.categories;
+  assert.equal(premium.filter((c) => c.period === "2026-10" && c.saIndex != null).length, premium.length);
+  assert.ok(model.contributions.filter((c) => typeof c.contribution === "number").length > 0);
+  const jan = model.gold.find((row) => String(row.releaseAtUtc).startsWith("2025-01-15"));
+  assert.ok(jan && jan.hourlyAvailable);
+  assert.equal(/Daily windows only/.test(jan.hourMessage || ""), false);
+  const restartAt = Date.parse("2026-11-10T13:25:00.000Z");
+  const restarted = lib.c103ForNow({ previousEvents: model.previousEvents, latest: { period: "2026-09", fetchedAt: "2026-11-09T18:00:00.000Z" } }, restartAt);
+  assert.equal(restarted.countdown.releaseAtUtc, "2026-11-10T13:30:00.000Z");
+  console.log("end latest", model.latest.period, "cats", premium.filter((c) => c.saIndex != null).length, "/", premium.length, "intraday", model.gold.filter((r) => r.hourlyAvailable).length, "restart", restarted.countdown.releaseUk);
+});
+
 test("recorder stays quiet before 10 December 2026", () => {
   const early = lib.c103ReleaseInstant(2026, 11, 10, 8, 15);
   const release = lib.c103ReleaseInstant(2026, 12, 10, 8, 30);

@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS cpi_gold_reactions (
     plus_5d_pct DOUBLE PRECISION,
     hourly_available BOOLEAN NOT NULL DEFAULT FALSE,
     recorded BOOLEAN NOT NULL DEFAULT FALSE,
+    hour_label TEXT,
     source_label TEXT NOT NULL,
     computed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
