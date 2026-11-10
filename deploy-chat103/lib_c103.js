@@ -1818,7 +1818,17 @@ async function c103Persist(deps, model) {
   const newestStored = c103NewestPeriod([].concat(...Object.keys(deps.knownSeries || {}).map((id) => deps.knownSeries[id] || [])));
   const latest = model.latest;
   const month = latest && latest.period || "none";
-  const wantRelease = !!(latest && latest.headline && typeof latest.headline.saIndex === "number" && (model.seriesFresh || model.releaseRowPending) && (!newestStored || latest.period >= newestStored));
+  let missingInDb = "";
+  if (typeof deps.sql.query === "function") {
+    try {
+      const found = await deps.sql.query("SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS data FROM (SELECT s.period FROM cpi_series_values s WHERE s.series_id = 'CUSR0000SA0' AND s.period = (SELECT MAX(period) FROM cpi_series_values WHERE series_id = 'CUSR0000SA0') AND NOT EXISTS (SELECT 1 FROM cpi_releases r WHERE r.period = s.period) LIMIT 1) t");
+      const data = found && found[0] && found[0].data;
+      missingInDb = data && data[0] && data[0].period || "";
+    } catch (e) { missingInDb = ""; }
+  }
+  const pending = !!(missingInDb && latest && latest.period === missingInDb);
+  model.releaseRowPending = pending;
+  const wantRelease = !!(latest && latest.headline && typeof latest.headline.saIndex === "number" && (model.seriesFresh || pending) && (!newestStored || latest.period >= newestStored));
   try {
     if (changed.length && typeof deps.sql.query === "function") {
       await deps.sql.query(

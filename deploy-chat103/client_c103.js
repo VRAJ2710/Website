@@ -108,7 +108,7 @@
     var h = latest.headline;
     var c = latest.core;
     var note = model.statusNote ? "<p class=\"c103-miss\">" + esc(model.statusNote) + "</p>" : "";
-    var cache = model.cacheNote ? "<p class=\"c103-miss\">" + esc(model.cacheNote) + "</p>" : "";
+    var cache = model.cacheNote && model.cacheNote !== model.statusNote ? "<p class=\"c103-miss\">" + esc(model.cacheNote) + "</p>" : "";
     var when = latest.periodLabel ? "<p class=\"c103-k\">Latest stored month " + esc(latest.periodLabel) + (latest.releaseUk ? " \u00b7 release " + esc(latest.releaseUk) : "") + ". " + esc(model.source || "Source: U.S. Bureau of Labor Statistics") + ".</p>" : "<p class=\"c103-k\">" + esc(model.source || "Source: U.S. Bureau of Labor Statistics") + ".</p>";
     var stats = "<div class=\"c103-stats\">" + [
       card("Headline, month", figure(h, "mom")),

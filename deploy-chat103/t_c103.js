@@ -349,7 +349,7 @@ test("deploy dry-run refuses a mismatched root and writes nothing", () => {
   assert.equal(fs.readdirSync(root).some((name) => name.includes("bak-chat103")), false);
   const spec = fs.readFileSync(path.join(dir, "deploy.sh"), "utf8");
   assert.match(spec, /099d7a7ebefb146220659d519fee5150315b18dee61f71fdc421cfcc9da8a054/);
-  assert.match(spec, /BASE_SERVER_MD5=16044e0cce0ff8728c4c38e3df96e4a7/);
+  assert.match(spec, /BASE_SERVER_MD5=b2e44157f0a86a38d145072aea5f89b9/);
   assert.match(spec, /BASE_APP_MD5=93644cb45fc3884e7068bf9a902d73e3/);
   assert.match(spec, /BASE_INDEX_MD5=338615e7ece511104855785b67e9c10a/);
 });
@@ -720,6 +720,57 @@ test("a null year figure is stored as NULL and retried after a failed release ro
     await lib.c103Persist({ sql: sql, knownSeries: model.previousSeries }, model);
     assert.equal(model.releaseRowPending, false);
     assert.match(lines.join("\n"), /\[c103\] persist ok 2026-10/);
+  } finally { console.log = log; }
+});
+
+test("a restart writes the missing release row from stored points and does not call BLS", async () => {
+  const at = Date.parse("2026-11-10T17:20:00.000Z");
+  const release = lib.c103ReleaseInstant(2026, 11, 10, 8, 30);
+  release.source = "bls-ics";
+  const series = {};
+  lib.C103_CATALOG.forEach((row) => {
+    const points = [{ year: 2026, month: 10, value: 337.643 }, { year: 2026, month: 9, value: 336.298 }];
+    series[row[2]] = points;
+    series[row[3]] = points.map((p) => Object.assign({}, p));
+  });
+  const previous = {
+    latest: { period: "2026-10", periodLabel: "October 2026", fetchedAt: "2026-11-10T17:10:00.000Z", headline: { saIndex: 337.643, momRounded: 0.4, yoyRounded: null }, core: { saIndex: 339.913, momRounded: 0.3, yoyRounded: null }, releaseSource: "bls-html" },
+    previousSeries: series,
+    previousEvents: [release],
+    feedTimes: { schedule: "2026-11-10T12:00:00.000Z", bls: "2026-11-10T17:10:00.000Z" },
+    blsBudget: { dayKey: "2026-11-10", calls: 4, lastBlsAt: Date.parse("2026-11-10T17:15:00.000Z") }
+  };
+  let bls = 0;
+  const body = await lib.c103Refresh({
+    timeoutMs: 1000,
+    blsBudget: previous.blsBudget,
+    fetch: async (url) => {
+      if (String(url).includes("api.bls.gov")) bls += 1;
+      return { ok: false, status: 500, text: async () => "" };
+    }
+  }, at, previous);
+  assert.equal(bls, 0);
+  assert.match(body.statusNote, /Tue 10 Nov, 17:10 UK/);
+  const writes = [];
+  let gap = true;
+  const sql = async () => [];
+  sql.query = async (text, params) => {
+    if (String(text).includes("NOT EXISTS")) return [{ data: gap ? [{ period: "2026-10" }] : [] }];
+    if (String(text).includes("headline_yoy")) { writes.push(params); gap = false; return [{ data: [] }]; }
+    return [{ data: [] }];
+  };
+  const lines = [];
+  const log = console.log;
+  console.log = (...args) => { lines.push(args.join(" ")); };
+  try {
+    await lib.c103Persist({ sql: sql, knownSeries: series }, body);
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0][0], "2026-10");
+    assert.equal(writes[0][4], 0.4);
+    assert.equal(writes[0][5], null);
+    assert.match(lines.join("\n"), /\[c103\] persist ok 2026-10/);
+    await lib.c103Persist({ sql: sql, knownSeries: series }, body);
+    assert.equal(writes.length, 1);
   } finally { console.log = log; }
 });
 
