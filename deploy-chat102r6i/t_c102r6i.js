@@ -90,6 +90,27 @@ test("desk-quotes sources become Yahoo Finance and market-reference machine ids 
   assert.equal(i.DXY.source, "dxy-fx-computed");
   assert.equal(i.EURUSD.source, "frankfurter-ecb");
   assert.equal(i.XAU.asOf, ref.XAU.asOf);
+
+  const live = {
+    fetchedAt: 1794332220000,
+    XAU: { p: 4050.1, source: "gold-api-spot-proxy", asOf: "2026-11-10T19:37:00.000Z" },
+    DXY: { p: 99.4, source: "dxy-fx-computed", asOf: "2026-11-10T19:37:00.000Z" },
+    US10Y: { value: 4.11, source: "frankfurter-ecb", asOf: "2026-11-10T19:37:00.000Z" }
+  };
+  const kept = send(iCtx, JSON.parse(JSON.stringify(live)), "/api/market-reference-quotes");
+  const keptH = send(hCtx, JSON.parse(JSON.stringify(live)), "/api/market-reference-quotes");
+  assert.deepEqual(kept, keptH);
+  assert.equal(Object.prototype.hasOwnProperty.call(kept, "generatedAtUtc"), false);
+  assert.equal(typeof kept.fetchedAt, "number");
+  assert.equal(kept.fetchedAt, 1794332220000);
+  assert.equal(kept.XAU.asOf, live.XAU.asOf);
+  assert.equal(kept.DXY.source, "dxy-fx-computed");
+  assert.equal(kept.US10Y.source, "frankfurter-ecb");
+  const client = fs.readFileSync(path.join(dir, "..", "deploy-chat102", "client_c102.js"), "utf8");
+  assert.equal(client.includes("fetchedAt"), false);
+  assert.match(client, /uk\(model\.generatedAtUtc\)/);
+  const app = fs.readFileSync("/tmp/c102hash/app.js", "utf8");
+  assert.match(app, /Number\(data\.fetchedAt\)/);
 });
 
 test("scenario copy and the terminal axis label are reader text, and bar dates stay ISO", () => {
@@ -234,7 +255,7 @@ test("deploy.sh bytes match EXPECTED_SHA256 and the md5 guards are the staged ro
   assert.equal(buf.length, bytes);
   assert.equal(require("crypto").createHash("sha256").update(buf).digest("hex"), sha);
   const text = buf.toString("utf8");
-  assert.match(text, /715b843b5e7b15e38a16a6478337d7f94752eeb4da3b902b4bcd60603e15aaa7/);
+  assert.match(text, /7e54c7c211dc81b68de5de5b61c52708756b462082529f55a825d358d23cfbef/);
   assert.match(text, /ebc29e2d257228adf720f98c5f1703fc/);
   assert.match(text, /459d922ab3a3f6e504b0b534b2ea4f5d/);
   assert.match(text, /ea5575ca8b4efc735105872497bbe684/);
