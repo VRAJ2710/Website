@@ -19,8 +19,8 @@ NEW_L1='const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off
 MARKER='// chat102 terminal. Built from lib_c102.js and client_c102.js. Edit those, then run node build_block.js.'
 MANIFEST=(
   "patch_c103.py da78fdbdac04e0a11afff84c58fe2ee558bb9def3ce32234d8cf7c862b21443a"
-  "server_block_c103.js a27c46b2d7a5e95d0a470f38a842cd495afeb68b521e58a56d81785d7c72185f"
-  "app_block_c103.js ab0c067f42fe185c5f943610f17a953b70283061613f1de99b9b9c3c1e91ec79"
+  "server_block_c103.js 35c410eb88d9deffe0ab14a995c48fe36573ac5623e3628b5f4c7bed2a5f83fa"
+  "app_block_c103.js db3d8eefdd446b56bbdb569c2056bfd8d02ae9927a3ad5d5613bb5ee07fd1a82"
   "ddl_c103.sql daea13f16b65de38741f79f2da273b1723d83a7470c941c7f851270e25a09053"
 )
 DRY=0; DIR=""

@@ -48,7 +48,7 @@ CPI-U, US city average. `CUUR` is not seasonally adjusted (year change). `CUSR` 
 | Services less energy services | CUSR0000SASLE | CUUR0000SASLE |
 | Recreation | CUSR0000SAR | CUUR0000SAR |
 
-Keyless v2 allows 25 series per query, so a refresh is two POSTs (50 with a key would still be two, because the list is 44). Ten years of months is inside the keyless limit. A key, when present, is sent as `registrationkey` and the start year moves back to twenty years. No new secret is added.
+Keyless v2 allows 25 series per query and 25 queries a day. This page hard-stops at 20 keyless calls a day, counted in `cpi_releases` under period `__bls_budget`. BLS is called only when nothing is stored, otherwise once a day, except in the 90 minutes after 08:30 US Eastern while the new month is missing, when one batch is sent every 5 minutes. A key already in `BLS_API_KEY` raises the cap to 50 series and 500 calls a day. No new secret is added.
 
 Approximate contribution is `(relative importance ÷ 100) × category month change`, in index percentage points. The weight is the Table 1 weight for the month before the change (August 2026 weights beside the September change). The line on the page is exactly `approx. contribution, our calculation from BLS data`. Medical care as a whole has an index but, in the September 2026 Table 1, no single weight row; its contribution stays unloaded. The commodities and services rows have weights and can show a contribution.
 
@@ -81,7 +81,7 @@ Sitemap gains `/cpi/` the same way Terminal was added.
 
 Same shape as chat102r4. The page and the JSON read an in-memory model and return. They do not wait on BLS or Yahoo.
 
-- Fresh for 15 minutes, then the stored model is served with `Cache-Control: private, max-age=0, stale-while-revalidate=120` and a note that it is the stored release, not a new print.
+- The countdown is recomputed on every response. The cache ends at the next release instant. From that instant until the new month is stored, the cache is 60 seconds. Otherwise it is up to 15 minutes, then the stored model is served with `Cache-Control: private, max-age=0, stale-while-revalidate=120`.
 - A missing model returns `not loaded yet`, `Cache-Control: no-store`, and starts one background refresh.
 - One refresh per key (single-flight). A second request does not start a second fetch.
 - Each upstream attempt dies at 2.5 seconds. The production path uses `https.request` and calls `req.destroy()` so the socket is aborted, not only the promise.

@@ -48,8 +48,9 @@ test("contribution is the weight times the category change", () => {
   assert.equal(lib.c103Contribution(35.323, 0.4), 35.323 * 0.4 / 100);
   assert.equal(lib.c103Contribution(13.507, 0), 0);
   assert.equal(lib.c103Contribution(null, 0.4), null);
-  const html = "<table><tr><td>Shelter</td><td>35.323</td></tr><tr><td>Food</td><td>13.507</td></tr></table>";
+  const html = "<table><tr><th id=\"w\">Relative<br/>importance<br/>Aug.<br/>2026</th><th>Change</th></tr><tr><th>Shelter</th><td headers=\"w\">35.323</td><td>0.4</td></tr></table>";
   const ri = lib.c103ParseRi(html);
+  assert.equal(ri.weightMonth, "Aug. 2026");
   assert.equal(ri.byName.Shelter, 35.323);
   const months = lib.c103BuildMonths({
     CUSR0000SAH1: [{ year: 2026, month: 8, value: 100 }, { year: 2026, month: 9, value: 100.4 }],
@@ -57,7 +58,9 @@ test("contribution is the weight times the category change", () => {
   }, ri);
   const shelter = months.find((row) => row.period === "2026-09").categories.find((row) => row.key === "shelter");
   assert.equal(shelter.momRounded, 0.4);
-  assert.equal(shelter.contribution, lib.c103Contribution(35.323, 0.4));
+  assert.equal(shelter.contribution, lib.c103Contribution(35.323, shelter.mom));
+  assert.equal(shelter.contributionUnit, "pp");
+  assert.match(shelter.weightMonth, /Aug/);
   assert.equal(shelter.contributionLabel, "approx. contribution, our calculation from BLS data");
 });
 
@@ -300,6 +303,204 @@ test("labelled fallback is used only when the schedule does not already have tha
   assert.equal(jan.referencePeriod, "2026-12");
   const onlyFallback = lib.c103MergeSchedule([], []);
   assert.equal(onlyFallback.find((ev) => ev.etDate === "2027-01-13").source, "labelled-fallback");
+});
+
+test("BLS calls stay inside the keyless budget", () => {
+  assert.equal(lib.c103BlsSeriesCap(""), 25);
+  assert.equal(lib.c103BlsSeriesCap("key"), 50);
+  const empty = lib.c103BlsPlan({ calls: 0, dayKey: "2026-11-10", lastBlsAt: 0 }, NOW, { apiKey: "", hasStored: false });
+  assert.equal(empty.call, true);
+  assert.equal(empty.reason, "empty");
+  const daily = lib.c103BlsPlan({ calls: 2, dayKey: "2026-11-10", lastBlsAt: NOW - 60 * 60 * 1000 }, NOW, { apiKey: "", hasStored: true, inReleaseWindow: false, hasNewMonth: true });
+  assert.equal(daily.call, false);
+  assert.equal(daily.reason, "daily");
+  const due = lib.c103BlsPlan({ calls: 2, dayKey: "2026-11-10", lastBlsAt: NOW - 25 * 3600 * 1000 }, NOW, { apiKey: "", hasStored: true });
+  assert.equal(due.call, true);
+  assert.equal(due.reason, "daily");
+  const soon = lib.c103BlsPlan({ calls: 3, dayKey: "2026-11-10", lastBlsAt: NOW - 4 * 60 * 1000 }, NOW, { apiKey: "", hasStored: true, inReleaseWindow: true, hasNewMonth: false });
+  assert.equal(soon.call, false);
+  const poll = lib.c103BlsPlan({ calls: 3, dayKey: "2026-11-10", lastBlsAt: NOW - 6 * 60 * 1000 }, NOW, { apiKey: "", hasStored: true, inReleaseWindow: true, hasNewMonth: false });
+  assert.equal(poll.call, true);
+  assert.equal(poll.batches, 1);
+  assert.equal(poll.batch, 25);
+  const keyed = lib.c103BlsPlan({ calls: 3, dayKey: "2026-11-10", lastBlsAt: NOW - 6 * 60 * 1000 }, NOW, { apiKey: "present", hasStored: true, inReleaseWindow: true, hasNewMonth: false });
+  assert.equal(keyed.batch, 50);
+  assert.equal(keyed.cap, 500);
+  const stopped = lib.c103BlsPlan({ calls: 20, dayKey: "2026-11-10", lastBlsAt: NOW - 60 * 60 * 1000 }, NOW, { apiKey: "", hasStored: false });
+  assert.equal(stopped.call, false);
+  assert.equal(stopped.reason, "budget");
+  const charged = lib.c103BlsCharge(poll, 1, NOW);
+  assert.equal(charged.calls, 4);
+});
+
+test("countdown is recomputed and the cache stops at the release", () => {
+  const release = lib.c103ReleaseInstant(2026, 11, 10, 8, 30);
+  const later = lib.c103ReleaseInstant(2026, 12, 10, 8, 30);
+  const model = { previousEvents: [release, later], latest: { period: "2026-09" } };
+  const before = release.startMs - 30 * 1000;
+  assert.ok(lib.c103CacheMs(model, before) <= 30 * 1000);
+  const shown = lib.c103ForNow(model, before);
+  assert.equal(shown.countdown.releaseAtUtc, release.releaseAtUtc);
+  const after = release.startMs + 60 * 1000;
+  assert.equal(lib.c103CacheMs(model, after), 60 * 1000);
+  const moved = lib.c103ForNow(model, after);
+  assert.equal(moved.countdown.releaseAtUtc, later.releaseAtUtc);
+  const arrived = { previousEvents: [release, later], latest: { period: release.referencePeriod } };
+  assert.ok(lib.c103CacheMs(arrived, after) > 60 * 1000);
+});
+
+test("relative importance uses the weight column and the prior month", () => {
+  const html = fs.readFileSync(path.join(dir, "fixture_ri_excerpt.html"), "utf8");
+  const ri = lib.c103ParseRi(html);
+  assert.equal(ri.byName["Food away from home"], 5.304);
+  assert.equal(ri.byName["Medical care commodities"], 1.396);
+  assert.equal(ri.byName["Owners' equivalent rent of residences"], 25.902);
+  assert.equal(ri.weightMonth, "Aug. 2026");
+  assert.equal(lib.c103WeightsMatch("Aug. 2026", "2026-09"), true);
+  assert.equal(lib.c103WeightsMatch("Jul. 2026", "2026-09"), false);
+  const months = lib.c103BuildMonths({
+    CUSR0000SEHC: [{ year: 2026, month: 8, value: 100 }, { year: 2026, month: 9, value: 100.4 }],
+    CUUR0000SEHC: [{ year: 2025, month: 9, value: 100 }, { year: 2026, month: 9, value: 103 }]
+  }, Object.assign({}, ri, { weightMonth: "Jul. 2026", asOf: "Jul. 2026" }));
+  const oer = months.find((row) => row.period === "2026-09").categories.find((row) => row.key === "oer");
+  assert.equal(oer.contribution, null);
+  assert.match(oer.contributionNote, /not shown/);
+});
+
+test("an empty schedule parse keeps the last good dates", () => {
+  const kept = [lib.c103ReleaseInstant(2026, 12, 10, 8, 30)];
+  kept[0].source = "bls-ics";
+  const model = lib.c103Compose({
+    series: { ok: false, series: {} },
+    previousSeries: {},
+    previousEvents: kept,
+    icsOk: true,
+    ics: [],
+    htmlOk: true,
+    html: [],
+    hourly: [],
+    daily: []
+  }, NOW);
+  assert.ok(model.previousEvents.some((ev) => ev.etDate === "2026-12-10" && ev.source === "bls-ics"));
+});
+
+test("gold day moves use the prior session and the hour label is not a raw timestamp", () => {
+  const release = lib.c103ReleaseInstant(2026, 9, 11, 8, 30);
+  const hourly = [
+    { startMs: Date.parse("2026-09-11T11:00:00.000Z"), endMs: Date.parse("2026-09-11T12:00:00.000Z"), close: 2000, sessionDate: "2026-09-11" },
+    { startMs: Date.parse("2026-09-11T13:00:00.000Z"), endMs: Date.parse("2026-09-11T14:00:00.000Z"), close: 2030, sessionDate: "2026-09-11" },
+    { startMs: NOW, endMs: NOW + 3600000, close: 9999, sessionDate: "2026-11-10" }
+  ];
+  const daily = [
+    { startMs: 1, endMs: 2, close: 1900, open: 1890, sessionDate: "2026-09-10" },
+    { startMs: 3, endMs: 4, close: 2100, open: 1940, sessionDate: "2026-09-11" }
+  ];
+  const row = lib.c103GoldReaction(release, hourly, daily, NOW);
+  assert.equal(row.dayAnchorLabel, "prior session close");
+  assert.equal(row.plus1dPct, lib.c103Pct(2100, 1900));
+  assert.match(row.hourLabel, /ET \(hourly bars\)/);
+  assert.equal(/\d{4}-\d{2}-\d{2}T/.test(row.hourLabel + row.anchorUk), false);
+  assert.match(row.rollNote, /contract roll/);
+  const ui = { document: { documentElement: { } }, devicePixelRatio: 1, encodeURIComponent: encodeURIComponent };
+  ui.getComputedStyle = () => ({ getPropertyValue: () => "" });
+  vm.createContext(ui);
+  vm.runInContext(fs.readFileSync(path.join(dir, "client_c103.js"), "utf8"), ui);
+  const html = ui.c103ui.render({
+    access: "premium",
+    source: "Source: U.S. Bureau of Labor Statistics",
+    latest: { periodLabel: "September 2026", headline: { momRounded: 0.6, yoyRounded: 3.7, saIndex: 1, nsaIndex: 1, momSeries: "CUSR0000SA0", yoySeries: "CUUR0000SA0", why: "Broad index.", source: "Source: U.S. Bureau of Labor Statistics" }, core: { momRounded: 0.3, yoyRounded: 2.6, saIndex: 1, nsaIndex: 1, why: "Slower part.", source: "Source: U.S. Bureau of Labor Statistics" } },
+    categories: [{ name: "Shelter", why: "Largest weight.", momRounded: 0.4, yoyRounded: 3.2, weight: 35.323, weightMonth: "Aug. 2026", contribution: 0.14, contributionNote: "", momSeries: "CUSR0000SAH1" }],
+    gold: [row],
+    relativeImportance: { citation: "https://www.bls.gov/news.release/cpi.t01.htm" }
+  });
+  assert.match(html, /BLS data/);
+  assert.equal(/>CUSR0000SA0</.test(html), false);
+  assert.match(html, /prior session close/);
+  assert.match(html, /href="https:\/\/data\.bls\.gov\/timeseries\//);
+  assert.match(html, /Core, dashed/);
+  assert.equal(html.includes("2026-09-11T"), false);
+});
+
+test("dismiss accepts only a known release from this site", () => {
+  const known = ["2026-11-10T13:30:00.000Z"];
+  const limiter = { allow: () => true };
+  const badOrigin = lib.c103DismissGate({ headers: { origin: "https://evil.example", "content-type": "application/json" } }, known[0], known, limiter, NOW, "u1");
+  assert.equal(badOrigin.status, 403);
+  const badType = lib.c103DismissGate({ headers: { origin: "https://thedispatch.uk", "content-type": "text/plain" } }, known[0], known, limiter, NOW, "u1");
+  assert.equal(badType.status, 415);
+  const unknown = lib.c103DismissGate({ headers: { origin: "https://thedispatch.uk", "content-type": "application/json" } }, "2020-01-01T00:00:00.000Z", known, limiter, NOW, "u1");
+  assert.equal(unknown.status, 400);
+  let calls = 0;
+  const limited = { allow: () => { calls += 1; return calls < 2; } };
+  const ok = lib.c103DismissGate({ headers: { origin: "https://thedispatch.uk", "content-type": "application/json" } }, known[0], known, limited, NOW, "u1");
+  assert.equal(ok.ok, true);
+  const blocked = lib.c103DismissGate({ headers: { origin: "https://thedispatch.uk", "content-type": "application/json" } }, known[0], known, limited, NOW, "u1");
+  assert.equal(blocked.status, 429);
+});
+
+test("the recorder uses a fresh bar only inside a release window on or after 10 Dec", async () => {
+  const early = await lib.c103RecordTick({ events: [], fetch: async () => { throw new Error("no"); } }, Date.parse("2026-11-10T13:00:00.000Z"));
+  assert.equal(early, null);
+  const release = lib.c103ReleaseInstant(2026, 12, 10, 8, 30);
+  const barEnd = release.startMs - 5 * 60 * 1000;
+  const payload = {
+    chart: { result: [{
+      meta: { symbol: "GC=F", instrumentType: "FUTURE", shortName: "Gold", exchangeTimezoneName: "America/New_York" },
+      timestamp: [(barEnd - 5 * 60 * 1000) / 1000],
+      indicators: { quote: [{ close: [4100], open: [4090] }] }
+    }] }
+  };
+  const snap = await lib.c103RecordTick({
+    events: [release],
+    timeoutMs: 1000,
+    fetch: async () => ({ ok: true, text: async () => JSON.stringify(payload) })
+  }, release.startMs - 2 * 60 * 1000);
+  assert.equal(snap.windowKind, "pre");
+  assert.equal(snap.price, 4100);
+  assert.equal(snap.sourceLabel, "Gold futures (COMEX, front month), Yahoo Finance delayed");
+});
+
+test("stored gold stays when the schedule no longer lists that release", () => {
+  const old = { releaseAtUtc: "2024-06-12T12:30:00.000Z", releaseUk: "Wed, 12 June 2024 at 13:30 BST", plus1dPct: 0.4, sourceLabel: lib.C103_GOLD_LABEL };
+  const model = lib.c103Compose({
+    series: { ok: false },
+    previousEvents: [],
+    storedGold: [old],
+    hourly: [],
+    daily: [],
+    icsOk: false,
+    htmlOk: false
+  }, NOW);
+  assert.ok(model.gold.some((row) => row.releaseAtUtc === old.releaseAtUtc && row.plus1dPct === 0.4));
+});
+
+test("only changed series values are written", () => {
+  const prev = { CUSR0000SA0: [{ year: 2026, month: 9, value: 336.298 }] };
+  const next = { CUSR0000SA0: [{ year: 2026, month: 9, value: 336.298 }, { year: 2026, month: 10, value: 337 }] };
+  const rows = lib.c103ChangedSeries(prev, next);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].period, "2026-10");
+});
+
+test("CPI Day is added in the same in-app menu group as Terminal", () => {
+  const menu = [["Markets and data", [["/terminal/", "Terminal", "Futures"], ["/markets/", "Markets", "Prices"]]]];
+  const before = menu[0][1].map((it) => it[0]);
+  const box = { C93_MENU: menu, window: {}, location: { pathname: "/" }, sessionStorage: { getItem() { return null; }, setItem() {} }, document: { getElementById() { return null; } } };
+  box.window = box;
+  vm.createContext(box);
+  vm.runInContext(fs.readFileSync(path.join(dir, "app_block_c103.js"), "utf8"), box);
+  const paths = box.C93_MENU[0][1].map((it) => it[0]);
+  assert.deepEqual(paths.filter((p) => p !== "/cpi/"), before);
+  assert.equal(paths[paths.indexOf("/terminal/") + 1], "/cpi/");
+});
+
+test("archive dates older than the ICS are daily-only", () => {
+  const html = '<a href="/news.release/archives/cpi_01122022.htm">January 2022</a><a href="/news.release/archives/cpi_10142026.htm">October 2026</a>';
+  const rows = lib.c103ParseArchive(html, NOW);
+  assert.ok(rows.some((row) => row.etDate === "2022-01-12" && row.dailyOnly && row.source === "bls-archive"));
+  assert.ok(rows.some((row) => row.etDate === "2026-10-14"));
+  const ancient = lib.c103ParseArchive('<a href="/news.release/archives/cpi_02152008.htm">old</a>', NOW);
+  assert.equal(ancient.length, 0);
 });
 
 test("recorder stays quiet before 10 December 2026", () => {

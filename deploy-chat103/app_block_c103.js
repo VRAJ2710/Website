@@ -36,10 +36,23 @@
       }
     }
   } catch (e2) {}
+  function groupWith(list, path) {
+    if (!list) return;
+    for (var i = 0; i < list.length; i++) {
+      var items = list[i] && list[i][1];
+      if (!items) continue;
+      for (var j = 0; j < items.length; j++) if (pathOf(items[j]) === path) return items;
+    }
+    return null;
+  }
   try {
     if (typeof C93_MENU !== "undefined" && C93_MENU) {
-      for (var m = 0; m < C93_MENU.length; m++) {
-        if (C93_MENU[m] && C93_MENU[m][0] === "Gold and macro") insert(C93_MENU[m][1]);
+      var menuItems = groupWith(C93_MENU, "/terminal/");
+      if (menuItems) insert(menuItems);
+      else {
+        for (var m = 0; m < C93_MENU.length; m++) {
+          if (C93_MENU[m] && C93_MENU[m][0] === "Gold and macro") insert(C93_MENU[m][1]);
+        }
       }
     }
   } catch (e3) {}

@@ -370,36 +370,78 @@ function c103ParseBls(payload) {
   return { ok: Object.keys(series).length > 0, series: series };
 }
 
+function c103CellText(html) {
+  return String(html || "")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<span[^>]*footnoteRefs[\s\S]*?<\/span>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&#160;/g, " ")
+    .replace(/\(\d+\)/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function c103ParseRi(html) {
   const rows = [];
   const tr = String(html || "").match(/<tr[\s\S]*?<\/tr>/gi) || [];
+  let weightCol = -1;
+  let weightId = "";
   let asOf = "";
-  const as = String(html || "").match(/Relative[\s\S]{0,120}?importance[\s\S]{0,80}?((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4})/i);
-  if (as) asOf = as[1].replace(/\s+/g, " ");
-  tr.forEach((row) => {
+  const parsed = tr.map((row) => {
     const cells = [];
-    const re = /<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi;
+    const re = /<t[dh]([^>]*)>([\s\S]*?)<\/t[dh]>/gi;
     let m;
     while ((m = re.exec(row))) {
-      const text = m[1].replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#160;/g, " ").replace(/\s+/g, " ").trim();
-      if (text) cells.push(text);
+      cells.push({ attrs: m[1] || "", text: c103CellText(m[2]) });
     }
+    return cells;
+  });
+  parsed.forEach((cells) => {
+    cells.forEach((cell, i) => {
+      if (!/relative/i.test(cell.text) || !/importance/i.test(cell.text)) return;
+      weightCol = i;
+      const id = /id="([^"]+)"/i.exec(cell.attrs);
+      if (id) weightId = id[1];
+      const month = cell.text.match(/((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{4})/i);
+      if (month) asOf = month[1].replace(/\s+/g, " ");
+    });
+  });
+  parsed.forEach((cells) => {
     if (!cells.length) return;
-    const name = cells[0].replace(/\(\d+\)/g, "").replace(/\s+/g, " ").trim();
-    const weightText = cells.map((x) => x.replace(/,/g, "")).find((x) => /^\d+\.\d+$/.test(x) && Number(x) <= 100);
-    if (!name || !weightText || /expenditure category/i.test(name)) return;
+    const name = cells[0].text;
+    if (!name || /expenditure category|relative importance/i.test(name)) return;
+    let weightText = "";
+    if (weightId) {
+      const hit = cells.find((cell) => new RegExp("headers=\"[^\"]*" + weightId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).test(cell.attrs));
+      if (hit) weightText = hit.text.replace(/,/g, "");
+    }
+    if (!weightText && weightCol >= 0 && cells[weightCol]) weightText = cells[weightCol].text.replace(/,/g, "");
+    if (!/^\d+\.\d+$/.test(weightText) || Number(weightText) > 100) return;
     rows.push({ name: name, weight: Number(weightText) });
   });
   const byName = {};
   rows.forEach((r) => { if (byName[r.name] == null) byName[r.name] = r.weight; });
   return {
-    ok: rows.length > 0,
+    ok: rows.length > 0 && weightCol >= 0,
     asOf: asOf,
+    weightMonth: asOf,
     byName: byName,
     sourceUrl: C103_RI,
     homeUrl: C103_RI_HOME,
-    citation: "Relative importance: U.S. Bureau of Labor Statistics, CPI news release Table 1 (the weight for the month before this change). " + C103_RI + " . Annual tables: " + C103_RI_HOME
+    citation: "Relative importance: U.S. Bureau of Labor Statistics, CPI news release Table 1. " + C103_RI + " Annual tables: " + C103_RI_HOME
   };
+}
+
+function c103MonthNameToNum(text) {
+  return c103MonNum(String(text || ""));
+}
+
+function c103WeightsMatch(weightMonth, latestPeriod) {
+  const per = /^(\d{4})-(\d{2})$/.exec(String(latestPeriod || ""));
+  const label = String(weightMonth || "").match(/([A-Za-z]+)\.?\s+(\d{4})/);
+  if (!per || !label) return false;
+  const prev = c103PrevMonth(Number(per[1]), Number(per[2]));
+  return c103MonthNameToNum(label[1]) === prev.m && Number(label[2]) === prev.y;
 }
 
 function c103ChangePair(saMap, nsaMap, y, m) {
@@ -440,6 +482,7 @@ function c103BuildMonths(series, ri) {
       const pair = c103ChangePair(maps[row[2]] || new Map(), maps[row[3]] || new Map(), slot.y, slot.m);
       const weight = row[4] && ri && ri.byName ? ri.byName[row[4]] : null;
       const weightNum = typeof weight === "number" ? weight : null;
+      const weightsOk = !!(ri && c103WeightsMatch(ri.weightMonth || ri.asOf, period));
       return {
         key: row[0],
         name: row[1],
@@ -457,8 +500,12 @@ function c103BuildMonths(series, ri) {
         yoy: pair.yoy,
         yoyRounded: pair.yoyRounded,
         weight: weightNum,
-        contribution: c103Contribution(weightNum, pair.momRounded),
+        weightMonth: ri && (ri.weightMonth || ri.asOf) || "",
+        weightsMatch: weightsOk,
+        contribution: weightsOk ? c103Contribution(weightNum, pair.mom) : null,
+        contributionUnit: "pp",
         contributionLabel: C103_CONTRIB_LABEL,
+        contributionNote: weightsOk ? "" : "The weight month is not the month before this figure. Contributions are not shown.",
         source: C103_SOURCE
       };
     });
@@ -488,12 +535,14 @@ function c103ParseYahoo(payload, intervalMs) {
   const bars = [];
   for (let i = 0; i < ts.length; i++) {
     const close = quote.close && quote.close[i];
+    const open = quote.open && quote.open[i];
     if (typeof ts[i] !== "number" || typeof close !== "number" || !isFinite(close)) continue;
     const startMs = ts[i] * 1000;
     bars.push({
       startMs: startMs,
       endMs: startMs + intervalMs,
       close: close,
+      open: typeof open === "number" && isFinite(open) ? open : null,
       timeUtc: new Date(startMs).toISOString(),
       sessionDate: c103Ymd(startMs, tz)
     });
@@ -502,17 +551,31 @@ function c103ParseYahoo(payload, intervalMs) {
   return { ok: bars.length > 0, bars: bars, timezone: tz, message: bars.length ? "" : "The futures feed returned no completed bars. No number was filled in." };
 }
 
-function c103GoldReaction(release, hourlyBars, dailyBars) {
+function c103EtClock(ms) {
+  const p = c103Parts(ms, "America/New_York");
+  return c103Pad(p.hour) + ":" + c103Pad(p.minute);
+}
+
+function c103CompletedBars(bars, nowMs, daily) {
+  const today = c103Ymd(nowMs, "America/New_York");
+  return (bars || []).filter((b) => {
+    if (!b || typeof b.close !== "number" || typeof b.endMs !== "number") return false;
+    if (b.endMs > nowMs) return false;
+    if (daily && b.sessionDate && b.sessionDate >= today) return false;
+    return true;
+  });
+}
+
+function c103GoldReaction(release, hourlyBars, dailyBars, nowMs) {
   const row = {
     releaseAtUtc: release.releaseAtUtc,
     releaseUk: release.releaseUk,
     referencePeriod: release.referencePeriod,
     referenceLabel: c103PeriodLabel(release.referencePeriod),
     hourlyAvailable: false,
-    anchorAtUtc: null,
-    anchorPrice: null,
-    plus1hAtUtc: null,
-    plus1hPrice: null,
+    hourLabel: "",
+    anchorUk: "",
+    dayAnchorLabel: "",
     plus1hPct: null,
     plus1dSession: null,
     plus1dPrice: null,
@@ -521,59 +584,81 @@ function c103GoldReaction(release, hourlyBars, dailyBars) {
     plus5dPrice: null,
     plus5dPct: null,
     recorded: false,
+    rollNote: "",
     sourceLabel: C103_GOLD_LABEL,
-    what: "How the front-month gold future moved after this release, measured from the last completed bar before 08:30 US Eastern.",
+    what: "How the front-month gold future moved after this release.",
     why: "Past releases only. This is the move that already happened. It is not a view on the next release."
   };
-  const hourly = (hourlyBars || []).filter((b) => b && typeof b.close === "number" && typeof b.endMs === "number");
+  const hourly = release && release.dailyOnly ? [] : c103CompletedBars(hourlyBars, nowMs || release.startMs, false);
   const before = hourly.filter((b) => b.endMs <= release.startMs && release.startMs - b.endMs <= 3 * 3600000);
   const anchor = before.length ? before[before.length - 1] : null;
   const after = anchor ? hourly.filter((b) => b.endMs >= release.startMs + 3600000 && b.startMs >= release.startMs && b.endMs - (release.startMs + 3600000) <= 2.5 * 3600000) : [];
   const plus = after.length ? after[0] : null;
   if (anchor && plus) {
     row.hourlyAvailable = true;
-    row.anchorAtUtc = new Date(anchor.endMs).toISOString();
+    row.hourAnchorPrice = anchor.close;
     row.anchorPrice = anchor.close;
-    row.plus1hAtUtc = new Date(plus.endMs).toISOString();
     row.plus1hPrice = plus.close;
     row.plus1hPct = c103Pct(plus.close, anchor.close);
+    row.hourLabel = c103EtClock(anchor.endMs) + "\u2192" + c103EtClock(plus.endMs) + " ET (hourly bars)";
+    row.anchorUk = c103FormatUk(anchor.endMs);
   }
-  const daily = (dailyBars || []).filter((b) => b && b.sessionDate && typeof b.close === "number");
+  const daily = c103CompletedBars(dailyBars, nowMs || release.startMs, true);
   const prior = daily.filter((b) => b.sessionDate < release.etDate);
   const dayAnchor = prior.length ? prior[prior.length - 1] : null;
-  if (!row.anchorPrice && dayAnchor) {
-    row.anchorAtUtc = dayAnchor.timeUtc;
-    row.anchorPrice = dayAnchor.close;
-  }
-  if (dayAnchor && row.anchorPrice) {
+  if (dayAnchor) {
+    row.dayAnchorLabel = "prior session close";
+    row.dayAnchorUk = dayAnchor.sessionDate;
+    row.dayAnchorPrice = dayAnchor.close;
     const later = daily.filter((b) => b.sessionDate > dayAnchor.sessionDate);
     const d1 = later[0];
     const d5 = later[4];
     if (d1) {
       row.plus1dSession = d1.sessionDate;
       row.plus1dPrice = d1.close;
-      row.plus1dPct = c103Pct(d1.close, row.anchorPrice);
+      row.plus1dPct = c103Pct(d1.close, dayAnchor.close);
+      if (c103RollJump(dayAnchor, d1)) row.rollNote = "This window crosses a jump between sessions. It may be a contract roll on the continuous series.";
     }
     if (d5) {
       row.plus5dSession = d5.sessionDate;
       row.plus5dPrice = d5.close;
-      row.plus5dPct = c103Pct(d5.close, row.anchorPrice);
+      row.plus5dPct = c103Pct(d5.close, dayAnchor.close);
     }
   }
   return row;
 }
 
+function c103RollJump(prev, next) {
+  if (!prev || !next || typeof prev.close !== "number" || typeof next.open !== "number" || prev.close === 0) return false;
+  const gap = Math.abs(next.open / prev.close - 1);
+  return gap > 0.015;
+}
+
+function c103MergeGold(computed, stored) {
+  const by = new Map();
+  (stored || []).forEach((row) => { if (row && row.releaseAtUtc) by.set(row.releaseAtUtc, row); });
+  (computed || []).forEach((row) => { if (row && row.releaseAtUtc) by.set(row.releaseAtUtc, row); });
+  return Array.from(by.values()).sort((a, b) => String(a.releaseAtUtc) < String(b.releaseAtUtc) ? 1 : -1);
+}
+
 function c103ApplySnapshots(row, snaps) {
   const mine = (snaps || []).filter((s) => s && s.releaseAtUtc === row.releaseAtUtc);
-  const pre = mine.filter((s) => s.windowKind === "pre").sort((a, b) => String(a.observedAtUtc) < String(b.observedAtUtc) ? 1 : -1)[0];
-  const h1 = mine.filter((s) => s.windowKind === "plus_1h").sort((a, b) => String(a.observedAtUtc) < String(b.observedAtUtc) ? 1 : -1)[0];
-  if (pre && h1 && typeof pre.price === "number" && typeof h1.price === "number") {
-    row.anchorPrice = pre.price;
-    row.anchorAtUtc = pre.observedAtUtc;
-    row.plus1hPrice = h1.price;
-    row.plus1hAtUtc = h1.observedAtUtc;
-    row.plus1hPct = c103Pct(h1.price, pre.price);
+  const pick = (kind) => mine.filter((s) => s.windowKind === kind).sort((a, b) => String(a.observedAtUtc) < String(b.observedAtUtc) ? 1 : -1)[0];
+  const pre = pick("pre");
+  const post = pick("plus_1h") || pick("post");
+  if (pre && typeof pre.price === "number") {
+    row.recordedPreUk = c103FormatUk(Date.parse(pre.observedAtUtc));
+    row.recordedPrePrice = pre.price;
+  }
+  if (post && typeof post.price === "number") {
+    row.recordedPostUk = c103FormatUk(Date.parse(post.observedAtUtc));
+    row.recordedPostPrice = post.price;
+  }
+  if (pre && post && typeof pre.price === "number" && typeof post.price === "number") {
+    row.plus1hPct = c103Pct(post.price, pre.price);
     row.hourlyAvailable = true;
+    row.hourLabel = (row.recordedPreUk || "pre-release") + " \u2192 " + (row.recordedPostUk || "after the release");
+    row.anchorUk = row.recordedPreUk || row.anchorUk;
     row.recorded = true;
     row.recordedNote = "Recorded by The Dispatch from that delayed feed at the times shown.";
   }
@@ -595,11 +680,6 @@ function c103SnapshotDecision(nowMs, events) {
     }
   }
   return null;
-}
-
-function c103FreshBar(bars, nowMs) {
-  const ready = (bars || []).filter((b) => b && typeof b.close === "number" && b.endMs <= nowMs && nowMs - b.endMs <= 30 * 60000);
-  return ready.length ? ready[ready.length - 1] : null;
 }
 
 function c103LatestFigure(month, key) {
@@ -656,11 +736,15 @@ function c103Compose(parts, nowMs) {
   const ri = riFresh ? parts.ri : (parts && parts.previousRi && parts.previousRi.byName ? parts.previousRi : null);
   const riCarried = !riFresh && !!(ri && ri.byName);
   const kept = parts && parts.previousEvents || [];
-  const icsIn = parts && parts.icsOk ? (parts.ics || []) : kept.filter((ev) => ev && ev.source === "bls-ics");
-  const htmlIn = parts && parts.htmlOk ? (parts.html || []) : kept.filter((ev) => ev && ev.source === "bls-html");
-  const icsCarried = !(parts && parts.icsOk) && icsIn.length > 0;
-  const htmlCarried = !(parts && parts.htmlOk) && htmlIn.length > 0;
-  const events = c103MergeSchedule(icsIn, htmlIn);
+  const icsFresh = parts && parts.icsOk && Array.isArray(parts.ics) && parts.ics.length > 0;
+  const htmlFresh = parts && parts.htmlOk && Array.isArray(parts.html) && parts.html.length > 0;
+  const archiveFresh = parts && parts.archiveOk && Array.isArray(parts.archive) && parts.archive.length > 0;
+  const icsIn = icsFresh ? parts.ics : kept.filter((ev) => ev && ev.source === "bls-ics");
+  const htmlIn = htmlFresh ? parts.html : kept.filter((ev) => ev && ev.source === "bls-html");
+  const archiveIn = archiveFresh ? parts.archive : kept.filter((ev) => ev && ev.source === "bls-archive");
+  const icsCarried = !icsFresh && icsIn.length > 0;
+  const htmlCarried = !htmlFresh && htmlIn.length > 0;
+  const events = c103MergeSchedule(icsIn.concat(archiveIn), htmlIn);
   const usedEvents = events;
   const scheduleFromFetch = (parts && parts.icsOk) || (parts && parts.htmlOk);
   const prevBars = (parts && parts.feedBars) || {};
@@ -688,10 +772,12 @@ function c103Compose(parts, nowMs) {
     core: c103LatestFigure(row, "core")
   })).filter((row) => row.headline || row.core);
   const past = usedEvents.filter((ev) => ev.startMs <= nowMs);
-  const gold = (hourly.length || daily.length)
+  const goldComputed = (hourly.length || daily.length)
     ? past.slice().reverse().map((ev) => {
-      const row = c103ApplySnapshots(c103GoldReaction(ev, hourly, daily), parts && parts.snapshots);
-      if (!hourly.length) row.hourMessage = "No number was filled in.";
+      const useHourly = ev && ev.dailyOnly ? [] : hourly;
+      const row = c103ApplySnapshots(c103GoldReaction(ev, useHourly, daily, nowMs), parts && parts.snapshots);
+      if (ev && ev.dailyOnly) row.hourMessage = "Daily windows only for this older release.";
+      else if (!useHourly.length) row.hourMessage = "No number was filled in.";
       else if (hourlyCarried && row.hourlyAvailable) row.hourMessage = c103CarryNote(prevBars.hourlyAt || "");
       else if (!row.hourlyAvailable) row.hourMessage = "Hourly bars do not cover this release.";
       if (!daily.length) row.dayMessage = "No number was filled in.";
@@ -699,6 +785,7 @@ function c103Compose(parts, nowMs) {
       return row;
     })
     : [];
+  const gold = c103MergeGold(goldComputed, parts && parts.storedGold);
   const countdown = c103Countdown(nowMs, usedEvents);
   const blsWhen = (parts && parts.feedTimes && parts.feedTimes.bls) || (parts && parts.storedFetchedAt) || "";
   const headlineCarried = !!(carried.CUSR0000SA0 || carried.CUUR0000SA0);
@@ -723,7 +810,8 @@ function c103Compose(parts, nowMs) {
       releaseAtUtc: match ? match.releaseAtUtc : "",
       headline: Object.assign(c103LatestFigure(latest, "headline") || {}, headlineCarried ? { message: c103CarryNote(blsWhen), carried: true } : {}),
       core: Object.assign(c103LatestFigure(latest, "core") || {}, coreCarried ? { message: c103CarryNote(blsWhen), carried: true } : {}),
-      fetchedAt: (headlineCarried || coreCarried) && blsWhen ? blsWhen : (parts && parts.fetchedAt || new Date(nowMs).toISOString())
+      fetchedAt: (headlineCarried || coreCarried) && blsWhen ? blsWhen : (parts && parts.fetchedAt || new Date(nowMs).toISOString()),
+      releaseSource: match ? match.source : ""
     } : null,
     trend: trend,
     archive: archive,
@@ -804,8 +892,7 @@ const c103Flights = new Map();
 function c103Kick(store, key, producer) {
   if (c103Flights.has(key)) return c103Flights.get(key);
   const run = Promise.resolve().then(() => producer()).then((body) => {
-    const prev = store.get(key);
-    const next = prev && prev.ok && prev.body ? c103MergeModels(prev.body, body) : body;
+    const next = body;
     if (c103WorthStoring(next)) {
       const saved = Object.assign({}, next);
       delete saved.cacheState;
@@ -822,7 +909,8 @@ function c103Kick(store, key, producer) {
 function c103Memo(store, key, ttl, producer, cold) {
   const now = Date.now();
   const hit = store.get(key);
-  const fresh = !!(hit && hit.ok && now - hit.at < ttl);
+  const limit = typeof ttl === "function" ? ttl(hit && hit.body) : ttl;
+  const fresh = !!(hit && hit.ok && now - hit.at < limit);
   if (!fresh) c103Kick(store, key, producer);
   if (fresh) return Promise.resolve(c103WithCache(hit.body, hit.at, "fresh"));
   if (hit && hit.ok) return Promise.resolve(c103WithCache(hit.body, hit.at, "stale"));
@@ -1022,6 +1110,28 @@ async function c103Job(fn) {
   catch (e) { return { ok: false, error: e && e.name === "TimeoutError" ? "timeout" : "failed" }; }
 }
 
+function c103ParseArchive(html, nowMs) {
+  const out = [];
+  const seen = new Set();
+  const re = /cpi_(\d{2})(\d{2})(\d{4})\.htm/g;
+  const cutoff = nowMs - 5 * 365.25 * 86400000;
+  let m;
+  while ((m = re.exec(String(html || "")))) {
+    const month = Number(m[1]);
+    const day = Number(m[2]);
+    const year = Number(m[3]);
+    if (month < 1 || month > 12 || day < 1 || day > 31) continue;
+    const row = c103ReleaseInstant(year, month, day, 8, 30);
+    if (row.startMs < cutoff || seen.has(row.etDate)) continue;
+    seen.add(row.etDate);
+    row.source = "bls-archive";
+    row.dailyOnly = true;
+    row.scheduleUrl = "https://www.bls.gov/bls/news-release/cpi.htm";
+    out.push(row);
+  }
+  return out;
+}
+
 async function c103FetchAll(deps, nowMs) {
   const ms = Math.min(2500, (deps && deps.timeoutMs) || 2500);
   const year = c103Parts(nowMs, "America/New_York").year;
@@ -1029,23 +1139,36 @@ async function c103FetchAll(deps, nowMs) {
   const startYear = String(deps && deps.apiKey ? year - 19 : year - 9);
   const ids = [];
   C103_CATALOG.forEach((row) => { ids.push(row[2], row[3]); });
+  const info = {
+    apiKey: deps && deps.apiKey,
+    hasStored: !!(deps && deps.hasStored),
+    inReleaseWindow: !!(deps && deps.inReleaseWindow),
+    hasNewMonth: !!(deps && deps.hasNewMonth)
+  };
+  const plan = c103BlsPlan(deps && deps.blsBudget, nowMs, info);
   const chunks = [];
-  const size = deps && deps.apiKey ? 50 : 25;
-  for (let i = 0; i < ids.length; i += size) chunks.push(ids.slice(i, i + size));
-  const blsBody = (list) => JSON.stringify({
-    seriesid: list,
-    startyear: startYear,
-    endyear: endYear,
-    registrationkey: deps && deps.apiKey ? deps.apiKey : undefined
-  });
-  const [ics, html, ri, hourly, daily, blsParts] = await Promise.all([
-    c103Job(() => c103RawGet(deps, C103_ICS, ms)),
-    c103Job(() => c103RawGet(deps, C103_HTML, ms)),
-    c103Job(() => c103RawGet(deps, C103_RI, ms)),
-    c103Job(() => c103RawGet(deps, c103GoldUrl("1h", "2y"), ms)),
-    c103Job(() => c103RawGet(deps, c103GoldUrl("1d", "5y"), ms)),
+  if (plan.call) {
+    const size = plan.batch;
+    for (let i = 0; i < ids.length && chunks.length < plan.batches; i += size) chunks.push(ids.slice(i, i + size));
+  }
+  const blsBody = (list) => {
+    const payload = { seriesid: list, startyear: startYear, endyear: endYear };
+    if (deps && deps.apiKey) payload.registrationkey = deps.apiKey;
+    return JSON.stringify(payload);
+  };
+  const scheduleDue = !(deps && deps.scheduleFresh);
+  const yahooDue = !(deps && deps.yahooFresh);
+  const [ics, html, ri, archive, hourly, daily, blsParts] = await Promise.all([
+    scheduleDue ? c103Job(() => c103RawGet(deps, C103_ICS, ms)) : Promise.resolve({ ok: false, error: "skipped" }),
+    scheduleDue ? c103Job(() => c103RawGet(deps, C103_HTML, ms)) : Promise.resolve({ ok: false, error: "skipped" }),
+    scheduleDue ? c103Job(() => c103RawGet(deps, C103_RI, ms)) : Promise.resolve({ ok: false, error: "skipped" }),
+    scheduleDue ? c103Job(() => c103RawGet(deps, "https://www.bls.gov/bls/news-release/cpi.htm", ms)) : Promise.resolve({ ok: false, error: "skipped" }),
+    yahooDue ? c103Job(() => c103RawGet(deps, c103GoldUrl("1h", "2y"), ms)) : Promise.resolve({ ok: false, error: "skipped" }),
+    yahooDue ? c103Job(() => c103RawGet(deps, c103GoldUrl("1d", "5y"), ms)) : Promise.resolve({ ok: false, error: "skipped" }),
     Promise.all(chunks.map((list) => c103Job(() => c103RawGet(Object.assign({}, deps, { headers: { "Content-Type": "application/json" } }), C103_BLS, ms, blsBody(list)))))
   ]);
+  const blsMade = blsParts.filter((part) => part.ok).length;
+  const blsBudget = c103BlsCharge(plan, plan.call ? chunks.length : 0, nowMs);
   const series = {};
   let seriesOk = false;
   blsParts.forEach((part) => {
@@ -1060,16 +1183,21 @@ async function c103FetchAll(deps, nowMs) {
   let hourlyBars = [];
   let dailyBars = [];
   if (hourly.ok) {
-    try { hourlyBars = c103ParseYahoo(JSON.parse(hourly.value), 3600000).bars || []; } catch (e) { hourlyBars = []; }
+    try { hourlyBars = c103CompletedBars(c103ParseYahoo(JSON.parse(hourly.value), 3600000).bars || [], nowMs, false); } catch (e) { hourlyBars = []; }
   }
   if (daily.ok) {
-    try { dailyBars = c103ParseYahoo(JSON.parse(daily.value), 86400000).bars || []; } catch (e) { dailyBars = []; }
+    try { dailyBars = c103CompletedBars(c103ParseYahoo(JSON.parse(daily.value), 86400000).bars || [], nowMs, true); } catch (e) { dailyBars = []; }
   }
+  const archiveRows = archive.ok ? c103ParseArchive(archive.value, nowMs) : [];
   return {
-    icsOk: ics.ok,
-    htmlOk: html.ok,
+    icsOk: ics.ok && c103ParseIcs(ics.value).length > 0,
+    htmlOk: html.ok && c103ParseHtmlSchedule(html.value).length > 0,
+    archiveOk: archive.ok && archiveRows.length > 0,
     ics: ics.ok ? c103ParseIcs(ics.value) : [],
     html: html.ok ? c103ParseHtmlSchedule(html.value) : [],
+    archive: archiveRows,
+    blsBudget: blsBudget,
+    blsCalls: blsMade,
     ri: ri.ok ? c103ParseRi(ri.value) : { ok: false },
     series: { ok: seriesOk, series: series },
     hourly: hourlyBars,
@@ -1096,30 +1224,78 @@ function c103Carry(previous) {
     previousGold: previous.previousGold || previous.gold || null,
     feedBars: previous.feedBars || null,
     feedTimes: previous.feedTimes || null,
+    storedGold: previous.storedGold || previous.gold || [],
+    blsBudget: previous.blsBudget || null,
     storedFetchedAt: previous.latest && previous.latest.fetchedAt || previous.cachedAt || "",
     snapshots: previous.snapshots || []
   };
 }
 
-function c103MergeModels(prev, next) {
-  if (!prev || !next) return next || prev;
-  if (!prev.latest && !prev.countdown) return next;
-  return next;
+function c103BlsSeriesCap(apiKey) { return apiKey ? 50 : 25; }
+
+function c103BlsPlan(budget, nowMs, info) {
+  const keyed = !!(info && info.apiKey);
+  const cap = keyed ? 500 : 20;
+  const batch = c103BlsSeriesCap(info && info.apiKey);
+  const day = c103Ymd(nowMs, "America/New_York");
+  const calls = budget && budget.dayKey === day ? (budget.calls || 0) : 0;
+  const last = budget && budget.lastBlsAt ? budget.lastBlsAt : 0;
+  const base = { cap: cap, batch: batch, calls: calls, day: day, lastBlsAt: last };
+  const room = cap - calls;
+  if (room <= 0) return Object.assign(base, { call: false, reason: "budget", batches: 0 });
+  if (!(info && info.hasStored)) return Object.assign(base, { call: true, reason: "empty", batches: room });
+  if (info.inReleaseWindow && !info.hasNewMonth) {
+    if (last && nowMs - last < 5 * 60 * 1000) return Object.assign(base, { call: false, reason: "poll-wait", batches: 0 });
+    return Object.assign(base, { call: true, reason: "release-window", batches: 1 });
+  }
+  if (last && nowMs - last < 24 * 3600 * 1000) return Object.assign(base, { call: false, reason: "daily", batches: 0 });
+  return Object.assign(base, { call: true, reason: "daily", batches: room });
+}
+
+function c103BlsCharge(plan, made, nowMs) {
+  return { dayKey: plan.day, calls: plan.calls + made, lastBlsAt: made ? nowMs : plan.lastBlsAt };
+}
+
+function c103InReleaseWindow(events, nowMs) {
+  return (events || []).some((ev) => ev && nowMs >= ev.startMs && nowMs - ev.startMs <= 90 * 60 * 1000);
+}
+
+function c103HasNewMonth(model, nowMs) {
+  const events = model && model.previousEvents || [];
+  const open = events.filter((ev) => ev && nowMs >= ev.startMs && nowMs - ev.startMs <= 90 * 60 * 1000);
+  if (!open.length) return true;
+  return open.every((ev) => model.latest && model.latest.period === ev.referencePeriod);
+}
+
+function c103CacheMs(model, nowMs) {
+  const events = model && model.previousEvents || [];
+  const next = events.filter((ev) => ev && ev.startMs > nowMs).sort((a, b) => a.startMs - b.startMs)[0];
+  if (c103InReleaseWindow(events, nowMs) && !c103HasNewMonth(model, nowMs)) return 60 * 1000;
+  if (next) return Math.max(1000, Math.min(15 * 60 * 1000, next.startMs - nowMs));
+  return 15 * 60 * 1000;
+}
+
+function c103ForNow(model, nowMs) {
+  const copy = Object.assign({}, model || {});
+  copy.countdown = c103Countdown(nowMs, copy.previousEvents || []);
+  return copy;
 }
 
 async function c103Refresh(deps, nowMs, previous) {
+  const events = previous && previous.previousEvents || [];
+  const yahooAt = previous && previous.feedBars && Date.parse(previous.feedBars.hourlyAt || previous.feedBars.dailyAt || "");
+  deps.hasStored = !!(previous && previous.latest);
+  deps.inReleaseWindow = c103InReleaseWindow(events, nowMs);
+  deps.hasNewMonth = c103HasNewMonth(previous, nowMs);
+  deps.blsBudget = (previous && previous.blsBudget) || (deps && deps.blsBudget) || { calls: 0, dayKey: "", lastBlsAt: 0 };
+  deps.scheduleFresh = !!(previous && previous.previousEvents && previous.previousEvents.length && previous.feedTimes && nowMs - Date.parse(previous.feedTimes.schedule || 0) < 24 * 3600 * 1000);
+  deps.yahooFresh = !!(yahooAt && nowMs - yahooAt < 15 * 60 * 1000);
   const fetched = await c103FetchAll(deps, nowMs);
   const model = c103Compose(Object.assign({}, fetched, c103Carry(previous), { snapshots: (deps && deps.snapshots) || (previous && previous.snapshots) || [] }), nowMs);
+  model.blsBudget = fetched.blsBudget;
+  if (model.feedTimes) model.feedTimes.schedule = deps.scheduleFresh ? (previous.feedTimes && previous.feedTimes.schedule) : new Date(nowMs).toISOString();
   if (!model.latest) model.statusNote = "not loaded yet";
-  const decision = c103SnapshotDecision(nowMs, model.previousEvents || []);
-  const bar = c103FreshBar(fetched.hourly || [], nowMs);
-  model.snapshotToSave = decision && bar ? {
-    releaseAtUtc: decision.releaseAtUtc,
-    observedAtUtc: new Date(bar.endMs).toISOString(),
-    price: bar.close,
-    windowKind: decision.windowKind,
-    sourceLabel: C103_GOLD_LABEL
-  } : null;
+  model.countdown = c103Countdown(nowMs, model.previousEvents || []);
   return model;
 }
 
@@ -1129,9 +1305,114 @@ function c103CacheControl(body) {
   return "private, max-age=15, stale-while-revalidate=120";
 }
 
-const C103_CSS = "<style id=\"c103-css\">.c103{box-sizing:border-box;max-width:100%;overflow-x:clip;font:15px/1.45 var(--sans,Inter,system-ui,sans-serif);color:var(--ink,#1b1b1b);min-width:0}.c103 *,.c103 *::before,.c103 *::after{box-sizing:border-box}.c103 h2,.c103 h3{font-family:var(--serif,Georgia,serif);line-height:1.2;margin:0 0 8px}.c103 h2{font-size:1.45rem}.c103 p{overflow-wrap:anywhere}.c103 a{text-decoration-thickness:1px;text-underline-offset:3px}.c103 a:focus-visible,.c103 button:focus-visible,#c103-canvas:focus-visible{outline:2px solid var(--gold,#1f3a5f);outline-offset:3px}.c103-k{color:var(--ink-2,#5c6570);font-size:14px}.c103-v{font:600 1.6rem/1.2 var(--serif,Georgia,serif);margin:4px 0;font-variant-numeric:tabular-nums}.c103-miss{border-left:3px solid var(--gold,#8a6a12);padding:4px 0 4px 10px;margin:8px 0}.c103-banner{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;border:1px solid var(--rule,rgba(0,0,0,.14));padding:10px 12px;margin:0 0 14px;background:var(--paper-2,transparent)}.c103-banner button{min-height:44px;min-width:44px;padding:8px 12px;background:transparent;color:inherit;border:1px solid var(--rule,rgba(0,0,0,.14));border-radius:4px;cursor:pointer}.c103-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:12px 0}.c103-card{min-width:0;border-top:2px solid var(--ink,#1b1b1b);padding:10px 2px}.c103-card h3{font:600 14px/1.3 var(--sans,Inter,sans-serif);margin:0 0 6px}.c103-count{border-top:2px solid var(--ink,#1b1b1b);padding:12px 0;margin:8px 0 4px}.c103-count strong{font:600 1.8rem/1.1 var(--serif,Georgia,serif);font-variant-numeric:tabular-nums}.c103-chart{min-width:0;margin:8px 0 16px}#c103-canvas{display:block;width:100%;height:420px;max-width:100%;touch-action:pan-y;background:transparent}.c103-scroll{display:block;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}.c103 table{border-collapse:collapse;width:max-content;min-width:100%;font-size:15px}.c103 caption{caption-side:top;text-align:left;padding:0 0 8px;font-size:15px}.c103 th,.c103 td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule,rgba(0,0,0,.14));white-space:nowrap;font-weight:400;vertical-align:top}.c103 thead th{font-weight:600}.c103-live{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}.c103-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:22px;min-width:0}.c103-lock{border:1px solid var(--rule,rgba(0,0,0,.14));padding:12px;margin:12px 0}@media (max-width:899px){.c103-stats{grid-template-columns:1fr 1fr}.c103-grid{grid-template-columns:1fr}#c103-canvas{height:300px}}@media (max-width:479px){.c103-stats{grid-template-columns:1fr}#c103-canvas{height:240px}.c103{font-size:15px}}@media (prefers-reduced-motion:reduce){.c103 *{transition:none!important;animation:none!important}}</style>";
+const C103_CSS = "<style id=\"c103-css\">.c103{box-sizing:border-box;max-width:100%;overflow-x:clip;font:15px/1.45 var(--sans,Inter,system-ui,sans-serif);color:var(--ink);background:var(--paper);min-width:0}.c103 *,.c103 *::before,.c103 *::after{box-sizing:border-box}.c103 h2,.c103 h3{font-family:var(--serif,Georgia,serif);line-height:1.2;margin:0 0 8px;color:var(--ink)}.c103 h2{font-size:1.45rem}.c103 p,.c103 caption,.c103 caption a{overflow-wrap:anywhere}.c103 a{color:var(--ink);text-decoration-thickness:1px;text-underline-offset:3px}.c103 a:focus-visible,.c103 button:focus-visible,#c103-canvas:focus-visible{outline:3px solid var(--ink);outline-offset:3px}.c103-k{color:var(--ink);font-size:14px}.c103-v{font:600 1.6rem/1.2 var(--serif,Georgia,serif);margin:4px 0;font-variant-numeric:tabular-nums;color:var(--ink)}.c103-miss{border-left:3px solid var(--gold);padding:4px 0 4px 10px;margin:8px 0;color:var(--ink)}.c103-banner{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;border:1px solid var(--rule);padding:10px 12px;margin:0 0 14px;background:var(--paper);color:var(--ink)}.c103-banner button,.c103-tools button{min-height:44px;min-width:44px;padding:8px 12px;background:var(--paper);color:var(--ink);border:1px solid var(--rule);border-radius:4px;cursor:pointer}.c103-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:12px 0}.c103-card{min-width:0;border-top:2px solid var(--ink);padding:10px 2px}.c103-card h3{font:600 14px/1.3 var(--sans,Inter,sans-serif);margin:0 0 6px;color:var(--ink)}.c103-count{border-top:2px solid var(--ink);padding:12px 0;margin:8px 0 4px}.c103-count strong{font:600 1.8rem/1.1 var(--serif,Georgia,serif);font-variant-numeric:tabular-nums}.c103-chart{min-width:0;margin:8px 0 16px}#c103-canvas{display:block;width:100%;height:420px;max-width:100%;touch-action:pan-y;background:var(--paper)}.c103-legend{display:flex;flex-wrap:wrap;gap:12px 18px;list-style:none;margin:8px 0;padding:0;color:var(--ink)}.c103-swatch{display:inline-block;width:28px;height:0;border-top:3px solid var(--ink);margin-right:6px;vertical-align:middle}.c103-swatch-core{border-top-style:dashed;border-top-color:var(--pos)}.c103-scroll{display:block;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}.c103 table{border-collapse:collapse;width:max-content;min-width:100%;font-size:15px;color:var(--ink)}.c103 caption{caption-side:top;text-align:left;padding:0 0 8px;font-size:15px;white-space:normal;color:var(--ink)}.c103 th,.c103 td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule);white-space:nowrap;font-weight:400;vertical-align:top;color:var(--ink);background:var(--paper)}.c103 thead th{font-weight:600}.c103 td.c103-why{white-space:normal;min-width:14rem}.c103-live{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}.c103-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:22px;min-width:0}.c103-lock{border:1px solid var(--rule);padding:12px;margin:12px 0;color:var(--ink);background:var(--paper)}@media (max-width:899px){.c103-stats{grid-template-columns:1fr 1fr}.c103-grid{grid-template-columns:1fr}#c103-canvas{height:300px}}@media (max-width:479px){.c103-stats{grid-template-columns:1fr}#c103-canvas{height:240px}.c103{font-size:15px}}@media (prefers-reduced-motion:reduce){.c103 *{transition:none!important;animation:none!important}}</style>";
+
+function c103DismissGate(req, key, known, limiter, nowMs, userId) {
+  const headers = (req && req.headers) || {};
+  const type = String(headers["content-type"] || "");
+  if (!/^application\/json\b/i.test(type)) return { ok: false, status: 415, error: "JSON required" };
+  const origin = String(headers.origin || "");
+  const site = (typeof PUBLIC_ORIGIN === "string" && PUBLIC_ORIGIN) || "https://thedispatch.uk";
+  if (origin !== site && origin !== "https://thedispatch.uk" && origin !== "https://www.thedispatch.uk") {
+    return { ok: false, status: 403, error: "Origin refused" };
+  }
+  if (!known || known.indexOf(key) < 0) return { ok: false, status: 400, error: "Unknown release" };
+  if (limiter && typeof limiter.allow === "function" && !limiter.allow(userId || "reader", nowMs || Date.now())) {
+    return { ok: false, status: 429, error: "Too many dismissals" };
+  }
+  return { ok: true, key: key };
+}
+
+async function c103Peek(req) {
+  return await new Promise((resolve) => {
+    const chunks = [];
+    let size = 0;
+    req.on("data", (c) => { size += c.length; if (size < 4000) chunks.push(c); });
+    req.on("end", () => {
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}")); }
+      catch (e) { resolve({}); }
+    });
+    req.on("error", () => resolve({}));
+  });
+}
+
+async function c103RecordTick(deps, nowMs) {
+  if (c103Ymd(nowMs, "America/New_York") < C103_RECORD_FROM) return null;
+  const hit = (deps.events || []).find((ev) => ev && nowMs >= ev.startMs - 20 * 60000 && nowMs <= ev.startMs + 90 * 60000);
+  if (!hit) return null;
+  const text = await c103RawGet(deps, c103GoldUrl("5m", "1d"), Math.min(2500, (deps && deps.timeoutMs) || 2500));
+  const parsed = c103ParseYahoo(JSON.parse(text), 5 * 60000);
+  const fresh = c103CompletedBars(parsed.bars || [], nowMs, false).filter((b) => nowMs - b.endMs <= 10 * 60000);
+  const bar = fresh.length ? fresh[fresh.length - 1] : null;
+  if (!bar) return null;
+  return {
+    releaseAtUtc: hit.releaseAtUtc,
+    observedAtUtc: new Date(bar.endMs).toISOString(),
+    price: bar.close,
+    windowKind: bar.endMs <= hit.startMs ? "pre" : "post",
+    sourceLabel: C103_GOLD_LABEL
+  };
+}
+
+async function c103SaveSnapshot(deps, snap) {
+  if (!deps || typeof deps.sql !== "function" || !snap) return;
+  if (typeof deps.sql.query === "function") {
+    await deps.sql.query(
+      "INSERT INTO cpi_gold_snapshots (release_at, observed_at, price, window_kind, source_label) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
+      [snap.releaseAtUtc, snap.observedAtUtc, snap.price, snap.windowKind, C103_GOLD_LABEL]
+    );
+  }
+}
+
+async function c103LoadStored(deps) {
+  if (!deps || typeof deps.sql !== "function" || typeof deps.sql.query !== "function") return null;
+  const one = async (text) => {
+    const result = await deps.sql.query(text);
+    return result && result[0] && Array.isArray(result[0].data) ? result[0].data : [];
+  };
+  const seriesRows = await one("SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS data FROM (SELECT series_id, period, value FROM cpi_series_values) t");
+  const goldRows = await one("SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS data FROM (SELECT release_at, reference_period, plus_1h_pct, plus_1d_pct, plus_5d_pct, hourly_available, recorded, source_label FROM cpi_gold_reactions) t");
+  const budgetRows = await one("SELECT COALESCE(json_agg(row_to_json(t)), '[]'::json) AS data FROM (SELECT payload FROM cpi_releases WHERE period = '__bls_budget') t");
+  const series = {};
+  seriesRows.forEach((row) => {
+    const m = /^(\d{4})-(\d{2})$/.exec(row.period || "");
+    if (!m || typeof Number(row.value) !== "number") return;
+    if (!series[row.series_id]) series[row.series_id] = [];
+    series[row.series_id].push({ year: Number(m[1]), month: Number(m[2]), value: Number(row.value) });
+  });
+  const storedGold = goldRows.map((row) => ({
+    releaseAtUtc: new Date(row.release_at).toISOString(),
+    referencePeriod: row.reference_period,
+    plus1hPct: row.plus_1h_pct,
+    plus1dPct: row.plus_1d_pct,
+    plus5dPct: row.plus_5d_pct,
+    hourlyAvailable: !!row.hourly_available,
+    recorded: !!row.recorded,
+    sourceLabel: C103_GOLD_LABEL,
+    releaseUk: c103FormatUk(new Date(row.release_at).getTime())
+  }));
+  const budget = budgetRows[0] && budgetRows[0].payload ? budgetRows[0].payload : null;
+  if (!Object.keys(series).length && !storedGold.length) return null;
+  const model = c103Compose({
+    series: { ok: Object.keys(series).length > 0, series: series },
+    ri: { ok: false },
+    icsOk: false,
+    htmlOk: false,
+    hourly: [],
+    daily: [],
+    storedGold: storedGold,
+    fetchedAt: new Date().toISOString()
+  }, Date.now());
+  model.storedGold = storedGold;
+  model.blsBudget = budget;
+  model.statusNote = model.latest ? "Stored release loaded from the database." : "not loaded yet";
+  return model;
+}
 
 function c103Install() {
+  c103Install.limiter = typeof FixedWindowRateLimiter === "function"
+    ? new FixedWindowRateLimiter({ limit: 8, windowMs: 10 * 60 * 1000, maxKeys: 2000 })
+    : { allow: function () { return true; } };
   if (c103Install.done) return;
   try { c103InsertNav(typeof C93_NAV !== "undefined" ? C93_NAV : null, typeof C101B_GROUPS !== "undefined" ? C101B_GROUPS : null); } catch (e) {}
   const store = new Map();
@@ -1148,21 +1429,31 @@ function c103Install() {
     return lib.request(url, options);
   }
   async function produce() {
-    const prev = store.get("model");
+    let prev = store.get("model");
     const deps = depsOf();
+    if (!prev) {
+      const loaded = await c103LoadStored(deps).catch(() => null);
+      if (loaded && loaded.latest) {
+        store.set("model", { ok: true, at: Date.now() - 60 * 1000, body: loaded });
+        prev = store.get("model");
+      }
+    }
     deps.snapshots = await c103LoadSnapshots(deps).catch(() => []);
+    deps.knownSeries = prev && prev.body && prev.body.previousSeries || {};
+    deps.knownGold = prev && prev.body && prev.body.storedGold || [];
     const body = await c103Refresh(deps, Date.now(), prev && prev.body);
     c103Persist(deps, body).catch(() => {});
     return body;
   }
   function read() {
-    return c103Memo(store, "model", 15 * 60 * 1000, produce, () => c103Cold(Date.now()));
+    return c103Memo(store, "model", (body) => c103CacheMs(body, Date.now()), produce, () => c103Cold(Date.now()));
   }
   function send(res, code, body, cache) {
     const payload = JSON.stringify(body);
     res.writeHead(code, {
       "Content-Type": "application/json; charset=utf-8",
       "Cache-Control": cache || c103CacheControl(body),
+      "Vary": "Cookie",
       "X-Content-Type-Options": "nosniff",
       "X-Frame-Options": "DENY",
       "Referrer-Policy": "strict-origin-when-cross-origin"
@@ -1196,7 +1487,7 @@ function c103Install() {
   }
   async function api(req, res) {
     const reader = await readerOf(req);
-    const model = await read();
+    const model = c103ForNow(await read(), Date.now());
     let dismissals = [];
     if (reader.signedIn) {
       try { dismissals = await c103Deadline(c103LoadDismissals(depsOf(), reader.userId), 400); }
@@ -1204,30 +1495,16 @@ function c103Install() {
     }
     return send(res, 200, c103Respond(model, reader, dismissals));
   }
-  function readBody(req) {
-    return new Promise((resolve) => {
-      const chunks = [];
-      let size = 0;
-      req.on("data", (c) => {
-        size += c.length;
-        if (size < 4000) chunks.push(c);
-      });
-      req.on("end", () => {
-        try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}")); }
-        catch (e) { resolve({}); }
-      });
-      req.on("error", () => resolve({}));
-    });
-  }
   async function dismiss(req, res) {
     const reader = await readerOf(req);
     if (!reader.signedIn) return send(res, 401, { error: "Sign in required" }, "no-store");
-    const body = await readBody(req);
-    const key = String(body && body.releaseKey || "");
-    if (!/^\d{4}-\d{2}-\d{2}T/.test(key)) return send(res, 400, { error: "Unknown release" }, "no-store");
-    try { await c103SaveDismissal(depsOf(), reader.userId, key); }
+    const stored = store.get("model");
+    const known = ((stored && stored.body && stored.body.previousEvents) || []).map((ev) => ev.releaseAtUtc).filter(Boolean);
+    const gate = c103DismissGate(req, String((await c103Peek(req)).releaseKey || ""), known, c103Install.limiter, Date.now(), reader.userId);
+    if (!gate.ok) return send(res, gate.status, { ok: false, error: gate.error }, "no-store");
+    try { await c103SaveDismissal(depsOf(), reader.userId, gate.key); }
     catch (e) { return send(res, 200, { ok: false, statusNote: "not loaded yet" }, "no-store"); }
-    return send(res, 200, { ok: true, releaseKey: key }, "no-store");
+    return send(res, 200, { ok: true, releaseKey: gate.key }, "no-store");
   }
   if (typeof handle === "function" && !handle.__c103) {
     const prev = handle;
@@ -1263,10 +1540,22 @@ function c103Install() {
   try {
     const warm = setTimeout(() => {
       const deps = depsOf();
-      c103EnsureSchema(deps).catch(() => {});
-      read().catch(() => {});
+      c103EnsureSchema(deps).then(() => c103LoadStored(deps)).then((loaded) => {
+        if (loaded && loaded.latest) store.set("model", { ok: true, at: Date.now(), body: loaded });
+      }).catch(() => {}).finally(() => { read().catch(() => {}); });
     }, 50);
     if (warm && typeof warm.unref === "function") warm.unref();
+    const recorder = setInterval(() => {
+      const deps = depsOf();
+      const prev = store.get("model");
+      deps.events = prev && prev.body && prev.body.previousEvents;
+      c103RecordTick(deps, Date.now()).then((snap) => {
+        if (!snap) return;
+        deps.snapshots = [snap];
+        return c103SaveSnapshot(deps, snap);
+      }).catch(() => {});
+    }, 60 * 1000);
+    if (recorder && typeof recorder.unref === "function") recorder.unref();
   } catch (e) {}
   c103Install.done = 1;
   c103Install._store = store;
@@ -1325,28 +1614,66 @@ async function c103Persist(deps, model) {
   if (model.latest && model.latest.headline && typeof model.latest.headline.saIndex === "number") {
     const latest = model.latest;
     const releaseAt = latest.releaseAtUtc || null;
-    const source = model.countdown && model.countdown.source ? model.countdown.source : "stored";
+    const source = latest.releaseSource || "stored";
     await deps.sql`INSERT INTO cpi_releases (period, release_at, release_source, reference_label, headline_mom, headline_yoy, core_mom, core_yoy, bls_fetched_at, payload)
       VALUES (${latest.period}, ${releaseAt}, ${source}, ${latest.periodLabel}, ${latest.headline.momRounded}, ${latest.headline.yoyRounded},
         ${latest.core ? latest.core.momRounded : null}, ${latest.core ? latest.core.yoyRounded : null}, ${latest.fetchedAt}, ${JSON.stringify({ period: latest.period })})
       ON CONFLICT (period) DO UPDATE SET headline_mom = EXCLUDED.headline_mom, headline_yoy = EXCLUDED.headline_yoy,
         core_mom = EXCLUDED.core_mom, core_yoy = EXCLUDED.core_yoy, bls_fetched_at = EXCLUDED.bls_fetched_at, fetched_at = NOW()`;
   }
-  const series = model.previousSeries || {};
-  for (const id of Object.keys(series)) {
-    for (const point of series[id] || []) {
-      if (typeof point.value !== "number") continue;
-      const period = c103Period(point.year, point.month);
-      await deps.sql`INSERT INTO cpi_series_values (series_id, period, value) VALUES (${id}, ${period}, ${point.value})
-        ON CONFLICT (series_id, period) DO UPDATE SET value = EXCLUDED.value, fetched_at = NOW()`;
-    }
+  const changed = c103ChangedSeries(deps.knownSeries || {}, model.previousSeries || {});
+  if (changed.length && typeof deps.sql.query === "function") {
+    await deps.sql.query(
+      "INSERT INTO cpi_series_values (series_id, period, value) SELECT series_id, period, value FROM jsonb_to_recordset($1::jsonb) AS x(series_id text, period text, value double precision) ON CONFLICT (series_id, period) DO UPDATE SET value = EXCLUDED.value, fetched_at = NOW() WHERE cpi_series_values.value IS DISTINCT FROM EXCLUDED.value",
+      [JSON.stringify(changed)]
+    );
   }
-  for (const g of model.gold || []) {
-    if (!g || !g.releaseAtUtc) continue;
-    await deps.sql`INSERT INTO cpi_gold_reactions (release_at, reference_period, anchor_at, anchor_price, plus_1h_at, plus_1h_price, plus_1h_pct, plus_1d_session, plus_1d_price, plus_1d_pct, plus_5d_session, plus_5d_price, plus_5d_pct, hourly_available, recorded, source_label)
-      VALUES (${g.releaseAtUtc}, ${g.referencePeriod || null}, ${g.anchorAtUtc}, ${g.anchorPrice}, ${g.plus1hAtUtc}, ${g.plus1hPrice}, ${g.plus1hPct}, ${g.plus1dSession}, ${g.plus1dPrice}, ${g.plus1dPct}, ${g.plus5dSession}, ${g.plus5dPrice}, ${g.plus5dPct}, ${!!g.hourlyAvailable}, ${!!g.recorded}, ${C103_GOLD_LABEL})
-      ON CONFLICT (release_at) DO UPDATE SET anchor_price = EXCLUDED.anchor_price, plus_1h_pct = EXCLUDED.plus_1h_pct, plus_1d_pct = EXCLUDED.plus_1d_pct, plus_5d_pct = EXCLUDED.plus_5d_pct, hourly_available = EXCLUDED.hourly_available, recorded = EXCLUDED.recorded, computed_at = NOW()`;
+  const goldRows = c103ChangedGold(deps.knownGold || [], model.gold || []);
+  if (goldRows.length && typeof deps.sql.query === "function") {
+    await deps.sql.query(
+      "INSERT INTO cpi_gold_reactions (release_at, reference_period, plus_1h_pct, plus_1d_pct, plus_5d_pct, hourly_available, recorded, source_label) SELECT release_at, reference_period, plus_1h_pct, plus_1d_pct, plus_5d_pct, hourly_available, recorded, source_label FROM jsonb_to_recordset($1::jsonb) AS x(release_at timestamptz, reference_period text, plus_1h_pct double precision, plus_1d_pct double precision, plus_5d_pct double precision, hourly_available boolean, recorded boolean, source_label text) ON CONFLICT (release_at) DO UPDATE SET plus_1h_pct = EXCLUDED.plus_1h_pct, plus_1d_pct = EXCLUDED.plus_1d_pct, plus_5d_pct = EXCLUDED.plus_5d_pct, hourly_available = EXCLUDED.hourly_available, recorded = EXCLUDED.recorded, computed_at = NOW()",
+      [JSON.stringify(goldRows.map((g) => ({
+        release_at: g.releaseAtUtc,
+        reference_period: g.referencePeriod || null,
+        plus_1h_pct: g.plus1hPct,
+        plus_1d_pct: g.plus1dPct,
+        plus_5d_pct: g.plus5dPct,
+        hourly_available: !!g.hourlyAvailable,
+        recorded: !!g.recorded,
+        source_label: C103_GOLD_LABEL
+      })))]
+    );
   }
+  if (model.blsBudget && typeof deps.sql.query === "function") {
+    await deps.sql.query(
+      "INSERT INTO cpi_releases (period, release_source, payload) VALUES ('__bls_budget', 'budget', $1::jsonb) ON CONFLICT (period) DO UPDATE SET payload = EXCLUDED.payload, fetched_at = NOW()",
+      [JSON.stringify(model.blsBudget)]
+    );
+  }
+}
+
+function c103ChangedSeries(prev, next) {
+  const rows = [];
+  Object.keys(next || {}).forEach((id) => {
+    const have = new Map((prev[id] || []).map((p) => [p.year + "-" + p.month, p.value]));
+    (next[id] || []).forEach((p) => {
+      if (typeof p.value !== "number") return;
+      const key = p.year + "-" + p.month;
+      if (have.get(key) === p.value) return;
+      rows.push({ series_id: id, period: c103Period(p.year, p.month), value: p.value });
+    });
+  });
+  return rows;
+}
+
+function c103ChangedGold(prev, next) {
+  const have = new Map((prev || []).map((row) => [row.releaseAtUtc, row]));
+  return (next || []).filter((row) => {
+    if (!row || !row.releaseAtUtc) return false;
+    const old = have.get(row.releaseAtUtc);
+    if (!old) return true;
+    return old.plus1hPct !== row.plus1hPct || old.plus1dPct !== row.plus1dPct || old.plus5dPct !== row.plus5dPct;
+  });
 }
 
 const api = {
@@ -1356,7 +1683,9 @@ const api = {
   c103ParseBls, c103ParseRi, c103BuildMonths, c103ParseYahoo, c103GoldReaction, c103ApplySnapshots,
   c103SnapshotDecision, c103Compose, c103Cold, c103Memo, c103Respond, c103IsPremium, c103DdlAudit,
   c103InsertNav, c103Paths, c103RawGet, c103Refresh, c103FetchAll, c103CacheControl, c103Install,
-  c103MergeModels, c103CarryNote, c103SeriesGood, c103PickSeries,
+  c103CarryNote, c103SeriesGood, c103PickSeries, c103BlsPlan, c103BlsCharge, c103BlsSeriesCap,
+  c103CacheMs, c103ForNow, c103DismissGate, c103RecordTick, c103ChangedSeries, c103ParseArchive,
+  c103WeightsMatch, c103MergeGold, c103LoadStored,
   c103WorthStoring, c103GoldUrl
 };
 

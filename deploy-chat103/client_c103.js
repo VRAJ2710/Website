@@ -22,6 +22,20 @@
     if (n === 0) return "0.00%";
     return (n > 0 ? "+" : "\u2212") + Math.abs(n).toFixed(2) + "%";
   }
+  function blsLink(id) {
+    if (!id) return "BLS data";
+    return "<a href=\"https://data.bls.gov/timeseries/" + encodeURIComponent(id) + "\">BLS data</a>";
+  }
+  function linkUrls(text) {
+    var parts = String(text || "").split(/(https:\/\/[^\s]+)/);
+    return parts.map(function (part) {
+      if (/^https:\/\//.test(part)) {
+        var href = part.replace(/[.,)]$/, "");
+        return "<a href=\"" + esc(href) + "\">" + esc(href) + "</a>";
+      }
+      return esc(part);
+    }).join("");
+  }
   function miss(text) {
     return "<p class=\"c103-miss\">" + esc(text || "not loaded yet") + "</p>";
   }
@@ -33,7 +47,7 @@
     var label = kind === "yoy" ? "Year change, not seasonally adjusted" : "Month change, seasonally adjusted";
     if (typeof value !== "number") return miss("not loaded yet");
     var carried = row.message ? miss(row.message) : "";
-    return "<p class=\"c103-v\">" + esc(pct(value)) + "</p><p>" + esc(label) + ".</p><p class=\"c103-k\">Index " + esc(num(index, 3)) + " \u00b7 " + esc(series || "") + "</p><p class=\"c103-k\">" + esc(row.source || "Source: U.S. Bureau of Labor Statistics") + " \u00b7 " + esc(row.periodLabel || "") + "</p><p>" + esc(row.why || "") + "</p>" + carried;
+    return "<p class=\"c103-v\">" + esc(pct(value)) + "</p><p>" + esc(label) + ".</p><p class=\"c103-k\">Index " + esc(num(index, 3)) + " \u00b7 " + blsLink(series) + "</p><p class=\"c103-k\">" + esc(row.source || "Source: U.S. Bureau of Labor Statistics") + " \u00b7 " + esc(row.periodLabel || "") + "</p><p>" + esc(row.why || "") + "</p>" + carried;
   }
   function card(title, body) {
     return "<article class=\"c103-card\"><h3>" + esc(title) + "</h3>" + body + "</article>";
@@ -68,21 +82,23 @@
   }
   function catTable(rows, ri) {
     var body = (rows || []).map(function (r) {
-      var contrib = typeof r.contribution === "number" ? num(r.contribution, 3) : "not loaded yet";
       var weight = typeof r.weight === "number" ? num(r.weight, 3) : "not loaded yet";
-      return "<tr><th scope=\"row\">" + esc(r.name) + "</th><td>" + esc(typeof r.momRounded === "number" ? pct(r.momRounded) : "not loaded yet") + "</td><td>" + esc(typeof r.yoyRounded === "number" ? pct(r.yoyRounded) : "not loaded yet") + "</td><td>" + esc(weight) + "</td><td>" + esc(contrib) + "</td><td>" + esc(r.momSeries || "") + "</td></tr>";
+      var pp = typeof r.contribution === "number" ? num(r.contribution, 3) + " pp" : (r.contributionNote || "not loaded yet");
+      return "<tr><th scope=\"row\">" + esc(r.name) + "</th><td class=\"c103-why\">" + esc(r.why || "") + "</td><td>" + esc(typeof r.momRounded === "number" ? pct(r.momRounded) : "not loaded yet") + "</td><td>" + esc(typeof r.yoyRounded === "number" ? pct(r.yoyRounded) : "not loaded yet") + "</td><td>" + esc(weight) + (r.weightMonth ? " <span class=\"c103-k\">" + esc(r.weightMonth) + "</span>" : "") + "</td><td>" + esc(pp) + "</td><td>" + blsLink(r.momSeries) + "</td></tr>";
     }).join("");
     if (!body) return miss("not loaded yet");
     var cite = ri && ri.citation ? ri.citation : "Relative importance source: U.S. Bureau of Labor Statistics.";
-    return "<div class=\"c103-scroll\" tabindex=\"0\" role=\"region\" aria-label=\"Category breakdown. This box scrolls sideways. The rest of the page does not.\"><table><caption>Category breakdown for the latest stored month. " + esc(CONTRIB) + ". " + esc(cite) + "</caption><thead><tr><th scope=\"col\">Category</th><th scope=\"col\">Month</th><th scope=\"col\">Year</th><th scope=\"col\">Weight</th><th scope=\"col\">Approx. contribution</th><th scope=\"col\">Month series</th></tr></thead><tbody>" + body + "</tbody></table></div>";
+    return "<div class=\"c103-scroll\" tabindex=\"0\" role=\"region\" aria-label=\"Category breakdown. This box scrolls sideways. The rest of the page does not.\"><table><caption>Category breakdown for the latest stored month. " + esc(CONTRIB) + ". " + linkUrls(cite) + "</caption><thead><tr><th scope=\"col\">Category</th><th scope=\"col\">What it is</th><th scope=\"col\">Month</th><th scope=\"col\">Year</th><th scope=\"col\">Weight</th><th scope=\"col\">Approx. contribution</th><th scope=\"col\">Source</th></tr></thead><tbody>" + body + "</tbody></table></div>";
   }
   function goldTable(rows) {
     var body = (rows || []).map(function (r) {
-      var hour = r.hourlyAvailable && typeof r.plus1hPct === "number" ? pct2(r.plus1hPct) : "Hourly bars do not cover this release";
-      return "<tr><th scope=\"row\">" + esc(r.releaseUk || r.releaseAtUtc || "") + "</th><td>" + esc(r.referenceLabel || "") + "</td><td>" + esc(hour) + "</td><td>" + esc(typeof r.plus1dPct === "number" ? pct2(r.plus1dPct) : "not loaded yet") + "</td><td>" + esc(typeof r.plus5dPct === "number" ? pct2(r.plus5dPct) : "not loaded yet") + "</td><td>" + esc(r.anchorAtUtc || "") + "</td><td>" + esc(r.plus1hAtUtc || "") + "</td></tr>";
+      var hour = r.hourlyAvailable && typeof r.plus1hPct === "number" ? pct2(r.plus1hPct) + (r.hourLabel ? " (" + r.hourLabel + ")" : "") : (r.hourMessage || "Hourly bars do not cover this release");
+      var anchor = r.dayAnchorLabel === "prior session close" ? "prior session close" : (r.anchorUk || r.dayAnchorLabel || "");
+      var roll = r.rollNote ? " " + r.rollNote : "";
+      return "<tr><th scope=\"row\">" + esc(r.releaseUk || "") + "</th><td>" + esc(r.referenceLabel || "") + "</td><td>" + esc(hour) + "</td><td>" + esc(typeof r.plus1dPct === "number" ? pct2(r.plus1dPct) : "not loaded yet") + "</td><td>" + esc(typeof r.plus5dPct === "number" ? pct2(r.plus5dPct) : "not loaded yet") + "</td><td>" + esc(anchor) + esc(roll) + "</td></tr>";
     }).join("");
     if (!body) return miss("not loaded yet");
-    return "<div class=\"c103-scroll\" tabindex=\"0\" role=\"region\" aria-label=\"Gold futures after past CPI releases. This box scrolls sideways. The rest of the page does not.\"><table><caption>" + esc(GOLD) + ". Move from the last bar before 08:30 US Eastern. History only.</caption><thead><tr><th scope=\"col\">Release, UK time</th><th scope=\"col\">Reference month</th><th scope=\"col\">To +1 hour</th><th scope=\"col\">To +1 trading day</th><th scope=\"col\">To +5 trading days</th><th scope=\"col\">Anchor time</th><th scope=\"col\">+1 hour bar end</th></tr></thead><tbody>" + body + "</tbody></table></div>";
+    return "<div class=\"c103-scroll\" tabindex=\"0\" role=\"region\" aria-label=\"Gold futures after past CPI releases. This box scrolls sideways. The rest of the page does not.\"><table><caption>" + esc(GOLD) + ". The day moves start from the prior session close. The intraday label is the hourly bar window in US Eastern. History only.</caption><thead><tr><th scope=\"col\">Release, UK time</th><th scope=\"col\">Reference month</th><th scope=\"col\">Intraday window</th><th scope=\"col\">To +1 trading day</th><th scope=\"col\">To +5 trading days</th><th scope=\"col\">Day anchor</th></tr></thead><tbody>" + body + "</tbody></table></div>";
   }
   function render(model) {
     model = model || {};
@@ -98,7 +114,7 @@
       card("Core, month", figure(c, "mom")),
       card("Core, year", figure(c, "yoy"))
     ].join("") + "</div>";
-    var chart = "<section class=\"c103-chart\" aria-labelledby=\"c103-trend\"><h2 id=\"c103-trend\">24-month trend</h2><p>Year change in headline and core. Each point is a stored BLS month, not a forecast.</p><p id=\"c103-read\" class=\"c103-k\">The table under the chart lists the same numbers.</p><div id=\"c103-live\" class=\"c103-live\" aria-live=\"polite\"></div><canvas id=\"c103-canvas\" tabindex=\"0\" role=\"img\" aria-label=\"Headline and core year change over the last 24 stored months\" aria-describedby=\"c103-read\"></canvas>" + trendTable(model.trend) + "</section>";
+    var chart = "<section class=\"c103-chart\" aria-labelledby=\"c103-trend\"><h2 id=\"c103-trend\">24-month trend</h2><p>Year change in headline and core. Each point is a stored BLS month, not a forecast.</p><ul class=\"c103-legend\"><li><span class=\"c103-swatch\" aria-hidden=\"true\"></span> Headline, solid</li><li><span class=\"c103-swatch c103-swatch-core\" aria-hidden=\"true\"></span> Core, dashed</li></ul><p id=\"c103-read\" class=\"c103-k\">The table under the chart lists the same numbers.</p><div id=\"c103-live\" class=\"c103-live\" aria-live=\"polite\"></div><canvas id=\"c103-canvas\" tabindex=\"0\" role=\"img\" aria-label=\"Headline and core year change over the last 24 stored months. Headline is the solid line. Core is the dashed line.\" aria-describedby=\"c103-read\"></canvas>" + trendTable(model.trend) + "</section>";
     var archive = "<section aria-labelledby=\"c103-arch\"><h2 id=\"c103-arch\">Archive</h2><p>Every month in the stored BLS response, newest first. Built from the index levels, not typed in.</p>" + archiveTable(model.archive) + "</section>";
     var premium = "";
     if (model.access === "premium") {
@@ -125,12 +141,11 @@
     canvas.height = Math.max(1, Math.floor(h * dpr));
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    var ink = cssColor("--ink", "#1b1b1b");
-    var paper = cssColor("--paper", "#fbfaf7");
-    var muted = cssColor("--ink-3", "#5c6570");
-    var rule = cssColor("--rule", "rgba(0,0,0,.14)");
-    var a = cssColor("--gold", "#1f3a5f");
-    var b = cssColor("--pos", "#2f6b47");
+    var ink = cssColor("--ink", "#16171A");
+    var paper = cssColor("--paper", "#EFEEE9");
+    var rule = cssColor("--rule", "rgba(22,23,26,.14)");
+    var a = cssColor("--ink", "#16171A");
+    var b = cssColor("--pos", "#1F6B4B");
     ctx.fillStyle = paper;
     ctx.fillRect(0, 0, w, h);
     if (!rows.length) {
@@ -151,7 +166,7 @@
     function y(v) { return padT + (max - v) / (max - min) * (h - padT - padB); }
     function x(i) { return padL + (rows.length === 1 ? 0 : i * (w - padL - padR) / (rows.length - 1)); }
     ctx.strokeStyle = rule;
-    ctx.fillStyle = muted;
+    ctx.fillStyle = ink;
     ctx.font = "14px sans-serif";
     ctx.beginPath();
     ctx.moveTo(padL, y(0));
@@ -159,9 +174,10 @@
     ctx.stroke();
     ctx.fillText(num(max, 1), 2, y(max) + 4);
     ctx.fillText(num(min, 1), 2, y(min));
-    function line(key, color) {
+    function line(key, color, dash) {
       ctx.strokeStyle = color;
       ctx.lineWidth = 1.6;
+      ctx.setLineDash(dash || []);
       ctx.beginPath();
       var started = false;
       rows.forEach(function (r, i) {
@@ -171,9 +187,10 @@
       });
       ctx.stroke();
     }
-    line("headlineYoy", a);
-    line("coreYoy", b);
-    ctx.fillStyle = muted;
+    line("headlineYoy", a, []);
+    line("coreYoy", b, [5, 4]);
+    ctx.setLineDash([]);
+    ctx.fillStyle = ink;
     ctx.fillText(rows[0].period || "", padL, h - 6);
     var right = rows[rows.length - 1].period || "";
     ctx.fillText(right, Math.max(padL, w - padR - 72), h - 6);
@@ -213,7 +230,11 @@
           method: "POST",
           headers: { "Content-Type": "application/json", Accept: "application/json" },
           body: JSON.stringify({ releaseKey: key })
-        }).then(function () {
+        }).then(function (r) {
+          if (!r || !r.ok) return null;
+          return r.json();
+        }).then(function (body) {
+          if (!body || body.ok !== true) return;
           var box = btn.closest(".c103-banner");
           if (box) box.remove();
         }).catch(function () {});
@@ -268,8 +289,8 @@
       }).then(function (model) {
         clearTimeout(timer);
         show(model);
-        if (attempt === 0 && model && model.cacheState === "cold") {
-          setTimeout(function () { if (ctrl && ctrl.signal && ctrl.signal.aborted) return; pull(1); }, 1500);
+        if (attempt < 2 && model && model.cacheState === "cold") {
+          setTimeout(function () { if (ctrl && ctrl.signal && ctrl.signal.aborted) return; pull(attempt + 1); }, attempt === 0 ? 1500 : 3000);
         }
       }).catch(function () {
         clearTimeout(timer);
