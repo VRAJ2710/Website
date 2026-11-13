@@ -258,7 +258,7 @@ test("patch.py keeps the prefix bytes and leaves one r6p attach log", () => {
   assert.equal(check.status, 0, check.stderr);
 });
 
-test("deploy.sh bytes match EXPECTED_SHA256 and the r6o root md5s", () => {
+test("deploy.sh bytes match EXPECTED_SHA256 and the current dev (b0e7cd7) root md5s", () => {
   const spec = fs.readFileSync(path.join(dir, "EXPECTED_SHA256"), "utf8");
   const sha = (spec.match(/sha256 ([a-f0-9]{64})/) || [])[1];
   const bytes = Number((spec.match(/bytes (\d+)/) || [])[1]);
@@ -266,9 +266,11 @@ test("deploy.sh bytes match EXPECTED_SHA256 and the r6o root md5s", () => {
   assert.equal(buf.length, bytes);
   assert.equal(crypto.createHash("sha256").update(buf).digest("hex"), sha);
   const text = buf.toString("utf8");
-  assert.match(text, /7e54c7c211dc81b68de5de5b61c52708756b462082529f55a825d358d23cfbef/);
-  assert.match(text, /84b408c7c03c9f3361051a93420836c3/);
-  assert.match(text, /6d35ef4436adf7b08496c5599c17681f/);
+  assert.match(text, /261655cc8637949842b6536322696748ecc466a3f9d04684d97e683e6dcce66b/);
+  assert.match(text, /3e6730cede4c0368d1dcbdc543c81d27/);
+  assert.match(text, /f2d33993e4092477ac4f77a23769f650/);
+  assert.match(text, /b5a35a7887f1ca8e5fbbcf87de03c866/);
+  assert.match(text, /PREFIX_BYTES=2326795/);
   assert.match(text, /bak-chat102r6p/);
   assert.match(text, /\[c102r6p\] scrub attached|chat102r6p/);
 });

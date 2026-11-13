@@ -8,4 +8,10 @@ This installer replaces only the last-write scrub. The prefix sha is unchanged. 
 
 Does not start the server, npm, git, or republish. No new secrets, tables, timers, or paid feeds.
 
-Base: current dev r6o. Agent bc-aa734e0e's r6p was not on GitHub when this was built, so the guards are the r6o app/index md5s, the prefix sha, and the single r6o attach log.
+Base: current Replit dev at b0e7cd7 (after r6o). Guards:
+
+- server.js md5 `b5a35a7887f1ca8e5fbbcf87de03c866` (mismatch refuses and leaves files untouched)
+- app.js md5 `3e6730cede4c0368d1dcbdc543c81d27`
+- index.html md5 `f2d33993e4092477ac4f77a23769f650`
+- prefix sha `261655cc8637949842b6536322696748ecc466a3f9d04684d97e683e6dcce66b` (2,326,795 bytes)
+- NEW_L1 and MARKER unchanged; tag remains chat102r6p
