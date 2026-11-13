@@ -1,0 +1,486 @@
+// chat102r6c last-write scrub. Append-only. Symbol fields stay machine-readable.
+// chat102r6h: quote routes, FRED reader labels, gold/silver asOfUk, slim install bar.
+// chat102r6i: desk-quotes vendor names, scenario copy, terminal axis labels.
+// chat102r6j: scenario source sentence and nothing else in this block.
+// chat102r6o: install bar, UK time, glance vendor, plain Gold labels.
+// chat102r6n: hold the learn breadcrumb. Header, scenario, FRED and length fixes stay.
+// chat102r6l: complete HTML. chat97 measures Content-Length, then this scrub used to lengthen the body,
+// so Node cut every r2 page inside the install script ("var d=document.ge"). Rewrite runs in
+// c97Transform before that measurement, and again on res.write for the chunked shell.
+// chat102r6p: Terminal previous close is the last completed daily session, never a multi-day chartPreviousClose.
+function c102r6pYmd(ms, tz) {
+  if (typeof c102Ymd === "function") return c102Ymd(ms, tz);
+  try {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(ms));
+  } catch (eYmd) { return ""; }
+}
+function c102r6pUkDay(isoDay) {
+  var ms = Date.parse(String(isoDay) + "T12:00:00Z");
+  if (!isFinite(ms)) return "";
+  try {
+    return new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", weekday: "short", day: "numeric", month: "short" }).format(new Date(ms));
+  } catch (eUk) { return String(isoDay); }
+}
+function c102r6pTz(meta) {
+  var tz = (meta && (meta.exchangeTimezoneName || meta.timezone)) || "America/New_York";
+  if (tz === "EST" || tz === "EDT" || tz === "CST" || tz === "CDT") return tz === "CST" || tz === "CDT" ? "America/Chicago" : "America/New_York";
+  return tz;
+}
+function c102r6pIsDaily(meta, timestamps) {
+  var gran = String((meta && (meta.dataGranularity || meta.interval)) || "");
+  if (gran === "1d") return true;
+  if (gran && /[hm]|1m|2m|5m|15m|30m|60m|90m|1h/.test(gran)) return false;
+  if (!Array.isArray(timestamps) || timestamps.length < 2) return false;
+  var i, d, ds = [];
+  for (i = 1; i < timestamps.length; i++) {
+    d = timestamps[i] - timestamps[i - 1];
+    if (typeof d === "number" && isFinite(d) && d > 0) ds.push(d);
+  }
+  if (!ds.length) return false;
+  ds.sort(function (a, b) { return a - b; });
+  return ds[Math.floor(ds.length / 2)] >= 12 * 3600;
+}
+function c102r6pSessionPrev(payload) {
+  var result = payload && payload.chart && Array.isArray(payload.chart.result) ? payload.chart.result[0] : null;
+  var meta = result && result.meta;
+  if (!meta || typeof meta.regularMarketTime !== "number" || !isFinite(meta.regularMarketTime)) return null;
+  var ts = Array.isArray(result.timestamp) ? result.timestamp : [];
+  if (!c102r6pIsDaily(meta, ts)) return null;
+  var quote = (result.indicators && result.indicators.quote && result.indicators.quote[0]) || {};
+  var closes = quote.close || [];
+  var tz = c102r6pTz(meta);
+  var session = c102r6pYmd(meta.regularMarketTime * 1000, tz);
+  if (!session) return null;
+  var i, close, day, prior = null;
+  for (i = 0; i < ts.length; i++) {
+    close = closes[i];
+    if (typeof close !== "number" || !isFinite(close) || typeof ts[i] !== "number" || !isFinite(ts[i])) continue;
+    day = c102r6pYmd(ts[i] * 1000, tz);
+    if (!day || day >= session) continue;
+    prior = { prev: close, prevAsOf: day, prevAsOfUk: c102r6pUkDay(day) };
+  }
+  return prior;
+}
+function c102r6pYahooQuote(payload, expect) {
+  var row = c102r6pYahooQuote.orig(payload, expect);
+  try {
+    if (!row || (row.status !== "ok" && row.status !== "partial")) return row;
+    var fix = c102r6pSessionPrev(payload);
+    if (!fix || typeof fix.prev !== "number" || !isFinite(fix.prev)) return row;
+    row.previousClose = fix.prev;
+    row.prevAsOf = fix.prevAsOf;
+    row.prevAsOfUk = fix.prevAsOfUk;
+    if (typeof row.price === "number" && isFinite(row.price)) {
+      row.change = Math.round((row.price - fix.prev) * 1e6) / 1e6;
+      row.status = "ok";
+      row.message = "";
+    }
+  } catch (eFix) {}
+  return row;
+}
+function c102r6pInstallQuote() {
+  if (typeof c102YahooQuote !== "function" || c102YahooQuote.__c102r6p) return;
+  c102r6pYahooQuote.orig = c102YahooQuote;
+  c102r6pYahooQuote.__c102r6p = 1;
+  c102YahooQuote = c102r6pYahooQuote;
+}
+
+(function () {
+  c102r6pInstallQuote();
+  var SOURCE_LABEL = {
+    "gold-api-spot-proxy": "gold-api.com spot price",
+    "gold-api-spot-proxy-browser": "gold-api.com spot price",
+    "dxy-fx-computed": "Dispatch FX basket (our calculation from Yahoo Finance FX rates)"
+  };
+  var QUOTE_PATH = /\/api\/(?:desk-quotes|market-reference-quotes|yahoo-quote|real-yield|eia-spot|crypto-snapshot|session-summary|c96\/gold-spot|c97\/dgs10|c100b\/gold-change|c101f\/rates|c102\/|ext-hours|twelve-data-quote|spot-energy)(?:[\/?#]|$)/;
+  var PIPE_SOURCE = /GC=F\|DX-Y\.NYB\|\^TNX/;
+  var YAHOO_DESK = /Yahoo Finance \((?:GC=F|DX-Y\.NYB|\^TNX)\)/;
+  var MACHINE_SOURCE = /^(?:gold-api-spot-proxy(?:-browser)?|dxy-fx-computed|dxy-computed|frankfurter-ecb|open-exchange-rate-api)$/;
+
+  function ukStamp(iso) {
+    var ms = Date.parse(iso);
+    if (!isFinite(ms)) return iso;
+    try {
+      return new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Europe/London",
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23"
+      }).format(new Date(ms)) + " UK";
+    } catch (e) { return iso; }
+  }
+  function plainR6d(s) {
+    var t = String(s);
+    t = t.replace(/Gold futures \(GC=F, delayed (\d+) min\)/g, "Gold futures (COMEX, front month), delayed $1 min");
+    t = t.replace(/gold futures \(GC=F\)/g, "gold futures (COMEX, front month)");
+    t = t.replace(/\(GC=F, delayed (\d+) min\)/g, "(COMEX, front month), delayed $1 min");
+    t = t.replace(/\(GC=F\)/g, "(COMEX, front month)");
+    t = t.replace(/US Dollar Index \(ICE, Yahoo DX-Y\.NYB\)/g, "US Dollar Index (ICE), Yahoo Finance");
+    t = t.replace(/Yahoo DX-Y\.NYB unavailable; this is the Dispatch FX basket/g, "Yahoo's ICE dollar index was unavailable; this is the Dispatch FX basket");
+    t = t.replace(/\bGC=F\b/g, "COMEX gold futures, front month");
+    t = t.replace(/Yahoo Finance \(\^TNX,\s*/g, "Yahoo Finance (");
+    t = t.replace(/\(\^TNX,\s*/g, "(");
+    t = t.replace(/\^TNX\b/g, "the US 10-year yield");
+    t = t.replace(/Yahoo DX-Y\.NYB/g, "ICE");
+    t = t.replace(/\bDX-Y\.NYB\b/g, "the ICE dollar index");
+    t = t.replace(/\^VIX\b/g, "the VIX");
+    t = t.replace(/\^GSPC\b/g, "the S&P 500");
+    t = t.replace(/\bCL=F\b/g, "WTI crude futures");
+    t = t.replace(/\bBTC-USD\b/g, "Bitcoin");
+    t = t.replace(/\b([A-Z]{3})([A-Z]{3})=X\b/g, "$1/$2");
+    t = t.replace(/\b([A-Z]{3})=X\b/g, "USD/$1");
+    t = t.replace(/Gold futures \(gold futures, delayed (\d+) min\)/gi, "Gold futures (COMEX, front month), delayed $1 min");
+    t = t.replace(/Gold futures \(COMEX gold futures, front month, delayed (\d+) min\)/g, "Gold futures (COMEX, front month), delayed $1 min");
+    t = t.replace(/US Dollar Index \(ICE, Yahoo the ICE dollar index\)/g, "US Dollar Index (ICE), Yahoo Finance");
+    t = t.replace(/US Dollar Index \(ICE, ICE\)/g, "US Dollar Index (ICE), Yahoo Finance");
+    t = t.replace(/Yahoo the ICE dollar index unavailable; this is the Dispatch FX basket/g, "Yahoo's ICE dollar index was unavailable; this is the Dispatch FX basket");
+    t = t.replace(/\(\s*,\s*/g, "(").replace(/\(\s*\)/g, "").replace(/ {2,}/g, " ").trim();
+    return t;
+  }
+  function plainFred(s) {
+    var t = String(s);
+    t = t.replace(/US Treasury via FRED \(DFII10\)(?:, [^.]*)?/g, "FRED, US 10-year real yield (TIPS)");
+    t = t.replace(/US Treasury via FRED \(DGS10\)(?:, [^.]*)?/g, "FRED, US 10-year Treasury yield");
+    t = t.replace(/\bDFII10\b/g, "US 10-year real yield (TIPS)");
+    t = t.replace(/\bDGS10\b/g, "US 10-year Treasury yield");
+    t = t.replace(/\bCPIAUCSL\b/g, "US CPI");
+    t = t.replace(/\bCPILFESL\b/g, "US core CPI");
+    t = t.replace(/\bPCEPI\b/g, "US PCE price index");
+    t = t.replace(/\bPAYEMS\b/g, "US nonfarm payrolls");
+    return t;
+  }
+  function fredSource(s) {
+    var t = String(s);
+    if (/\bDFII10\b/.test(t) && /\bDGS10\b/.test(t)) return plainFred(t);
+    if (/\bDFII10\b/.test(t)) return "FRED, US 10-year real yield (TIPS)";
+    if (/\bDGS10\b/.test(t)) return "FRED, US 10-year Treasury yield";
+    return null;
+  }
+  function plainProse(s) {
+    var t = String(s).replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z/g, function (iso) { return ukStamp(iso); });
+    t = plainR6d(t);
+    t = plainFred(t);
+    t = t.replace(/Yahoo Finance \(the ICE dollar index\)/g, "Yahoo Finance (ICE US Dollar Index)");
+    t = t.replace(/gold futures \(gold futures\)/gi, "gold futures (COMEX, front month)");
+    t = t.replace(/(gold futures \(COMEX, front month\)) -(\d)/gi, "$1 −$2");
+    t = t.replace(/Gold futures \(COMEX, front month\), delayed (\d+) min/g, "Gold futures (COMEX, front month, delayed $1 min)");
+    t = t.replace(/\bSI=F\b/g, "COMEX silver futures");
+    t = t.replace(/\bgold-api-spot-proxy-browser\b/g, "gold-api.com spot price");
+    t = t.replace(/\bgold-api-spot-proxy\b/g, "gold-api.com spot price");
+    t = t.replace(/\bdxy-fx-computed\b/g, "Dispatch FX basket");
+    return t;
+  }
+  function r6dReads(key) {
+    return /label|note|text|source|name|narrative|method|basis|title|summary|plain|kicker|reason/i.test(String(key || ""));
+  }
+  function proseKey(key) {
+    var k = String(key || "");
+    return /^(note|cacheNote|statusNote|text|label|detail|message|caption|description)$/.test(k) || /(?:Note|Text|Label)$/.test(k);
+  }
+  function quoteOrTerminal(body) {
+    if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+    if (body.XAU || body.US10Y || body.DXY) return true;
+    if (body.spot || body.cacheState === "cold" || body.cacheState === "fresh" || body.cacheState === "stale" || body.cacheNote || body.generatedAtUtc) return true;
+    return false;
+  }
+  function quoteBearing(body) {
+    if (!body || typeof body !== "object" || Array.isArray(body)) return false;
+    if (quoteOrTerminal(body)) return true;
+    if (body.quotes && typeof body.quotes === "object") return true;
+    if (body.displayChange || body.displayChangeLabel) return true;
+    if (body.ratio && typeof body.ratio === "object" && body.ratio.asOfUtc) return true;
+    if (body.series && /^(DGS10|DFII10)$/.test(String(body.series))) return true;
+    if ((body.price != null || body.p != null || body.value != null) && (body.symbol || body.label || body.source || body.displayChange)) return true;
+    var keys = Object.keys(body);
+    for (var i = 0; i < keys.length; i++) {
+      if (/^(XAU|DXY|TNX|US10Y|SLV|WTI|VIX|BTC|ETH|GBPUSD|EURUSD)$/.test(keys[i]) && body[keys[i]] && typeof body[keys[i]] === "object") return true;
+    }
+    return false;
+  }
+  function yahooDeskSource(s) {
+    return YAHOO_DESK.test(String(s || "")) || PIPE_SOURCE.test(String(s || ""));
+  }
+  function machineSource(s) {
+    return MACHINE_SOURCE.test(String(s || ""));
+  }
+  function deskBody(body) {
+    return !!(body && typeof body === "object" && !Array.isArray(body) && body.quotes && typeof body.quotes === "object" && !body.generatedAtUtc && !body.XAU && !body.US10Y);
+  }
+  function deskInstrument(obj) {
+    var sym = "";
+    var src = "";
+    if (obj && typeof obj === "object") {
+      sym = String(obj.symbol || obj.ticker || (obj.displayChange && obj.displayChange.symbol) || "");
+      src = String(obj.source || "");
+    }
+    var blob = sym + " " + src;
+    if (PIPE_SOURCE.test(src)) return "Yahoo Finance";
+    if (/GC=F/.test(blob)) return "Gold futures (COMEX, front month), Yahoo Finance";
+    if (/DX-Y\.NYB/.test(blob)) return "ICE US Dollar Index, Yahoo Finance";
+    if (/\^TNX/.test(blob) || sym === "TNX" || sym === "US10Y") return "CBOE 10-year Treasury yield index, Yahoo Finance";
+    return "Yahoo Finance";
+  }
+  function ratioObject(obj, key) {
+    if (!obj || typeof obj !== "object" || !obj.asOfUtc) return false;
+    if (key === "ratio") return true;
+    return !!(obj.numerator && obj.denominator && obj.value != null);
+  }
+  function scrub(value, key, legacy, desk) {
+    if (typeof value === "string") {
+      if (proseKey(key)) {
+        var raw = fredText(String(value));
+        if (raw.indexOf("FRED series DFII10") >= 0 || raw.indexOf("FRED series DTWEXBGS") >= 0) raw = plainScenario(raw);
+        return plainProse(raw);
+      }
+      if (key === "source") {
+        var fred = fredSource(value);
+        if (fred) return fred;
+        if (desk && yahooDeskSource(value) && !machineSource(value)) return "Yahoo Finance";
+        if (legacy) return plainR6d(value);
+        return value;
+      }
+      if (legacy && r6dReads(key)) return plainR6d(value);
+      return value;
+    }
+    if (Array.isArray(value)) return value.map(function (item) { return scrub(item, key, legacy, desk); });
+    if (!value || typeof value !== "object") return value;
+    var out = {};
+    Object.keys(value).forEach(function (k) { out[k] = scrub(value[k], k, legacy, desk); });
+    if (key === "DXY") out.sourceLabel = "Yahoo Finance, ICE US Dollar Index";
+    else if (key === "US10Y") {
+      out.sourceLabel = "Yahoo Finance, CBOE 10-year Treasury yield index";
+      if (typeof value.note === "string" && /percent|Show the %/i.test(value.note)) out.note = "Yield in percent.";
+    } else if (typeof value.source === "string" && SOURCE_LABEL[value.source] && out.sourceLabel == null) {
+      out.sourceLabel = SOURCE_LABEL[value.source];
+    }
+    if (typeof value.source === "string" && PIPE_SOURCE.test(value.source) && !desk) out.sourceLabel = "Yahoo Finance";
+    if (desk && typeof value.source === "string" && yahooDeskSource(value.source) && !machineSource(value.source)) out.sourceLabel = deskInstrument(value);
+    if (ratioObject(value, key) && !out.asOfUk) out.asOfUk = ukStamp(value.asOfUtc);
+    return out;
+  }
+  function interesting(text) {
+    return text.indexOf("displayChange") >= 0 || text.indexOf("US10Y") >= 0 || text.indexOf("\"spot\"") >= 0 || text.indexOf("cacheState") >= 0 || text.indexOf("cacheNote") >= 0 || text.indexOf("XAU") >= 0 || text.indexOf("fallbackReason") >= 0 || text.indexOf("generatedAtUtc") >= 0 || text.indexOf("DGS10") >= 0 || text.indexOf("DFII10") >= 0 || text.indexOf("\"quotes\"") >= 0 || text.indexOf("GC=F") >= 0 || text.indexOf("asOfUtc") >= 0 || text.indexOf("desk-quotes") >= 0;
+  }
+  function pathQuote(res) {
+    var url = "";
+    try { url = (res && res.req && res.req.url) || ""; } catch (e) { url = ""; }
+    return QUOTE_PATH.test(String(url));
+  }
+  function plainScenario(t) {
+    var s = String(t);
+    s = s.replace(/FRED series DFII10/g, "10-year real yield (TIPS), FRED");
+    s = s.replace(/FRED series DTWEXBGS(?: \([^)]*\))?/g, "broad trade-weighted US dollar index, FRED");
+    s = s.replace(/real yield,\s*(?:<[^>]*>\s*)*10-year real yield \(TIPS\), FRED(?:\s*<\/a>)?/g, "real yield: 10-year real yield (TIPS), FRED");
+    s = s.replace(/dollar,\s*(?:<[^>]*>\s*)*broad trade-weighted US dollar index, FRED(?:\s*<\/a>)?/g, "dollar: broad trade-weighted US dollar index, FRED");
+    return s;
+  }
+  var HEADER_CSS = '<style id="c102r6o-header">@media (min-width:1024px) and (max-width:1440px){header.site .wrap,header.site .nav,header.site form.c97tg{min-width:0;max-width:100%;box-sizing:border-box}header.site .wrap{display:flex;flex-wrap:wrap;height:auto}header.site .nav{display:flex;flex-wrap:wrap;flex:1 1 auto}header.site form.c97tg{flex:0 1 auto}header.site .nav a{white-space:normal}html.c97-dark header.site .wrap,html.c97-system header.site .wrap{display:flex;flex-wrap:wrap;height:auto;min-width:0}html.c97-dark header.site .nav,html.c97-system header.site .nav{display:flex;flex-wrap:wrap;flex:1 1 auto;min-width:0}html.c97-dark header.site form.c97tg,html.c97-system header.site form.c97tg{min-width:0;max-width:100%;flex:0 1 auto}html.c97-dark header.site .nav a,html.c97-system header.site .nav a{white-space:normal}}</style>';
+  var SCEN_JS = '<script id="c102r6o-scen">(function(){var Y="FRED "+"series "+"DFII10",D="FRED "+"series "+"DTWEXBGS";function fix(s){var t=String(s).split(Y).join("10-year real yield (TIPS), FRED").split(D).join("broad trade-weighted US dollar index, FRED");t=t.replace(/ \\(Federal Reserve broad dollar index\\)/g,"");t=t.replace(/real yield,\\s*10-year real yield \\(TIPS\\), FRED/g,"real yield: 10-year real yield (TIPS), FRED");t=t.replace(/dollar,\\s*broad trade-weighted US dollar index, FRED/g,"dollar: broad trade-weighted US dollar index, FRED");return t}function walk(n){if(!n||n.nodeName==="SCRIPT"||n.nodeName==="STYLE")return;if(n.nodeType===3){var v=fix(n.nodeValue);if(v!==n.nodeValue)n.nodeValue=v;return}var c=n.childNodes,i;for(i=0;i<c.length;i++)walk(c[i])}function go(){walk(document.body);var all=document.querySelectorAll("p,li,span");var i;for(i=0;i<all.length;i++){var el=all[i];if(el.querySelector&&el.querySelector("p,div,li"))continue;var raw=el.textContent||"";var next=fix(raw);if(next!==raw)el.textContent=next}}if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",go);else go();try{new MutationObserver(go).observe(document.documentElement,{subtree:true,childList:true,characterData:true})}catch(e){}})();</script>';
+  function place(html, payload, id) {
+    if (!payload || html.indexOf(id) >= 0) return html;
+    if (html.indexOf("</head>") >= 0) return html.replace("</head>", payload + "</head>");
+    if (html.indexOf("</body>") >= 0) return html.replace("</body>", payload + "</body>");
+    return html;
+  }
+  function dropCrumb(html) {
+    return String(html)
+      .replace(/<script id="c102r6[lm]-crumb-js">[\s\S]*?<\/script>/g, "")
+      .replace(/<nav class="c102r6[lm]-crumb"[\s\S]*?<\/nav>/g, "");
+  }
+  function headerFit(html) {
+    if (html.indexOf("c102r6o-header") >= 0) return html;
+    if (html.indexOf("</body>") >= 0) return html.replace("</body>", HEADER_CSS + "</body>");
+    if (html.indexOf("</head>") >= 0) return html.replace("</head>", HEADER_CSS + "</head>");
+    return html;
+  }
+  var AXIS_OLD = "    var left = bars[0].sessionDate;\n    var right = bars[bars.length - 1].sessionDate;\n    ctx.fillText(left, padL, h - 8);";
+  var AXIS_NEW = "    function c102AxisDay(iso) {\n      var ms = Date.parse(String(iso || \"\") + \"T12:00:00Z\");\n      if (!isFinite(ms)) return iso;\n      try {\n        return new Intl.DateTimeFormat(\"en-GB\", { timeZone: \"Europe/London\", weekday: \"short\", day: \"numeric\", month: \"short\" }).format(new Date(ms));\n      } catch (eAxis) { return iso; }\n    }\n    var left = c102AxisDay(bars[0].sessionDate);\n    var right = c102AxisDay(bars[bars.length - 1].sessionDate);\n    ctx.fillText(left, padL, h - 8);";
+  var FRED_NAME = { DGS10: "10-year Treasury yield, FRED", DFII10: "10-year real yield (TIPS), FRED", DTWEXBGS: "broad trade-weighted US dollar index, FRED", DGS2: "2-year Treasury yield, FRED", DGS30: "30-year Treasury yield, FRED", T10YIE: "10-year breakeven inflation, FRED", CPIAUCSL: "US CPI, FRED", CPILFESL: "US core CPI, FRED", PCEPI: "US PCE price index, FRED", PAYEMS: "US nonfarm payrolls, FRED", DFF: "federal funds rate, FRED", UNRATE: "US unemployment rate, FRED" };
+  function fredName(id) { return FRED_NAME[id] || "FRED"; }
+  function fredText(s) {
+    return String(s)
+      .replace(/US Treasury daily print via FRED \(([A-Z0-9]+)\)/g, function (_m, id) { return fredName(id); })
+      .replace(/US Treasury via FRED \(([A-Z0-9]+)\)(?:, [^.]*)?/g, function (_m, id) { return fredName(id); })
+      .replace(/FRED series ([A-Z0-9]+)(?: \([^)]*\))?/g, function (_m, id) { return fredName(id); })
+      .replace(/FRED \(([A-Z0-9]+)\)/g, function (_m, id) { return fredName(id); });
+  }
+  function fredVisible(html) {
+    return String(html).replace(/<script\b[\s\S]*?<\/script>|<style\b[\s\S]*?<\/style>|href\s*=\s*"[^"]*"|href\s*=\s*'[^']*'|title\s*=\s*"([^"]*)"|title\s*=\s*'([^']*)'|[^<]+/gi, function (m, t1, t2) {
+      if (/^<script\b/i.test(m) || /^<style\b/i.test(m) || /^href\s*=/i.test(m)) return m;
+      if (t1 != null) return 'title="' + fredText(t1).replace(/"/g, "&quot;") + '"';
+      if (t2 != null) return "title='" + fredText(t2).replace(/'/g, "&#39;") + "'";
+      return fredText(m);
+    });
+  }
+  var FRED_JS = '<script id="c102r6o-fred">(function(){var N={DGS10:"10-year Treasury yield, FRED",DFII10:"10-year real yield (TIPS), FRED",DTWEXBGS:"broad trade-weighted US dollar index, FRED",DGS2:"2-year Treasury yield, FRED",DGS30:"30-year Treasury yield, FRED",T10YIE:"10-year breakeven inflation, FRED",CPIAUCSL:"US CPI, FRED",CPILFESL:"US core CPI, FRED",PCEPI:"US PCE price index, FRED",PAYEMS:"US nonfarm payrolls, FRED",DFF:"federal funds rate, FRED",UNRATE:"US unemployment rate, FRED"};function name(id){return N[id]||"FRED"}function fix(s){return String(s).replace(/US Treasury daily print via FRED \\(([A-Z0-9]+)\\)/g,function(_m,id){return name(id)}).replace(/US Treasury via FRED \\(([A-Z0-9]+)\\)(?:, [^.]*)?/g,function(_m,id){return name(id)}).replace(/FRED series ([A-Z0-9]+)(?: \\([^)]*\\))?/g,function(_m,id){return name(id)}).replace(/FRED \\(([A-Z0-9]+)\\)/g,function(_m,id){return name(id)})}function walk(root){if(!root||!document.createTreeWalker)return;var tw=document.createTreeWalker(root,NodeFilter.SHOW_TEXT),n,list=[];while((n=tw.nextNode()))list.push(n);var i;for(i=0;i<list.length;i++){var node=list[i],p=node.parentNode;if(!p||/^(SCRIPT|STYLE|NOSCRIPT|TEXTAREA)$/.test(p.tagName||""))continue;var v=node.nodeValue,next=fix(v);if(next!==v)node.nodeValue=next}var els=root.querySelectorAll?root.querySelectorAll("[title]"):[],j;for(j=0;j<els.length;j++){if(/^(SCRIPT|STYLE)$/.test(els[j].tagName||""))continue;var t=els[j].getAttribute("title")||"",nt=fix(t);if(nt!==t)els[j].setAttribute("title",nt)}}function go(){try{if(document.body)walk(document.body)}catch(e){}}if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",go);else go();window.addEventListener("load",go);setTimeout(go,400);setTimeout(go,1500)})();</script>';
+  var INST_CSS = '<style id="c102r6o-inst">#c101-inst{left:0;right:0;max-width:100%;box-sizing:border-box;flex-wrap:wrap;max-height:none}#c101-inst span{min-width:0;white-space:normal}body:has(#c101-inst){padding-bottom:72px}@media (max-width:390px){#c101-inst{padding:6px 8px;gap:6px;font-size:12px;overflow:hidden}#c101-inst button{min-width:0;flex:1 1 auto}body:has(#c101-inst){padding-bottom:120px}}</style>';
+  var INST_JS = '<script id="c102r6o-fix">(function(){function fit(){var d=document.getElementById("c101-inst");if(!document.body)return;document.body.style.paddingBottom=d?((d.offsetHeight||72)+12)+"px":""}function boot(){if(!document.body)return;fit();try{new MutationObserver(fit).observe(document.body,{childList:true})}catch(e){}window.addEventListener("resize",fit)}function uk(s){return String(s).replace(/\\bUK UK\\b/g,"UK")}function gold(s){return String(s).replace(/\\bGC=F\\b/g,"Gold").replace(/\\bXAU\\b/g,"Gold")}function pass(){if(!document.body)return;var tw=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT),n,list=[];while((n=tw.nextNode()))list.push(n);var i;for(i=0;i<list.length;i++){var node=list[i],p=node.parentNode;if(!p||/^(SCRIPT|STYLE|NOSCRIPT|TEXTAREA)$/.test(p.tagName||""))continue;var v=node.nodeValue,next=uk(v);if(p.closest&&p.closest(".cap-nums,.cap-lbl,.news-px,.news-act"))next=gold(next);if(next!==v)node.nodeValue=next}}if(document.body)boot();else document.addEventListener("DOMContentLoaded",boot);if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",pass);else pass();window.addEventListener("load",pass);setTimeout(pass,400)})();</script>';
+  function ukVisible(html) {
+    return String(html).replace(/<script\b[\s\S]*?<\/script>|<style\b[\s\S]*?<\/style>|href\s*=\s*"[^"]*"|href\s*=\s*'[^']*'|title\s*=\s*"([^"]*)"|title\s*=\s*'([^']*)'|[^<]+/gi, function (m, t1, t2) {
+      function uk(s) { return String(s).replace(/\bUK UK\b/g, "UK"); }
+      if (/^<script\b/i.test(m) || /^<style\b/i.test(m) || /^href\s*=/i.test(m)) return m;
+      if (t1 != null) return 'title="' + uk(t1).replace(/"/g, "&quot;") + '"';
+      if (t2 != null) return "title='" + uk(t2).replace(/'/g, "&#39;") + "'";
+      return uk(m);
+    });
+  }
+  function rewriteHtml(text, url) {
+    var t = plainScenario(text);
+    t = fredVisible(t);
+    t = ukVisible(t);
+    t = place(t, INST_CSS + INST_JS, "c102r6o-inst");
+    t = place(t, FRED_JS, "c102r6o-fred");
+    t = headerFit(t);
+    t = dropCrumb(t);
+    if (String(url || "").indexOf("/tools/scenario") >= 0 || t.indexOf("c101scen") >= 0 || t.indexOf("Model rebuilt") >= 0) {
+      t = place(t, SCEN_JS, "c102r6o-scen");
+    }
+    if (t.indexOf("FRED series DFII10") >= 0) t = t.replace(/>FRED series DFII10</g, ">10-year real yield (TIPS), FRED<");
+    if (t.indexOf("FRED series DTWEXBGS") >= 0) {
+      t = t.replace(/>FRED series DTWEXBGS \(Federal Reserve broad dollar index\)</g, ">Broad trade-weighted US dollar index, FRED<");
+      t = t.replace(/>FRED series DTWEXBGS</g, ">Broad trade-weighted US dollar index, FRED<");
+    }
+    if (t.indexOf(AXIS_OLD) >= 0) t = t.replace(AXIS_OLD, AXIS_NEW);
+    if (t.indexOf("c101-inst") < 0) return t;
+    var cssOld = "#c101-inst{position:fixed;left:12px;right:12px;bottom:12px;z-index:2147482000;max-width:560px;margin:0 auto;display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#fff;color:#1b1b1b;border:1px solid #c9c4b8;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:12px 14px;font:14px/1.45 Inter,system-ui,sans-serif}#c101-inst span{flex:1 1 220px}#c101-inst button{min-height:40px;padding:0 14px;border-radius:6px;font:600 14px Inter,system-ui,sans-serif;cursor:pointer}";
+    var cssNew = "#c101-inst{position:fixed;left:0;right:0;bottom:0;z-index:20;max-width:none;max-height:40px;margin:0;display:flex;flex-wrap:nowrap;gap:8px;align-items:center;background:#fff;color:#1b1b1b;border:0;border-top:1px solid #c9c4b8;border-radius:0;box-shadow:none;padding:4px 10px;font:13px/1.3 Inter,system-ui,sans-serif;overflow:hidden}#c101-inst span{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#c101-inst button{min-height:32px;padding:0 10px;border-radius:6px;font:600 13px Inter,system-ui,sans-serif;cursor:pointer}body:has(#c101-inst){padding-bottom:44px}";
+    if (t.indexOf(cssOld) >= 0) t = t.replace(cssOld, cssNew);
+    var whenOld = "if(!/[?&]source=pwa/.test(location.search))setTimeout(bar,4000)";
+    var whenNew = "if(!/[?&]source=pwa/.test(location.search)){var n=1;try{n=(+localStorage.getItem(\"c101-install-visits\")||0)+1;localStorage.setItem(\"c101-install-visits\",String(n))}catch(err){}if(n>=2)bar();else setTimeout(bar,30000)}";
+    if (t.indexOf(whenOld) >= 0) t = t.replace(whenOld, whenNew);
+    var guard = "if(!window.__c102r6hFetch){window.__c102r6hFetch=1;var _f=window.fetch;if(typeof _f===\"function\"){window.fetch=function(input,init){var u=\"\";try{u=typeof input===\"string\"?input:(input&&input.url)||\"\"}catch(e0){}if(String(u).indexOf(\"/api/c98/alerts\")>=0&&window._userSignedIn!==true){return Promise.resolve(new Response(\"\",{status:204}))}return _f.apply(this,arguments)}}}";
+    var mark = "window.__c101i=1;";
+    if (t.indexOf(mark) >= 0 && t.indexOf("__c102r6hFetch") < 0) t = t.replace(mark, mark + guard);
+    return t;
+  }
+  function proseOnly(value, key) {
+    if (typeof value === "string") {
+      if (!proseKey(key)) return value;
+      var raw = fredText(value);
+      if (raw.indexOf("FRED series DFII10") >= 0 || raw.indexOf("FRED series DTWEXBGS") >= 0) raw = plainScenario(raw);
+      return plainProse(raw);
+    }
+    if (Array.isArray(value)) return value.map(function (item) { return proseOnly(item, key); });
+    if (!value || typeof value !== "object") return value;
+    var out = {};
+    Object.keys(value).forEach(function (k) { out[k] = proseOnly(value[k], k); });
+    return out;
+  }
+  function emit(chunk, next) {
+    if (typeof chunk === "string") return next;
+    return Buffer.from(next);
+  }
+  function rewriteChunk(chunk, res) {
+    var text = null;
+    if (typeof chunk === "string") text = chunk;
+    else if (chunk && typeof Buffer !== "undefined" && Buffer.isBuffer(chunk)) text = chunk.toString("utf8");
+    if (!text) return chunk;
+    var pageUrl = "";
+    try { pageUrl = (res && res.req && res.req.url) || ""; } catch (ePage) { pageUrl = ""; }
+    var htmlish = text.charAt(0) === "<" || text.indexOf("<!doctype") >= 0 || text.indexOf("<html") >= 0 || text.indexOf("c101-inst-js") >= 0 || text.indexOf(AXIS_OLD) >= 0;
+    if (htmlish) {
+      var html = rewriteHtml(text, pageUrl);
+      if (html === text) return chunk;
+      return emit(chunk, html);
+    }
+    if (text.charAt(0) !== "{") return chunk;
+    var onQuote = pathQuote(res);
+    var forceProse = /FRED \([A-Z0-9]+\)|via FRED \(|FRED series [A-Z0-9]+/.test(text);
+    if (!onQuote && !interesting(text) && !forceProse) return chunk;
+    var obj;
+    try { obj = JSON.parse(text); } catch (e) { return chunk; }
+    if (!onQuote && !quoteBearing(obj) && forceProse) return emit(chunk, JSON.stringify(proseOnly(obj, "")));
+    if (!onQuote && !quoteBearing(obj)) return chunk;
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return chunk;
+    var url = "";
+    try { url = (res && res.req && res.req.url) || ""; } catch (eUrl) { url = ""; }
+    var desk = /\/api\/desk-quotes(?:[\/?#]|$)/.test(url) || (!/\/api\/market-reference-quotes/.test(url) && deskBody(obj));
+    var legacy = quoteOrTerminal(obj);
+    var next = JSON.stringify(scrub(obj, "", legacy, desk));
+    return emit(chunk, next);
+  }
+  try {
+    var attached = [];
+    if (typeof c97Transform === "function" && !c97Transform.__c102r6o) {
+      var prevTr = c97Transform;
+      var tr = function (html, req) {
+        var out = prevTr.apply(this, arguments);
+        try {
+          if (typeof out === "string") out = rewriteHtml(out, (req && req.url) || "");
+        } catch (eTr) { console.log("[c102r6p] scrub failed: " + (eTr && eTr.message || eTr)); }
+        return out;
+      };
+      tr.__c102r6o = 1;
+      c97Transform = tr;
+      attached.push("c97Transform");
+    }
+    if (typeof bb8oShape === "function" && !bb8oShape.__c102r6o) {
+      var prevShape = bb8oShape;
+      var shape = function () {
+        var out = prevShape.apply(this, arguments);
+        if (quoteBearing(out)) return scrub(out, "", quoteOrTerminal(out), deskBody(out));
+        return out;
+      };
+      shape.__c102r6o = 1;
+      bb8oShape = shape;
+      try { globalThis.bb8oShape = shape; } catch (e1) {}
+      attached.push("bb8oShape");
+    }
+    var http = null;
+    try { http = typeof require === "function" ? require("http") : null; } catch (e2) { http = null; }
+    var proto = http && http.ServerResponse && http.ServerResponse.prototype;
+    function byteLen(body) {
+      if (typeof body === "string") return Buffer.byteLength(body);
+      if (body && Buffer.isBuffer(body)) return body.length;
+      return null;
+    }
+    function syncLength(res, body) {
+      if (!res || res.headersSent) return;
+      var n = byteLen(body);
+      if (n == null || typeof res.setHeader !== "function") return;
+      try { res.setHeader("Content-Length", n); } catch (eLen) {}
+    }
+    function grownPast(res, before, after) {
+      if (before === after) return after;
+      if (!res || !res.headersSent) return after;
+      var cl = null;
+      try { cl = typeof res.getHeader === "function" ? res.getHeader("content-length") : null; } catch (eCl) { cl = null; }
+      if (cl == null) return after;
+      return before;
+    }
+    if (proto && typeof proto.write === "function" && !proto.write.__c102r6p) {
+      var write0 = proto.write;
+      var write = function (chunk, encoding, cb) {
+        var before = chunk;
+        try { chunk = rewriteChunk(chunk, this); } catch (e5) { console.log("[c102r6p] scrub failed: " + (e5 && e5.message || e5)); chunk = before; }
+        chunk = grownPast(this, before, chunk);
+        if (typeof encoding === "function") return write0.call(this, chunk, encoding);
+        if (encoding === undefined) return write0.call(this, chunk, cb);
+        return write0.call(this, chunk, encoding, cb);
+      };
+      write.__c102r6p = 1;
+      proto.write = write;
+      attached.push("res.write");
+    }
+    if (proto && typeof proto.end === "function" && !proto.end.__c102r6p) {
+      var end0 = proto.end;
+      var end = function (chunk, encoding, cb) {
+        try { chunk = rewriteChunk(chunk, this); } catch (e3) { console.log("[c102r6p] scrub failed: " + (e3 && e3.message || e3)); }
+        try { syncLength(this, chunk); } catch (e4) {}
+        if (typeof encoding === "function") return end0.call(this, chunk, encoding);
+        if (encoding === undefined) return end0.call(this, chunk, cb);
+        return end0.call(this, chunk, encoding, cb);
+      };
+      end.__c102r6p = 1;
+      proto.end = end;
+      attached.push("res.end");
+    }
+    if (!attached.length) throw new Error("neither bb8oShape nor res.end could be wrapped");
+    console.log("[c102r6p] scrub attached");
+  } catch (e) {
+    console.log("[c102r6p] scrub failed: " + (e && e.message || e));
+  }
+})();
