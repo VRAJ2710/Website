@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # deploy-chat102r6p: Terminal previous close is the last completed daily session.
-# Re-pinned to the current Replit dev root (b0e7cd7, after r6o). The payload is unchanged.
+# Re-pinned to the current Replit dev root (fef1da0). The payload is unchanged.
 # Does NOT start the server, npm, git, or republish. Does not change EXPECT_TAG.
 # Usage: bash deploy.sh [--dry-run] [--dir /path/to/project]
 set -u
@@ -8,13 +8,13 @@ set -u
 # Do not point this at the commit that only changes deploy.sh.
 PAYLOAD_COMMIT=85f68bc7386b444085545274688016b1059058f1
 BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/${PAYLOAD_COMMIT}/deploy-chat102r6p"
-# Current dev root at b0e7cd7 (post-r6o). app.js and index.html stay those bytes.
+# Current dev root at fef1da0. app.js and index.html stay those bytes.
 # server.js must be the full-file md5 below; a mismatch refuses and leaves files untouched.
-APP_MD5=3e6730cede4c0368d1dcbdc543c81d27
-INDEX_MD5=f2d33993e4092477ac4f77a23769f650
-SERVER_MD5=b5a35a7887f1ca8e5fbbcf87de03c866
-PREFIX_SHA=261655cc8637949842b6536322696748ecc466a3f9d04684d97e683e6dcce66b
-PREFIX_BYTES=2326795
+APP_MD5=d8ca8562df01bf88c68e4971752e602c
+INDEX_MD5=23e26d5287a773dadaf3fd2c40deb389
+SERVER_MD5=9c593e7ab7887a20ba876e938abca0fc
+PREFIX_SHA=8d29291995dacca242b934ccc5058afc5eb27cbae9d4ccbdc9383b4909a9f7ae
+PREFIX_BYTES=2332205
 NEW_L1='const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)'
 MARKER='// chat102r6c last-write scrub.'
 MANIFEST=(
@@ -69,7 +69,7 @@ if grep -q '\[c102r6p\] scrub attached' "$SERVER" && [ "$am" = "$APP_MD5" ] && [
   exit 0
 fi
 [ "$sm" = "$SERVER_MD5" ] || die "replace refused: root server.js md5 $sm is not the current dev server $SERVER_MD5"
-python3 - "$SERVER" "$MARKER" "$PREFIX_SHA" "$PREFIX_BYTES" << 'PY' || die "replace refused: server.js is not the current dev (b0e7cd7) root"
+python3 - "$SERVER" "$MARKER" "$PREFIX_SHA" "$PREFIX_BYTES" << 'PY' || die "replace refused: server.js is not the current dev (fef1da0) root"
 import pathlib, sys, hashlib
 server, marker, expect, expect_bytes = sys.argv[1:]
 text = pathlib.Path(server).read_text(encoding="utf-8")

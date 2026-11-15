@@ -8,10 +8,10 @@ This installer replaces only the last-write scrub. The prefix sha is unchanged. 
 
 Does not start the server, npm, git, or republish. No new secrets, tables, timers, or paid feeds.
 
-Base: current Replit dev at b0e7cd7 (after r6o). Guards:
+Base: current Replit dev at fef1da0. Guards:
 
-- server.js md5 `b5a35a7887f1ca8e5fbbcf87de03c866` (mismatch refuses and leaves files untouched)
-- app.js md5 `3e6730cede4c0368d1dcbdc543c81d27`
-- index.html md5 `f2d33993e4092477ac4f77a23769f650`
-- prefix sha `261655cc8637949842b6536322696748ecc466a3f9d04684d97e683e6dcce66b` (2,326,795 bytes)
+- server.js md5 `9c593e7ab7887a20ba876e938abca0fc` (mismatch refuses and leaves files untouched)
+- app.js md5 `d8ca8562df01bf88c68e4971752e602c`
+- index.html md5 `23e26d5287a773dadaf3fd2c40deb389`
+- prefix sha `8d29291995dacca242b934ccc5058afc5eb27cbae9d4ccbdc9383b4909a9f7ae` (2,332,205 bytes)
 - NEW_L1 and MARKER unchanged; tag remains chat102r6p
