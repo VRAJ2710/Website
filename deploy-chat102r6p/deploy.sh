@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # deploy-chat102r6p: Terminal previous close is the last completed daily session.
-# Re-pinned to the current Replit dev root (fef1da0). The payload is unchanged.
+# Re-pinned after v3 home preview blocks (chat105v3home / chat105v3home2)
+# were inserted before the scrub marker. The payload is unchanged.
 # Does NOT start the server, npm, git, or republish. Does not change EXPECT_TAG.
 # Usage: bash deploy.sh [--dry-run] [--dir /path/to/project]
 set -u
@@ -8,13 +9,14 @@ set -u
 # Do not point this at the commit that only changes deploy.sh.
 PAYLOAD_COMMIT=85f68bc7386b444085545274688016b1059058f1
 BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/${PAYLOAD_COMMIT}/deploy-chat102r6p"
-# Current dev root at fef1da0. app.js and index.html stay those bytes.
-# server.js must be the full-file md5 below; a mismatch refuses and leaves files untouched.
+# app.js and index.html stay the current dev bytes. server.js must match the
+# full-file md5 below; a mismatch refuses and leaves files untouched.
+# The r6o scrub is identified by MARKER-to-EOF size and sha256, not a fixed prefix.
 APP_MD5=d8ca8562df01bf88c68e4971752e602c
 INDEX_MD5=23e26d5287a773dadaf3fd2c40deb389
-SERVER_MD5=9c593e7ab7887a20ba876e938abca0fc
-PREFIX_SHA=8d29291995dacca242b934ccc5058afc5eb27cbae9d4ccbdc9383b4909a9f7ae
-PREFIX_BYTES=2332205
+SERVER_MD5=7a3aeaf7a9e317ce888e28e4b9d4461a
+SCRUB_SHA=e45d46bf24eca1e3585739491058fc7470b7faffd7ba54600764f90594d63cbc
+SCRUB_BYTES=29743
 NEW_L1='const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)'
 MARKER='// chat102r6c last-write scrub.'
 MANIFEST=(
@@ -69,25 +71,30 @@ if grep -q '\[c102r6p\] scrub attached' "$SERVER" && [ "$am" = "$APP_MD5" ] && [
   exit 0
 fi
 [ "$sm" = "$SERVER_MD5" ] || die "replace refused: root server.js md5 $sm is not the current dev server $SERVER_MD5"
-python3 - "$SERVER" "$MARKER" "$PREFIX_SHA" "$PREFIX_BYTES" << 'PY' || die "replace refused: server.js is not the current dev (fef1da0) root"
+python3 - "$SERVER" "$MARKER" "$SCRUB_SHA" "$SCRUB_BYTES" << 'PY' || die "replace refused: server.js does not end with the current r6o scrub block"
 import pathlib, sys, hashlib
 server, marker, expect, expect_bytes = sys.argv[1:]
-text = pathlib.Path(server).read_text(encoding="utf-8")
-if text.count("[c102r6p] scrub attached") >= 1:
-    sys.exit("r6p attach log present on a root that is not already-applied")
-if text.count(marker) != 1:
+raw = pathlib.Path(server).read_bytes()
+mb = marker.encode("utf-8")
+idx = raw.find(mb)
+if idx < 0 or raw.find(mb, idx + 1) >= 0:
     sys.exit("project-root server.js does not contain exactly one last-write scrub marker")
-if text.count("[c102r6o] scrub attached") != 1:
+if raw.count(b"[c102r6p] scrub attached") >= 1:
+    sys.exit("r6p attach log present on a root that is not already-applied")
+if raw.count(b"[c102r6o] scrub attached") != 1:
     sys.exit("project-root server.js does not have the single r6o attach log")
-prefix = text.split(marker, 1)[0]
-got = hashlib.sha256(prefix.encode("utf-8")).hexdigest()
-n = len(prefix.encode("utf-8"))
-if got != expect:
-    sys.exit("prefix sha256 " + got + " is not " + expect)
+block = raw[idx:]
+n = len(block)
+got = hashlib.sha256(block).hexdigest()
 if str(n) != expect_bytes:
-    sys.exit("prefix bytes " + str(n) + " is not " + expect_bytes)
-print("prefix sha256", got)
-print("prefix bytes", n)
+    sys.exit("scrub block bytes " + str(n) + " is not " + expect_bytes)
+if got != expect:
+    sys.exit("scrub block sha256 " + got + " is not " + expect)
+prefix = raw[:idx]
+print("prefix sha256", hashlib.sha256(prefix).hexdigest())
+print("prefix bytes", len(prefix))
+print("scrub sha256", got)
+print("scrub bytes", n)
 PY
 cp "$SERVER" "$S/server.js"; cp "$APP" "$S/app.js"; cp "$INDEX" "$S/index.html"
 python3 "$P/patch_c102r6p.py" "$S/server.js" "$P/server_block_c102r6o.js" "$P/server_block_c102r6p.js" || die "patch_c102r6p failed (project-root files untouched)"
@@ -96,23 +103,26 @@ node --check "$S/app.js" || die "node --check app.js failed (scratch)"
 [ "$(md5of "$S/app.js")" = "$APP_MD5" ] && [ "$(md5of "$S/index.html")" = "$INDEX_MD5" ] || die "app.js or index.html changed"
 grep -q '\[c102r6p\] scrub attached' "$S/server.js" || die "r6p attach log missing from scratch server.js"
 grep -q '\[c102r6o\] scrub attached' "$S/server.js" && die "r6o attach log is still in the scratch server.js"
-python3 - "$SERVER" "$S/server.js" "$PREFIX_SHA" << 'PY' || die "bytes before the scrub block changed"
+python3 - "$SERVER" "$S/server.js" << 'PY' || die "bytes before the scrub block changed"
 import hashlib, pathlib, sys
 old = pathlib.Path(sys.argv[1]).read_bytes()
 new = pathlib.Path(sys.argv[2]).read_bytes()
-expect = sys.argv[3]
 marker = b"// chat102r6c last-write scrub."
-io, inn = old.find(marker), new.rfind(marker)
+io, inn = old.find(marker), new.find(marker)
 if io < 0 or inn < 0:
     sys.exit("marker missing")
+if old.find(marker, io + 1) >= 0 or new.find(marker, inn + 1) >= 0:
+    sys.exit("marker is not unique")
 if old[:io] != new[:inn]:
     sys.exit("prefix mismatch")
-got = hashlib.sha256(old[:io]).hexdigest()
-if got != expect:
-    sys.exit("prefix sha256 " + got + " is not " + expect)
+old_sha = hashlib.sha256(old[:io]).hexdigest()
+new_sha = hashlib.sha256(new[:inn]).hexdigest()
+if old_sha != new_sha:
+    sys.exit("prefix sha256 changed: " + old_sha + " -> " + new_sha)
 if not new.rstrip().endswith(b"})();"):
     sys.exit("scrub block is not last")
-print("prefix sha256", got)
+print("prefix sha256 before", old_sha)
+print("prefix sha256 after", new_sha)
 print("prefix bytes", io)
 print("scrub block is last")
 PY

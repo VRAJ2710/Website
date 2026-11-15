@@ -258,7 +258,7 @@ test("patch.py keeps the prefix bytes and leaves one r6p attach log", () => {
   assert.equal(check.status, 0, check.stderr);
 });
 
-test("deploy.sh bytes match EXPECTED_SHA256 and the current dev (fef1da0) root md5s", () => {
+test("deploy.sh bytes match EXPECTED_SHA256 and the current root md5s plus scrub identity", () => {
   const spec = fs.readFileSync(path.join(dir, "EXPECTED_SHA256"), "utf8");
   const sha = (spec.match(/sha256 ([a-f0-9]{64})/) || [])[1];
   const bytes = Number((spec.match(/bytes (\d+)/) || [])[1]);
@@ -266,13 +266,75 @@ test("deploy.sh bytes match EXPECTED_SHA256 and the current dev (fef1da0) root m
   assert.equal(buf.length, bytes);
   assert.equal(crypto.createHash("sha256").update(buf).digest("hex"), sha);
   const text = buf.toString("utf8");
-  assert.match(text, /8d29291995dacca242b934ccc5058afc5eb27cbae9d4ccbdc9383b4909a9f7ae/);
+  assert.match(text, /7a3aeaf7a9e317ce888e28e4b9d4461a/);
   assert.match(text, /d8ca8562df01bf88c68e4971752e602c/);
   assert.match(text, /23e26d5287a773dadaf3fd2c40deb389/);
-  assert.match(text, /9c593e7ab7887a20ba876e938abca0fc/);
-  assert.match(text, /PREFIX_BYTES=2332205/);
+  assert.match(text, /e45d46bf24eca1e3585739491058fc7470b7faffd7ba54600764f90594d63cbc/);
+  assert.match(text, /SCRUB_BYTES=29743/);
+  assert.equal(text.includes("PREFIX_SHA="), false);
+  assert.equal(text.includes("PREFIX_BYTES="), false);
   assert.match(text, /bak-chat102r6p/);
   assert.match(text, /\[c102r6p\] scrub attached|chat102r6p/);
+});
+
+
+function extractHeredoc(script, afterNeedle) {
+  const i = script.indexOf(afterNeedle);
+  assert.ok(i >= 0, "missing needle: " + afterNeedle);
+  const lineStart = script.lastIndexOf("\n", i) + 1;
+  const start = script.indexOf("<< 'PY'", lineStart);
+  assert.ok(start >= 0 && start < i + afterNeedle.length);
+  const bodyStart = script.indexOf("\n", start) + 1;
+  const end = script.indexOf("\nPY\n", bodyStart);
+  assert.ok(end >= 0);
+  return script.slice(bodyStart, end);
+}
+
+test("a different prefix with an identical scrub block is accepted; a mutated scrub is refused", () => {
+  const deploy = fs.readFileSync(path.join(dir, "deploy.sh"), "utf8");
+  const identityPy = extractHeredoc(deploy, "does not end with the current r6o scrub block");
+  const prefixPy = extractHeredoc(deploy, "bytes before the scrub block changed");
+  const blockBuf = fs.readFileSync(path.join(dir, "server_block_c102r6o.js"));
+  assert.equal(blockBuf.length, 29743);
+  assert.equal(crypto.createHash("sha256").update(blockBuf).digest("hex"), "e45d46bf24eca1e3585739491058fc7470b7faffd7ba54600764f90594d63cbc");
+  const marker = "// chat102r6c last-write scrub.";
+  const l1 = "const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)\n";
+  const prefix = l1 + "// chat105v3home fixture prefix, not the live root\nfunction unusedPreview() { return 1; }\n";
+  const prefixBuf = Buffer.from(prefix, "utf8");
+  const beforeSha = crypto.createHash("sha256").update(prefixBuf).digest("hex");
+  const work = fs.mkdtempSync("/tmp/c102r6p-scrubid-");
+  const server = path.join(work, "server.js");
+  fs.writeFileSync(server, Buffer.concat([prefixBuf, blockBuf]));
+  const origCopy = path.join(work, "server.before.js");
+  fs.copyFileSync(server, origCopy);
+
+  let run = spawnSync("python3", ["-", server, marker, "e45d46bf24eca1e3585739491058fc7470b7faffd7ba54600764f90594d63cbc", "29743"], { input: identityPy, encoding: "utf8" });
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  assert.match(run.stdout, new RegExp("prefix sha256 " + beforeSha));
+  assert.match(run.stdout, /scrub bytes 29743/);
+
+  run = spawnSync("python3", [path.join(dir, "patch_c102r6p.py"), server, path.join(dir, "server_block_c102r6o.js"), path.join(dir, "server_block_c102r6p.js")], { encoding: "utf8" });
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+
+  run = spawnSync("python3", ["-", origCopy, server], { input: prefixPy, encoding: "utf8" });
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  assert.match(run.stdout, new RegExp("prefix sha256 before " + beforeSha));
+  assert.match(run.stdout, new RegExp("prefix sha256 after " + beforeSha));
+  const out = fs.readFileSync(server);
+  const at = out.indexOf(Buffer.from(marker));
+  assert.deepEqual(out.subarray(0, at), prefixBuf);
+
+  const mutated = Buffer.from(blockBuf);
+  mutated[120] = mutated[120] ^ 0xff;
+  const bad = path.join(work, "mutated.js");
+  fs.writeFileSync(bad, Buffer.concat([prefixBuf, mutated]));
+  const badBefore = fs.readFileSync(bad);
+  run = spawnSync("python3", ["-", bad, marker, "e45d46bf24eca1e3585739491058fc7470b7faffd7ba54600764f90594d63cbc", "29743"], { input: identityPy, encoding: "utf8" });
+  assert.notEqual(run.status, 0);
+  assert.match(run.stderr + run.stdout, /scrub block sha256|is not/);
+  run = spawnSync("python3", [path.join(dir, "patch_c102r6p.py"), bad, path.join(dir, "server_block_c102r6o.js"), path.join(dir, "server_block_c102r6p.js")], { encoding: "utf8" });
+  assert.notEqual(run.status, 0, run.stdout + run.stderr);
+  assert.deepEqual(fs.readFileSync(bad), badBefore);
 });
 
 test("remote payload is fetched and a non-matching root is refused", () => {
