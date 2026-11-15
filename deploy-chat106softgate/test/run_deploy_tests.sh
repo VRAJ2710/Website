@@ -19,7 +19,7 @@ POST_BYTES=$(wc -c < "$R/server.js" | tr -d ' ')
 APPM=$(md5sum "$R/app.js" | cut -d' ' -f1); IDXM=$(md5sum "$R/index.html" | cut -d' ' -f1)
 sed -e "s/^PREFIX_SHA=.*/PREFIX_SHA=$PRE_SHA/" -e "s/^PREFIX_BYTES=.*/PREFIX_BYTES=$PRE_LEN/" -e "s/^PRE_R6P_MD5=.*/PRE_R6P_MD5=$PRE_MD5/" \
     -e "s/^POST_R6P_BYTES=.*/POST_R6P_BYTES=$POST_BYTES/" -e "s/^APP_MD5=.*/APP_MD5=$APPM/" -e "s/^INDEX_MD5=.*/INDEX_MD5=$IDXM/" "$PKG/deploy.sh" > "$W/deploy_fixture.sh"
-export C106SG_LOCAL_PAYLOAD="$PKG"
+[ -n "${C106SG_REMOTE:-}" ] || export C106SG_LOCAL_PAYLOAD="$PKG"
 pass=0; fail=0
 chk(){ if eval "$2"; then echo "ok   - $1"; pass=$((pass+1)); else echo "FAIL - $1"; fail=$((fail+1)); fi; }
 M0=$(md5sum "$R/server.js" | cut -d' ' -f1)
