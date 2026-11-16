@@ -21,14 +21,14 @@ What changes in `server.js` (only bytes before the chat105v3home2 block; app.js 
 - Unchanged: the `email_verified` column and its ALTER, `issueEmailVerification` / the Resend email text, the
   /__auth/verify routes, the Ask provider order, Stripe code, the webhook rejection log. No DDL, no secret/config change.
 
-Apply order: AFTER deploy-chat102r6p (bd275cb1, payload 85f68bc7). On the pre-r6p root it refuses ("apply r6p first").
+Apply order: AFTER deploy-chat102r6p (re-pinned on dev 5ce95f3, 16 Nov 2026). On the pre-r6p root it refuses ("apply r6p first").
 
 Guards (the post-r6p md5 cannot be computed off-box, so the root is pinned byte-exact by parts):
 - bytes before the chat105v3home2 block: sha256 8d29291995dacca242b934ccc5058afc5eb27cbae9d4ccbdc9383b4909a9f7ae, 2,332,205 B
 - chat105v3home2 block byte-exact (sha256 1da4d654...), ending at the single scrub marker
-- marker to EOF = r6p scrub byte-exact (sha256 b896eb5a..., 33,279 B); total 2,418,347 B
-- prefix + chat105v3home2 + r6o scrub must have md5 7a3aeaf7a9e317ce888e28e4b9d4461a
-- app.js d8ca8562df01bf88c68e4971752e602c, index.html 23e26d5287a773dadaf3fd2c40deb389
+- marker to EOF = r6p scrub byte-exact (sha256 3f02d689..., 33,579 B, includes the 5ce95f3 rewriteHtml auth-page script strip); total 2,418,647 B
+- prefix + chat105v3home2 + r6o scrub (sha256 97cf896d..., 30,043 B) must have md5 5b2b6d8061d876f0093cbe7caa4629af (dev 5ce95f3)
+- app.js 8726da25f103e569c25f13ea1b155d66, index.html 23e26d5287a773dadaf3fd2c40deb389
 
 Every edit is an anchored regex that must match exactly once (indentation-tolerant); otherwise nothing is written.
 

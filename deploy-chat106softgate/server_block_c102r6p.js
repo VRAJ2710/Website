@@ -328,6 +328,11 @@ function c102r6pInstallQuote() {
     });
   }
   function rewriteHtml(text, url) {
+    // Auth documents deliberately use script-src 'none' and ordinary POST
+    // forms. Do not inject optional install/label scripts into those pages.
+    if (/^\/__auth(?:\/|$)/.test(String(url || "").split("?")[0])) {
+      return text.replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, "");
+    }
     var t = plainScenario(text);
     t = fredVisible(t);
     t = ukVisible(t);
