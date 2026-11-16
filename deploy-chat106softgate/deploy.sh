@@ -8,24 +8,26 @@
 #    GET /__auth/verify/status, GET /__auth/verify/reminder.js.
 #  - A failed send never stops sign-up or checkout; each failure is logged once.
 #  - The email_verified column, the verification emails and the Ask order are unchanged. No DDL, no Stripe change.
-# APPLY ORDER: after deploy-chat102r6p. Refuses on the pre-r6p root (r6o scrub still present).
+# APPLY ORDER: after deploy-chat102r6p (re-pinned on dev 5ce95f3). Refuses on the pre-r6p root (r6o scrub still present).
+# Re-pinned 16 Nov 2026 on dev 5ce95f3 (server 5b2b6d80, app 8726da25). Both scrub reference blocks carry the 5ce95f3
+# rewriteHtml auth-page script strip. The softgate edits themselves are unchanged.
 # Guards (no fixed post-r6p md5 is known off-box, so the root is pinned by parts, byte-exact):
 #   bytes before the chat105v3home2 block = fef1da0 prefix (sha256 8d292999..., 2,332,205 B)
-#   then the chat105v3home2 block (sha256 1da4d654..., byte-exact), then the r6p scrub to EOF (b896eb5a..., 33,279 B)
-#   prefix + v3home2 + r6o scrub must have md5 7a3aeaf7a9e317ce888e28e4b9d4461a (the pre-r6p dev server)
-#   app.js d8ca8562df01bf88c68e4971752e602c, index.html 23e26d5287a773dadaf3fd2c40deb389 (both left unchanged)
+#   then the chat105v3home2 block (sha256 1da4d654..., byte-exact), then the r6p scrub to EOF (3f02d689..., 33,579 B)
+#   prefix + v3home2 + r6o scrub (97cf896d..., 30,043 B) must have md5 5b2b6d8061d876f0093cbe7caa4629af (dev 5ce95f3, pre-r6p)
+#   app.js 8726da25f103e569c25f13ea1b155d66, index.html 23e26d5287a773dadaf3fd2c40deb389 (both left unchanged)
 # Only bytes before the chat105v3home2 block are edited. Does NOT start the server, npm, git, or republish.
 # Usage (project folder, Replit Shell): bash deploy.sh --measure | --dry-run | (no flag to apply)
 set -u
-PAYLOAD_COMMIT=40e0eb4bdfa4f343f9072c46b63c699d417afd70
+PAYLOAD_COMMIT=33235e741c7c48b6abc48c7b8471c8bc5a0b2e5e
 BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/${PAYLOAD_COMMIT}/deploy-chat106softgate"
 TAG=chat106softgate
-APP_MD5=d8ca8562df01bf88c68e4971752e602c
+APP_MD5=8726da25f103e569c25f13ea1b155d66
 INDEX_MD5=23e26d5287a773dadaf3fd2c40deb389
-PRE_R6P_MD5=7a3aeaf7a9e317ce888e28e4b9d4461a
+PRE_R6P_MD5=5b2b6d8061d876f0093cbe7caa4629af
 PREFIX_SHA=8d29291995dacca242b934ccc5058afc5eb27cbae9d4ccbdc9383b4909a9f7ae
 PREFIX_BYTES=2332205
-POST_R6P_BYTES=2418347
+POST_R6P_BYTES=2418647
 NEW_L1='const BB10I_MAINTENANCE_ON = false; // set false to turn maintenance off (restart to apply)'
 MARKER='// chat102r6c last-write scrub.'
 ATTACH='[chat106softgate] attached'
@@ -33,8 +35,8 @@ MANIFEST=(
   "patch_chat106softgate.py 9330e3d9a3eef32d3fd7659ca04a6f2e9482713d73a501f566f99817e4ba4f2f"
   "server_block_chat106softgate.js 9d3bf507e515c517a860ca71332f6e755f987319fda68730686724c299c8cfa9"
   "server_block_chat105v3home2.js 1da4d65430058dc310a42642ca65a95cf84b8e3dd03e82182335f9a916e9340f"
-  "server_block_c102r6o.js e45d46bf24eca1e3585739491058fc7470b7faffd7ba54600764f90594d63cbc"
-  "server_block_c102r6p.js b896eb5a35c3a1e5db30c8ff3143a189b513d1d9c86dc741d370ac76b0449445"
+  "server_block_c102r6o.js 97cf896d7c0f73c417eef0b41cf9888d38e1649d2930de97320927495d56359a"
+  "server_block_c102r6p.js 3f02d689fe58951deb789b0809bcecf78fdb2252abe89fbe6af8a722a90b88a8"
 )
 DRY=0; MEASURE=0; DIR=""
 while [ $# -gt 0 ]; do case "$1" in --dry-run) DRY=1;; --measure) MEASURE=1;; --dir) shift; DIR="${1:-}";; *) echo "unknown arg $1"; exit 2;; esac; shift; done
@@ -93,7 +95,7 @@ node --check "$S/app.js" || die "node --check app.js failed (scratch)"
 NS=$(md5of "$S/server.js")
 say "scratch build ok: only bytes before the chat105v3home2 block changed; v3home2 block and r6p scrub byte-identical."
 echo "post-r6p server.js md5 (input) $sm"
-echo "scratch server.js md5 $NS ($(wc -c < "$S/server.js" | tr -d ' ') bytes; about 2,429,345 expected if the indentation matches the fixture)"
+echo "scratch server.js md5 $NS ($(wc -c < "$S/server.js" | tr -d ' ') bytes; about 2,429,645 expected if the indentation matches the fixture)"
 echo "scratch server.js sha256 $(sha256of "$S/server.js")"
 if [ "$DRY" = "1" ]; then say "DRY RUN complete: project-root files untouched. Scratch: $W"; exit 0; fi
 [ "$(md5of "$SERVER")" = "$sm" ] || die "server.js changed during the run"
