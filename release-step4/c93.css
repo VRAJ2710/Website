@@ -1,0 +1,3 @@
+/* Compatibility entry point for stale pages that still request c93.css (chat110navy).
+   The maintained shell presentation lives in the versioned shared stylesheet. */
+@import url("/styles.css?v=chat110navy");
