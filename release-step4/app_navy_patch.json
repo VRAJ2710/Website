@@ -1,0 +1,664 @@
+{
+"base_md5": "bd13a193f2a16ef7d7a4508c25231bb9",
+"result_md5": "f7678ca9b0284afea8bf74581fdf44eb",
+"hunks": [
+{
+"id": "1201c",
+"a1": 1201,
+"a2": 1201,
+"op": "c",
+"old": [
+"  h += `<div class=\"gc\" style=\"padding:0;overflow:hidden;border-left:3px solid var(--gd)\">"
+],
+"new": [
+"  h += `<article class=\"gc dispatch-brief-article\" style=\"padding:0;overflow:hidden;border-left:3px solid var(--gd)\">"
+]
+},
+{
+"id": "1207c",
+"a1": 1207,
+"a2": 1207,
+"op": "c",
+"old": [
+"      <div style=\"font-family:var(--sf);font-size:20px;font-weight:400;line-height:1.2;margin-bottom:8px\">${b.headline || \"Market Brief\"}</div>"
+],
+"new": [
+"      <h2 class=\"editorial-headline\">${b.headline || \"Market Brief\"}</h2>"
+]
+},
+{
+"id": "1216a",
+"a1": 1216,
+"a2": 1216,
+"op": "a",
+"old": [],
+"new": [
+"  h += _editorialCallouts(b);"
+]
+},
+{
+"id": "1227c",
+"a1": 1227,
+"a2": 1227,
+"op": "c",
+"old": [
+"  h += `<div style=\"font-family:var(--mn);font-size:7px;color:var(--t3);text-align:center;padding:8px;border-top:1px dotted var(--gb)\">House view · Not investment advice. Capital at risk.</div></div>`;"
+],
+"new": [
+"  h += `<div class=\"editorial-disclaimer\">House view · Not investment advice. Capital at risk.</div></article>`;"
+]
+},
+{
+"id": "3943a",
+"a1": 3943,
+"a2": 3943,
+"op": "a",
+"old": [],
+"new": [
+"function _editorialCallouts(payload) {",
+"  const section = (label, value) => {",
+"    const paragraphs = (Array.isArray(value) ? value : [value])",
+"      .filter(item => typeof item === \"string\" && item.trim());",
+"    if (!paragraphs.length) return \"\";",
+"    return `<section class=\"editorial-callout\"><h2>${label}</h2>${paragraphs.map(item => `<p>${_escHtml(item)}</p>`).join(\"\")}</section>`;",
+"  };",
+"  return section(\"Why it matters\", payload?.whyItMatters || payload?.why_it_matters)",
+"    + section(\"What to watch\", payload?.whatToWatch || payload?.what_to_watch);",
+"}",
+""
+]
+},
+{
+"id": "3954c",
+"a1": 3954,
+"a2": 3954,
+"op": "c",
+"old": [
+"      <p style=\"font-size:12px;color:var(--t2);line-height:1.6;margin:0\">${_escHtml(editorialBrief.summary)}</p>"
+],
+"new": [
+"      <p class=\"editorial-standfirst\">${_escHtml(editorialBrief.summary)}</p>",
+"      ${_editorialCallouts(editorialBrief)}"
+]
+},
+{
+"id": "6501c",
+"a1": 6501,
+"a2": 6501,
+"op": "c",
+"old": [
+"  return `<div data-spark-tk=\"${tk}\" data-spark-w=\"${w}\" data-spark-h=\"${h}\" data-rt-no-chart=\"1\" role=\"img\" aria-label=\"Intraday chart unavailable right now\" title=\"Intraday chart unavailable right now\" style=\"width:${w}px;height:${h}px;opacity:0\"></div>`;"
+],
+"new": [
+"  return `<div class=\"spark-unavailable\" data-spark-tk=\"${tk}\" data-spark-w=\"${w}\" data-spark-h=\"${h}\" data-rt-no-chart=\"1\" role=\"img\" aria-label=\"Intraday chart unavailable right now\" title=\"Intraday chart unavailable right now\" style=\"width:${w}px;min-height:${h}px\">History unavailable</div>`;"
+]
+},
+{
+"id": "6506c",
+"a1": 6506,
+"a2": 6506,
+"op": "c",
+"old": [
+"  el.textContent = \"\"; el.style.border = \"none\"; el.style.opacity = \"0\";"
+],
+"new": [
+"  el.textContent = \"History unavailable\"; el.style.border = \"none\"; el.style.opacity = \"1\";",
+"  el.classList.add(\"spark-unavailable\");"
+]
+},
+{
+"id": "6856a",
+"a1": 6856,
+"a2": 6856,
+"op": "a",
+"old": [],
+"new": [
+"    const contextEl=el.querySelector(\"[data-price-context]\");",
+"    if(contextEl){",
+"      const contextOnly=!hasSyncedQuote(tk)&&hasRetainedQuote(tk);",
+"      contextEl.hidden=!contextOnly;",
+"      contextEl.textContent=contextOnly?`Context only · ${showDollar?\"$\":\"\"}${d.p}`:\"\";",
+"    }",
+"    const metaEl=el.querySelector(\"[data-price-meta]\");",
+"    if(metaEl)metaEl.innerHTML=marketCardMeta(tk);"
+]
+},
+{
+"id": "6859c",
+"a1": 6859,
+"a2": 6859,
+"op": "c",
+"old": [
+"       chgEl.innerHTML=chgN==null?\"—\":fe78_chgHtml(tk, pctOnly?`${fe83f_pctBit(d)}`:`${fe83f_chgPair(d)}`);"
+],
+"new": [
+"       chgEl.innerHTML=chgN==null?\"Change unavailable\":fe78_chgHtml(tk, pctOnly?`${fe83f_pctBit(d)}`:`${fe83f_chgPair(d)}`);"
+]
+},
+{
+"id": "6919a",
+"a1": 6919,
+"a2": 6919,
+"op": "a",
+"old": [],
+"new": [
+"// Presentation only: expose unavailable metadata explicitly without qualifying a quote.",
+"function marketCardMeta(tk) {",
+"  const d = fp(tk);",
+"  const source = _quoteSourceLabel(d.src) || \"Source unavailable\";",
+"  const time = d.asOf ? _fmtAsOf(d.asOf) : \"Timestamp unavailable\";",
+"  return `<span class=\"market-card-provenance\"><span class=\"asof-tag\">${_escHtml(source)} · ${time}</span>${stat(tk)}</span>`;",
+"}"
+]
+},
+{
+"id": "8780c",
+"a1": 8780,
+"a2": 8780,
+"op": "c",
+"old": [
+"   h += `<div style=\"padding:8px 12px 4px;display:flex;justify-content:space-between;align-items:center;font-family:var(--mn);font-size:9px;color:var(--t3)\">${tickers.length} tickers · DELAYED Yahoo context · click any row to analyse<button onclick=\"nav('intel')\" style=\"background:var(--blG);color:var(--bl);border:1px solid rgba(79,142,247,0.2);border-radius:5px;padding:3px 10px;font-family:var(--mn);font-size:9px;cursor:pointer\">⬢ AI Doc Intel</button></div>`;"
+],
+"new": [
+"   h += `<div class=\"dyn-market-provenance\" role=\"note\"><span>${tickers.length} tickers · Yahoo Finance screener · delayed context · provider timestamp not supplied</span><button type=\"button\" class=\"dyn-market-intel\" onclick=\"nav('intel')\">AI Document Intel</button></div>`;"
+]
+},
+{
+"id": "8786c",
+"a1": 8786,
+"a2": 8786,
+"op": "c",
+"old": [
+"      <th style=\"padding:7px 10px;text-align:right;font-size:9px;color:var(--t3)\">CHG%</th>"
+],
+"new": [
+"       <th style=\"padding:7px 10px;text-align:right;font-size:9px;color:var(--t3)\">CHANGE · ABS / %</th>"
+]
+},
+{
+"id": "8793a",
+"a1": 8793,
+"a2": 8793,
+"op": "a",
+"old": [],
+"new": [
+"    const prev = typeof t.prev === \"number\" && isFinite(t.prev) && t.prev > 0 ? t.prev : null;",
+"    const abs = px != null && prev != null ? px - prev : null;"
+]
+},
+{
+"id": "8795d",
+"a1": 8795,
+"a2": 8795,
+"op": "d",
+"old": [
+"    const sign = ch != null && ch >= 0 ? \"+\" : \"\";"
+],
+"new": []
+},
+{
+"id": "8802c",
+"a1": 8802,
+"a2": 8803,
+"op": "c",
+"old": [
+"      <td style=\"padding:7px 10px;text-align:right;font-weight:700\">${px!=null?('$'+px.toFixed(px>100?2:4)):'—'}</td>",
+"      <td style=\"padding:7px 10px;text-align:right;color:${col};font-weight:700\">${ch!=null?sign+ch.toFixed(2)+'%':'—'}</td>"
+],
+"new": [
+"       <td style=\"padding:7px 10px;text-align:right;font-weight:700\">${px!=null?('$'+px.toFixed(px>100?2:4)):'No quote'}</td>",
+"       <td style=\"padding:7px 10px;text-align:right;color:${col};font-weight:700\">${fe83f_marketChange(abs,ch)}</td>"
+]
+},
+{
+"id": "13126a",
+"a1": 13126,
+"a2": 13126,
+"op": "a",
+"old": [],
+"new": [
+"    const retained=hasRetainedQuote(idx.tk);"
+]
+},
+{
+"id": "13131c",
+"a1": 13131,
+"a2": 13131,
+"op": "c",
+"old": [
+"      <div class=\"idx-card-top\"><span class=\"idx-card-name\">${idx.nm}</span><span class=\"idx-card-stat\">${stat(idx.tk)}</span></div>"
+],
+"new": [
+"      <div class=\"idx-card-top\"><span class=\"idx-card-name\">${idx.nm} <span class=\"dash-ticker\">${idx.tk}</span></span><span class=\"idx-card-stat\">${stat(idx.tk)}</span></div>"
+]
+},
+{
+"id": "13133c",
+"a1": 13133,
+"a2": 13133,
+"op": "c",
+"old": [
+"      <div class=\"idx-card-chg asset-chg ${chgCls}\">${na||chN==null?chgDim():fe78_chgHtml(idx.tk, `${fe83f_chgPair(d)}`)}</div>"
+],
+"new": [
+"      <div class=\"idx-card-chg asset-chg ${chgCls}\">${na||chN==null?\"Change unavailable\":fe78_chgHtml(idx.tk, `${fe83f_chgPair(d)}`)}</div>"
+]
+},
+{
+"id": "13135c",
+"a1": 13135,
+"a2": 13135,
+"op": "c",
+"old": [
+"      <div>${asOfTag(idx.tk)}</div>"
+],
+"new": [
+"      <div class=\"dash-card-context\" data-price-context ${na&&retained?\"\":\"hidden\"}>${na&&retained?`Context only · ${d.p}`:\"\"}</div>",
+"      <div data-price-meta>${marketCardMeta(idx.tk)}</div>"
+]
+},
+{
+"id": "13145a",
+"a1": 13145,
+"a2": 13145,
+"op": "a",
+"old": [],
+"new": [
+"    const retained=hasRetainedQuote(a.tk);"
+]
+},
+{
+"id": "13149c",
+"a1": 13149,
+"a2": 13150,
+"op": "c",
+"old": [
+"    h+=`<button type=\"button\" class=\"conv-card\" onclick=\"openA('${a.tk}')\" data-price-card=\"${a.tk}\" data-price-dollar=\"1\" data-price-chg=\"pct\">",
+"      <div class=\"conv-card-top\"><span class=\"conv-tk\">${a.tk}</span><span class=\"conv-chg asset-chg ${chgCls}\">${na||chN==null?chgDim():fe78_chgHtml(a.tk, `${fe83f_pctBit(d)}`)}</span></div>"
+],
+"new": [
+"    h+=`<button type=\"button\" class=\"conv-card\" onclick=\"openA('${a.tk}')\" data-price-card=\"${a.tk}\" data-price-dollar=\"1\">",
+"      <div class=\"conv-card-top\"><span class=\"conv-tk\">${a.tk}</span><span class=\"conv-chg asset-chg ${chgCls}\">${na||chN==null?\"Change unavailable\":fe78_chgHtml(a.tk, `${fe83f_chgPair(d)}`)}</span></div>"
+]
+},
+{
+"id": "13153c",
+"a1": 13153,
+"a2": 13153,
+"op": "c",
+"old": [
+"      <div>${asOfTag(a.tk)}</div>"
+],
+"new": [
+"      <div class=\"conv-spark\">${spark(a.tk,108,16)}</div>",
+"      <div class=\"dash-card-context\" data-price-context ${na&&retained?\"\":\"hidden\"}>${na&&retained?`Context only · $${d.p}`:\"\"}</div>",
+"      <div data-price-meta>${marketCardMeta(a.tk)}</div>"
+]
+},
+{
+"id": "13211c",
+"a1": 13211,
+"a2": 13213,
+"op": "c",
+"old": [
+"    <button class=\"${_mktView==='curated'?'on':''}\" onclick=\"_mktViewSet('curated')\">★ Curated (${A.length})</button>",
+"    <button class=\"${_mktView==='live'?'on':''}\" onclick=\"_mktViewSet('live')\">⚡ All markets${dynCount?` (${dynCount}+)`:''}</button>",
+"    <button class=\"${_mktView==='global'?'on':''}\" onclick=\"_mktViewSet('global')\">🌍 Global</button>"
+],
+"new": [
+"    <button class=\"${_mktView==='curated'?'on':''}\" onclick=\"_mktViewSet('curated')\">Curated (${A.length})</button>",
+"    <button class=\"${_mktView==='live'?'on':''}\" onclick=\"_mktViewSet('live')\">All markets${dynCount?` (${dynCount}+)`:''}</button>",
+"    <button class=\"${_mktView==='global'?'on':''}\" onclick=\"_mktViewSet('global')\">Global</button>"
+]
+},
+{
+"id": "13235c",
+"a1": 13235,
+"a2": 13235,
+"op": "c",
+"old": [
+"   mktList.forEach(a=>{const d=fp(a.tk);const iw=isWatched(a.tk);const primary=hasSyncedQuote(a.tk);"
+],
+"new": [
+"  h += `<div class=\"market-instrument-grid\" aria-label=\"Market instruments\">`;",
+"   mktList.forEach(a=>{const d=fp(a.tk);const iw=isWatched(a.tk);const primary=hasSyncedQuote(a.tk);const retained=hasRetainedQuote(a.tk);"
+]
+},
+{
+"id": "13241c",
+"a1": 13241,
+"a2": 13241,
+"op": "c",
+"old": [
+"    h+=`<div class=\"gc gc-a gc-sector gc-glow ${sc}\" data-price-card=\"${a.tk}\" data-price-dollar=\"${showDollar?1:0}\" onclick=\"openA('${a.tk}')\">"
+],
+"new": [
+"    h+=`<article class=\"gc gc-a gc-sector market-instrument ${sc}\" data-price-card=\"${a.tk}\" data-price-dollar=\"${showDollar?1:0}\">"
+]
+},
+{
+"id": "13246c",
+"a1": 13246,
+"a2": 13246,
+"op": "c",
+"old": [
+"              <span style=\"font-size:14px;font-weight:800;font-family:var(--mn)\">${a.tk}</span>"
+],
+"new": [
+"              <button type=\"button\" class=\"market-instrument-open\" onclick=\"openA('${a.tk}')\" aria-label=\"Open ${_escAttr(a.nm)} analysis\">${a.tk}</button>"
+]
+},
+{
+"id": "13249c",
+"a1": 13249,
+"a2": 13249,
+"op": "c",
+"old": [
+"              <span style=\"cursor:pointer;color:${iw?\"var(--gd)\":\"var(--t3)\"};font-size:14px;line-height:1\" onclick=\"event.stopPropagation();togWatch('${a.tk}')\" aria-label=\"${iw?'Remove from':'Add to'} watchlist\">★</span>"
+],
+"new": [
+"              <button type=\"button\" class=\"market-watch-button\" onclick=\"event.stopPropagation();togWatch('${a.tk}')\" aria-pressed=\"${iw}\" aria-label=\"${iw?'Remove from':'Add to'} ${_escAttr(a.nm)} watchlist\">${iw?'−':'+'}</button>"
+]
+},
+{
+"id": "13256c",
+"a1": 13256,
+"a2": 13257,
+"op": "c",
+"old": [
+"           <div class=\"asset-price\">${primary?(showDollar?\"$\":\"\")+d.p:_rt22NoSync()}</div>",
+"          <div class=\"asset-chg\" style=\"color:${col}\">${d.status===\"unavailable\"||ch==null?(a.cat===\"Crypto\"?fe78_skel():chgDim()):fe79_pctHtml(a.tk, ch)}</div>"
+],
+"new": [
+"            <div class=\"asset-price\">${primary?(showDollar?\"$\":\"\")+d.p:_rt22NoSync()}</div>",
+"           <div class=\"asset-chg\" style=\"color:${col}\">${!primary||ch==null?\"Change unavailable\":fe78_chgHtml(a.tk, fe83f_chgPair(d))}</div>"
+]
+},
+{
+"id": "13258a",
+"a1": 13258,
+"a2": 13258,
+"op": "a",
+"old": [],
+"new": [
+"           <div class=\"dash-card-context\" data-price-context ${!primary&&retained?\"\":\"hidden\"}>${!primary&&retained?`Context only · ${showDollar?\"$\":\"\"}${d.p}`:\"\"}</div>",
+"           <div class=\"asset-source-line\" data-price-meta>${marketCardMeta(a.tk)}</div>"
+]
+},
+{
+"id": "13260c",
+"a1": 13260,
+"a2": 13260,
+"op": "c",
+"old": [
+"      </div></div>`;});"
+],
+"new": [
+"      </div></article>`;});",
+"  h += `</div>`;"
+]
+},
+{
+"id": "17905c",
+"a1": 17905,
+"a2": 17905,
+"op": "c",
+"old": [
+"  const upd = _lf ? `Prices last refreshed <span class=\"stf-time\">${_rt16Hms(_lf)}</span> UK time` : \"\";"
+],
+"new": [
+"  const upd = _lf ? `Prices last refreshed <span class=\"stf-time\">${String(_rt16Hms(_lf) || \"\").replace(/\\s*UK\\s*$/i, \"\")}</span> UK time` : \"\";"
+]
+},
+{
+"id": "30111c",
+"a1": 30111,
+"a2": 30111,
+"op": "c",
+"old": [
+"  if (document.documentElement.classList.contains(\"c93\")) return; // chat93: calm desk, no ticker tape"
+],
+"new": [
+"  if (document.documentElement.classList.contains(\"c93\") || document.documentElement.classList.contains(\"dispatch-shell\")) return; // chat110navy: calm desk kept"
+]
+},
+{
+"id": "36846c",
+"a1": 36846,
+"a2": 36846,
+"op": "c",
+"old": [
+"  var sign = n > 0 ? \"+\" : (n < 0 ? \"-\" : \"\");"
+],
+"new": [
+"   var sign = n >= 0 ? \"+\" : \"-\";"
+]
+},
+{
+"id": "36848a",
+"a1": 36848,
+"a2": 36848,
+"op": "a",
+"old": [],
+"new": [
+"function fe83f_marketChange(abs, pct) {",
+"  var a = fe83f_num(abs), p = fe83f_num(pct);",
+"  if (a == null || p == null) return \"Change unavailable\";",
+"  return fe83f_signed(a, \"\") + \" (\" + fe83f_signed(p, \"%\") + \")\";",
+"}"
+]
+},
+{
+"id": "41368a",
+"a1": 41368,
+"a2": 41368,
+"op": "a",
+"old": [],
+"new": [
+"  de.setAttribute(\"data-theme\", s === \"system\" ? (_c97IsDark(s) ? \"dark\" : \"light\") : s);"
+]
+},
+{
+"id": "41553c",
+"a1": 41553,
+"a2": 41562,
+"op": "c",
+"old": [
+"  try {",
+"    var st = document.createElement(\"style\"); st.id = \"r2-app\";",
+"    st.textContent = \".gd-dash-cta{background:linear-gradient(135deg,rgba(31,58,95,.06),rgba(31,58,95,0)),var(--paper-2,transparent)!important}\" +",
+"      \"html:not(.c97-dark) .gd-dash-cta{background:#fff linear-gradient(135deg,rgba(31,58,95,.07),rgba(31,58,95,0))!important}\" +",
+"      \"html:not(.c97-dark) .dash-details{background:transparent!important}\" +",
+"      \".latency-strip{background:var(--paper-2,transparent)!important}\" +",
+"      \".spine-cell.spine-nosync{opacity:1!important}.spine-nosync{opacity:1!important}\" +",
+"      \".book-price-row{background:transparent!important}.c97-pvbar a{color:#fff!important;text-decoration:underline}\";",
+"    (document.head || document.documentElement).appendChild(st);",
+"  } catch (e) {}"
+],
+"new": [
+"  // Shared surface and freshness presentation is maintained in styles.css."
+]
+},
+{
+"id": "41790c",
+"a1": 41790,
+"a2": 41796,
+"op": "c",
+"old": [
+"    st.textContent = \"html.c93 .c93-menu.c101b-menu{width:min(920px,calc(100vw - 32px))}\" +",
+"      \"html.c93 .c93-menu .c101b-h{font:600 15px/1.2 var(--ui);color:var(--ink);margin:0 0 10px}\" +",
+"      \"html.c93 .c93-menu .c101b-cols{columns:3 220px;column-gap:24px}html.c93 .c93-menu .c101b-g{break-inside:avoid;margin:0 0 12px}\" +",
+"      \"html.c93 .c93-menu.c101b-menu ul{display:block}html.c93 .c93-menu.c101b-menu h2{margin:0 0 4px}\" +",
+"      \"html.c93 .c93-menu .c101b-note{font:400 12px/1.4 var(--ui);color:var(--ink-3);margin:6px 0 0}\" +",
+"      \"html.c93 .c93-menu a:focus-visible{outline:2px solid var(--gold);outline-offset:1px}\" +",
+"      \"@media (max-width:767px){html.c93 .c93-menu.c101b-menu{width:auto;max-height:calc(100vh - 72px)}html.c93 .c93-menu .c101b-cols{columns:2 150px;column-gap:16px}html.c93 .c93-menu.c101b-menu .c93-menu-d{display:none}html.c93 .c93-menu.c101b-menu a{padding:9px 2px}}\";"
+],
+"new": [
+"    st.textContent = \"html.dispatch-shell .c93-menu.c101b-menu{width:min(920px,calc(100vw - 32px))}\" +",
+"      \"html.dispatch-shell .c93-menu .c101b-h{font:600 15px/1.2 var(--ui);color:var(--ink);margin:0 0 10px}\" +",
+"      \"html.dispatch-shell .c93-menu .c101b-cols{columns:3 220px;column-gap:24px}html.dispatch-shell .c93-menu .c101b-g{break-inside:avoid;margin:0 0 12px}\" +",
+"      \"html.dispatch-shell .c93-menu.c101b-menu ul{display:block}html.dispatch-shell .c93-menu.c101b-menu h2{margin:0 0 4px}\" +",
+"      \"html.dispatch-shell .c93-menu .c101b-note{font:400 12px/1.4 var(--ui);color:var(--ink-3);margin:6px 0 0}\" +",
+"      \"html.dispatch-shell .c93-menu a:focus-visible{outline:2px solid var(--gold);outline-offset:1px}\" +",
+"      \"@media (max-width:767px){html.dispatch-shell .c93-menu.c101b-menu{width:auto;max-height:calc(100vh - 72px)}html.dispatch-shell .c93-menu .c101b-cols{columns:2 150px;column-gap:16px}html.dispatch-shell .c93-menu.c101b-menu .c93-menu-d{display:none}html.dispatch-shell .c93-menu.c101b-menu a{padding:9px 2px}}\";"
+]
+},
+{
+"id": "41905c",
+"a1": 41905,
+"a2": 41905,
+"op": "c",
+"old": [
+"      \"html.c93 .c93-menu.c101c-sheet{position:fixed;top:0!important;right:0;bottom:0;left:0;width:auto;height:100vh;height:100dvh;max-height:none;margin:0;padding:0;z-index:2000;\" +"
+],
+"new": [
+"      \"html.dispatch-shell .c93-menu.c101c-sheet{position:fixed;top:0!important;right:0;bottom:0;left:0;width:auto;height:100vh;height:100dvh;max-height:none;margin:0;padding:0;z-index:2000;\" +"
+]
+},
+{
+"id": "41907c",
+"a1": 41907,
+"a2": 41907,
+"op": "c",
+"old": [
+"      \"html.c93 .c93-menu.c101c-sheet[hidden]{display:none!important}\" +"
+],
+"new": [
+"      \"html.dispatch-shell .c93-menu.c101c-sheet[hidden]{display:none!important}\" +"
+]
+},
+{
+"id": "41909c",
+"a1": 41909,
+"a2": 41919,
+"op": "c",
+"old": [
+"      \"html.c93 .c93-menu .c101c-bar{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:12px;height:60px;padding:0 20px;background:var(--paper);border-bottom:1px solid var(--rule-2);box-sizing:border-box}\" +",
+"      \"html.c93 .c93-menu .c101c-title{font:600 15px/1.2 var(--ui);color:var(--ink)}\" +",
+"      \"html.c93 .c93-menu .c101c-x{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;margin:0 -6px 0 0;padding:0;background:var(--paper);color:var(--ink);border:1px solid var(--rule-2);border-radius:4px;cursor:pointer}\" +",
+"      \"html.c93 .c93-menu .c101c-x:hover{border-color:var(--ink)}html.c93 .c93-menu .c101c-x:focus-visible{outline:2px solid var(--gold);outline-offset:2px}\" +",
+"      \"html.c93 .c93-menu .c101c-in{max-width:640px;margin:0 auto;padding:16px 20px 40px;box-sizing:border-box}\" +",
+"      \"html.c93 .c93-menu .c101c-top{margin:0 0 18px}\" +",
+"      \"html.c93 .c93-menu.c101b-menu a.c101c-cta{display:block;min-height:46px;box-sizing:border-box;padding:13px 16px;text-align:center;font:600 15px/1.25 var(--ui);background:var(--ink);color:var(--paper)!important;border:1px solid var(--ink);border-radius:4px}\" +",
+"      \"html.c93 .c93-menu.c101b-menu a.c101c-cta:hover{opacity:.92;color:var(--paper)!important}\" +",
+"      \"html.c93 .c93-menu .c101c-sec{border-bottom:1px solid var(--rule-soft)}html.c93 .c93-menu .c101c-sec:first-child{border-top:1px solid var(--rule-soft)}\" +",
+"      \"html.c93 .c93-menu.c101b-menu h2.c101c-hd{margin:0;padding:0;font:inherit;letter-spacing:0;text-transform:none}\" +",
+"      \"html.c93 .c93-menu .c101c-btn{display:flex;align-items:center;width:100%;min-height:52px;box-sizing:border-box;margin:0;padding:0 2px;background:transparent;border:0;border-radius:0;\" +"
+],
+"new": [
+"      \"html.dispatch-shell .c93-menu .c101c-bar{position:sticky;top:0;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:12px;height:60px;padding:0 20px;background:var(--paper);border-bottom:1px solid var(--rule-2);box-sizing:border-box}\" +",
+"      \"html.dispatch-shell .c93-menu .c101c-title{font:600 15px/1.2 var(--ui);color:var(--ink)}\" +",
+"      \"html.dispatch-shell .c93-menu .c101c-x{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;margin:0 -6px 0 0;padding:0;background:var(--paper);color:var(--ink);border:1px solid var(--rule-2);border-radius:4px;cursor:pointer}\" +",
+"      \"html.dispatch-shell .c93-menu .c101c-x:hover{border-color:var(--ink)}html.dispatch-shell .c93-menu .c101c-x:focus-visible{outline:2px solid var(--gold);outline-offset:2px}\" +",
+"      \"html.dispatch-shell .c93-menu .c101c-in{max-width:640px;margin:0 auto;padding:16px 20px 40px;box-sizing:border-box}\" +",
+"      \"html.dispatch-shell .c93-menu .c101c-top{margin:0 0 18px}\" +",
+"      \"html.dispatch-shell .c93-menu.c101b-menu a.c101c-cta{display:block;min-height:46px;box-sizing:border-box;padding:13px 16px;text-align:center;font:600 15px/1.25 var(--ui);background:var(--ink);color:var(--paper)!important;border:1px solid var(--ink);border-radius:4px}\" +",
+"      \"html.dispatch-shell .c93-menu.c101b-menu a.c101c-cta:hover{opacity:.92;color:var(--paper)!important}\" +",
+"      \"html.dispatch-shell .c93-menu .c101c-sec{border-bottom:1px solid var(--rule-soft)}html.dispatch-shell .c93-menu .c101c-sec:first-child{border-top:1px solid var(--rule-soft)}\" +",
+"      \"html.dispatch-shell .c93-menu.c101b-menu h2.c101c-hd{margin:0;padding:0;font:inherit;letter-spacing:0;text-transform:none}\" +",
+"      \"html.dispatch-shell .c93-menu .c101c-btn{display:flex;align-items:center;width:100%;min-height:52px;box-sizing:border-box;margin:0;padding:0 2px;background:transparent;border:0;border-radius:0;\" +"
+]
+},
+{
+"id": "41921c",
+"a1": 41921,
+"a2": 41930,
+"op": "c",
+"old": [
+"      \"html.c93 .c93-menu .c101c-btn:hover,html.c93 .c93-menu .c101c-btn[aria-expanded=true]{color:var(--ink)}\" +",
+"      \"html.c93 .c93-menu .c101c-btn:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}\" +",
+"      \"html.c93 .c93-menu .c101c-t{flex:1 1 auto}\" +",
+"      \"html.c93 .c93-menu .c101c-n{flex:0 0 auto;font:500 12px/1 var(--ui);letter-spacing:0;color:var(--ink-3);min-width:22px;text-align:right;font-variant-numeric:tabular-nums}\" +",
+"      \"html.c93 .c93-menu .c101c-ch{flex:0 0 auto;width:7px;height:7px;margin:-4px 6px 0 14px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);transition:transform .15s ease}\" +",
+"      \"html.c93 .c93-menu .c101c-btn[aria-expanded=true] .c101c-ch{transform:rotate(-135deg);margin-top:4px}\" +",
+"      \"html.c93 .c93-menu.c101b-menu .c101c-acc ul{display:block;margin:0 0 10px;padding:0;list-style:none}html.c93 .c93-menu .c101c-acc ul[hidden]{display:none!important}\" +",
+"      \"html.c93 .c93-menu.c101b-menu .c101c-acc a{display:flex;align-items:center;min-width:0;max-width:100%;min-height:44px;box-sizing:border-box;padding:10px 4px;border:0;border-top:1px solid var(--rule-soft);font:500 15px/1.3 var(--ui);white-space:normal;overflow-wrap:break-word}\" +",
+"      \"html.c93 .c93-menu .c101c-acc a[aria-current=page]{font-weight:600;color:var(--gold)!important;box-shadow:inset 2px 0 0 var(--gold);padding-left:12px}\" +",
+"      \"html.c93 .c93-menu p.c101c-note{font:400 12px/1.45 var(--ui);color:var(--ink-3);margin:18px 0 0}\" +"
+],
+"new": [
+"      \"html.dispatch-shell .c93-menu .c101c-btn:hover,html.dispatch-shell .c93-menu .c101c-btn[aria-expanded=true]{color:var(--ink)}\" +",
+"      \"html.dispatch-shell .c93-menu .c101c-btn:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}\" +",
+"      \"html.dispatch-shell .c93-menu .c101c-t{flex:1 1 auto}\" +",
+"      \"html.dispatch-shell .c93-menu .c101c-n{flex:0 0 auto;font:500 12px/1 var(--ui);letter-spacing:0;color:var(--ink-3);min-width:22px;text-align:right;font-variant-numeric:tabular-nums}\" +",
+"      \"html.dispatch-shell .c93-menu .c101c-ch{flex:0 0 auto;width:7px;height:7px;margin:-4px 6px 0 14px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);transition:transform .15s ease}\" +",
+"      \"html.dispatch-shell .c93-menu .c101c-btn[aria-expanded=true] .c101c-ch{transform:rotate(-135deg);margin-top:4px}\" +",
+"      \"html.dispatch-shell .c93-menu.c101b-menu .c101c-acc ul{display:block;margin:0 0 10px;padding:0;list-style:none}html.dispatch-shell .c93-menu .c101c-acc ul[hidden]{display:none!important}\" +",
+"      \"html.dispatch-shell .c93-menu.c101b-menu .c101c-acc a{display:flex;align-items:center;min-width:0;max-width:100%;min-height:44px;box-sizing:border-box;padding:10px 4px;border:0;border-top:1px solid var(--rule-soft);font:500 15px/1.3 var(--ui);white-space:normal;overflow-wrap:break-word}\" +",
+"      \"html.dispatch-shell .c93-menu .c101c-acc a[aria-current=page]{font-weight:600;color:var(--gold)!important;box-shadow:inset 2px 0 0 var(--gold);padding-left:12px}\" +",
+"      \"html.dispatch-shell .c93-menu p.c101c-note{font:400 12px/1.45 var(--ui);color:var(--ink-3);margin:18px 0 0}\" +"
+]
+},
+{
+"id": "41932c",
+"a1": 41932,
+"a2": 41932,
+"op": "c",
+"old": [
+"      \"@media (prefers-reduced-motion:reduce){html.c93 .c93-menu .c101c-ch{transition:none}}\";"
+],
+"new": [
+"      \"@media (prefers-reduced-motion:reduce){html.dispatch-shell .c93-menu .c101c-ch{transition:none}}\";"
+]
+},
+{
+"id": "41941c",
+"a1": 41941,
+"a2": 41941,
+"op": "c",
+"old": [
+"      \"@media (max-width:600px){html.c93,html.c93 body{overflow-x:hidden!important;max-width:100%}}\" +"
+],
+"new": [
+"      \"@media (max-width:600px){html.dispatch-shell,html.dispatch-shell body{overflow-x:hidden!important;max-width:100%}}\" +"
+]
+},
+{
+"id": "42044c",
+"a1": 42044,
+"a2": 42044,
+"op": "c",
+"old": [
+"      \".c101e-mk .msrc{display:none}.c101e-mk .c101e-ses,.c101e-mk .c101f-ses,.c101e-mk .c101f-off{display:block;margin-top:2px}.c101e-mk .c101f-off{font-weight:600}\" +"
+],
+"new": [
+"      \".c101e-mk .msrc{display:block;color:var(--ink-2);font-size:11px;line-height:1.45;overflow-wrap:anywhere}.c101e-mk .c101e-ses,.c101e-mk .c101f-ses,.c101e-mk .c101f-off{display:block;margin-top:2px}.c101e-mk .c101f-off{font-weight:600}\" +"
+]
+},
+{
+"id": "20433c",
+"a1": 20433,
+"a2": 20433,
+"op": "c",
+"old": [
+"      els.forEach(el => { if (el.textContent !== txt) el.textContent = txt; });"
+],
+"new": [
+"      els.forEach(el => { const v = el.classList.contains(\"stf-time\") ? String(txt).replace(/\\s*UK\\s*$/i, \"\") : txt; if (el.textContent !== v) el.textContent = v; }); // chat110navy: no \"UK UK time\""
+]
+}
+],
+"excluded": {
+"2737c": "r6o",
+"2742c": "r6o",
+"13845c": "r6o",
+"13849c": "r6o",
+"37248a": "r6o",
+"37255a": "r6o",
+"20739c": "ask",
+"21034a": "ask",
+"21039c": "ask",
+"21045a": "ask",
+"21153c": "ask-behaviour",
+"21227a": "ask",
+"21229c": "ask",
+"21231c": "ask",
+"21235c": "ask",
+"21239c": "ask",
+"21241a": "ask",
+"19298c": "data-fetch (CoinGecko browser fallback removal)",
+"41044d": "plain-English rewrite removal (would show NO LIVE SYNC / UNAVAILABLE)",
+"41363c": "default theme dark (kept system)",
+"41367c": "default theme dark (kept system)"
+}
+}
