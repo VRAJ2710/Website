@@ -1,0 +1,5 @@
+/* chat108saferxC: gold chart card, latest delayed quote as the main figure, last close on a secondary line. Preview only. */
+html.v9b #v3-gold .v10-sec{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin:0 0 6px;padding:7px 10px;border:1px solid var(--v-line);border-radius:10px;background:var(--v-chip);font:500 12.5px/1.4 "DM Sans",Inter,system-ui,sans-serif;color:var(--v-ink2)}
+html.v9b #v3-gold .v10-sec b{font-weight:700;color:var(--v-ink)}
+html.v9b #v3-gold .v10-sec .v3-flat,html.v9b #v3-gold .v10-sec .v3-up,html.v9b #v3-gold .v10-sec .v3-down{font-weight:700}
+html.v9b #v3-gold .v10-main{margin:0 0 8px}
