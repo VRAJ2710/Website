@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en" data-public-route="brief" class="r2-nobyok c97-system">
+<head><!--r2--><!--c97-theme-->
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<script>
+// One-shot cache bust — never loop-reload
+(function(){
+  var V='TD-chat1';
+  try {
+    var s=sessionStorage.getItem('td_ver');
+    if(!s){ sessionStorage.setItem('td_ver',V); return; }
+    if(s!==V){
+      sessionStorage.setItem('td_ver',V);
+      if(!sessionStorage.getItem('td_reloaded_'+V)){
+        sessionStorage.setItem('td_reloaded_'+V,'1');
+        location.reload();
+      }
+    }
+  } catch(e) {}
+})();
+
+// chat110navy: navy shell. Theme follows the saved choice, default "system" (device); set before the stylesheet is parsed.
+(function(){
+  document.documentElement.classList.add('fe64-js');
+  document.documentElement.classList.add('dispatch-shell');
+  try {
+    var m = /(?:^|;\s*)dispatch_theme=(light|dark|system)(?:;|$)/.exec(document.cookie || '');
+    var s = m ? m[1] : localStorage.getItem('dispatch_theme');
+    if (!/^(light|dark|system)$/.test(s || '')) s = 'system';
+    var de = document.documentElement;
+    var resolved = s === 'system' ? (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : s;
+    de.setAttribute('data-theme', resolved);
+    de.classList.remove('c97-light', 'c97-dark', 'c97-system');
+    de.classList.add('c97-' + s);
+  } catch (e) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    document.documentElement.classList.add('c97-system');
+  }
+})();
+</script>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="The Dispatch Market">
+<meta name="theme-color" content="#111820">
+<meta name="dispatch-asset-version" content="1183c958c30bca7b">
+<link rel="manifest" href="/manifest.json">
+<!-- SEO_HEAD_START -->
+<meta name="description" content="The Dispatch Brief is a daily market view covering the current regime, key risks, and the questions that matter for gold and macro analysts.">
+<meta name="author" content="Vraj Patel">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://thedispatch.uk/brief/">
+<title>Dispatch Brief | Daily Market View | The Dispatch Market</title>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="The Dispatch Market">
+<meta property="og:title" content="Dispatch Brief | Daily Market View | The Dispatch Market">
+<meta property="og:description" content="The Dispatch Brief is a daily market view covering the current regime, key risks, and the questions that matter for gold and macro analysts.">
+<meta property="og:url" content="https://thedispatch.uk/brief/">
+<meta property="og:image" content="https://thedispatch.uk/og-card.png">
+<meta property="og:image:alt" content="The Dispatch Market — gold and macro research house">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Dispatch Brief | Daily Market View | The Dispatch Market">
+<meta name="twitter:description" content="The Dispatch Brief is a daily market view covering the current regime, key risks, and the questions that matter for gold and macro analysts.">
+<meta name="twitter:image" content="https://thedispatch.uk/og-card.png">
+<script id="dispatch-page-schema" type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","@id":"https://thedispatch.uk/brief/#page","name":"Dispatch Brief | Daily Market View | The Dispatch Market","url":"https://thedispatch.uk/brief/","description":"The Dispatch Brief is a daily market view covering the current regime, key risks, and the questions that matter for gold and macro analysts.","isPartOf":{"@type":"WebSite","name":"The Dispatch Market","url":"https://thedispatch.uk/"},"publisher":{"@type":"Person","name":"Vraj Patel","url":"https://www.linkedin.com/in/vraj2710"}}</script>
+<script id="dispatch-breadcrumb-schema" type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"The Dispatch Market","item":"https://thedispatch.uk/"},{"@type":"ListItem","position":2,"name":"Dispatch Brief: a daily market view","item":"https://thedispatch.uk/brief/"}]}</script>
+<script id="dispatch-public-seo" type="application/json">{"home":{"path":"/","title":"The Dispatch Market | Gold \u0026 Macro Research","description":"The Dispatch Market is a gold and macro research house for independent traders. Read conditional weekly playbooks, daily briefs, and honest market context.","h1":"Know what matters before gold moves.","type":"WebSite"},"brief":{"path":"/brief/","title":"Dispatch Brief | Daily Market View | The Dispatch Market","description":"The Dispatch Brief is a daily market view covering the current regime, key risks, and the questions that matter for gold and macro analysts.","h1":"Dispatch Brief: a daily market view","type":"CollectionPage"},"playbook":{"path":"/playbook/","title":"Weekly Playbook | Conditional Gold \u0026 Macro Scenarios | The Dispatch Market","description":"A weekly conditional playbook for gold and macro markets, with scenarios, catalysts, invalidation levels, and a research-first decision framework.","h1":"Weekly Playbook: conditional gold and macro scenarios","type":"CollectionPage"},"gold":{"path":"/gold/","title":"Gold Desk | Gold Price Structure \u0026 Macro Context | The Dispatch Market","description":"The Gold Desk explains gold price structure, macro catalysts, and conditional scenarios for analysts who want context before conviction.","h1":"Gold Desk: structure, levels, and macro context","type":"CollectionPage"},"markets":{"path":"/markets/","title":"Markets | Equities, Crypto, Sectors \u0026 Indices | The Dispatch Market","description":"Explore market context across US equities, global indices, crypto, sectors, and watchlists with price-aware research from The Dispatch Market.","h1":"Markets: prices, sectors, and cross-asset context","type":"CollectionPage"},"news":{"path":"/news/","title":"Newsroom | Financial News with Market Context | The Dispatch Market","description":"The Dispatch Newsroom aggregates financial news and adds market context, relevance, and a clear path to deeper research.","h1":"Newsroom: market news with context","type":"CollectionPage"},"research":{"path":"/research/","title":"Research Desk | Market Explainers \u0026 Analysis | The Dispatch Market","description":"Research explainers from The Dispatch Market covering macro regimes, market structure, sector dispersion, and the reasoning behind a thesis.","h1":"Research Desk: explain the market before acting","type":"CollectionPage"},"signals":{"path":"/signals/","title":"Market Signals | Macro Signals Explained | The Dispatch Market","description":"Review evidence-weighted market signals across macro, equities, gold, and risk appetite with clear descriptions of what supports or weakens each read.","h1":"Market Signals: evidence-weighted macro context","type":"CollectionPage"}}</script>
+<!-- SEO_HEAD_END -->
+<link rel="icon" type="image/svg+xml" href="/logo-mark.svg?v=1183c958c30bca7b">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://api.gold-api.com" crossorigin>
+<link rel="dns-prefetch" href="https://ws-feed.exchange.coinbase.com">
+<link rel="dns-prefetch" href="https://streamer.finance.yahoo.com">
+<style id="fe70-critical">
+@media (max-width:767px){
+  .terminal-wrap{display:none!important}
+  .hdr{display:flex;flex-wrap:wrap;align-items:center;max-width:100%}
+  #hdrAuthBtn,.hdr .hdr-auth{flex-wrap:wrap;max-width:100%}
+  [data-fe70-ask="mob"]{display:inline-flex!important;align-items:center;justify-content:center;min-width:44px;min-height:44px}
+  [data-fe70-ask="desk"]{display:none!important}
+}
+@media (min-width:768px){
+  .hdr{display:none!important}
+  .cmd-bar{position:relative;z-index:260}
+  [data-fe70-ask="desk"]{display:inline-flex!important;align-items:center;justify-content:center;min-width:44px;min-height:44px;position:relative;z-index:261}
+  [data-fe70-ask="mob"]{display:none!important}
+}
+</style><style id="c99-app">.c99ask{margin:4px 0 12px;padding:10px 12px;border:1px solid var(--line,#d5d9e0);border-radius:10px;max-width:560px}.c99ask figcaption{font-weight:600;font-size:14px;margin-bottom:6px}.c99ask svg{width:100%;height:auto;display:block}.c99ask polyline.up{stroke:#1f6f5c}.c99ask polyline.dn{stroke:#b4483c}.c99ax{display:flex;justify-content:space-between;font-size:12px;opacity:.8}.c99p{margin:6px 0 2px;font-size:14px}.c99s{margin:2px 0;font-size:12px;opacity:.85}html.c97-dark .c99ask polyline.up{stroke:#4fb59a}html.c97-dark .c99ask polyline.dn{stroke:#e07b6f}@media (prefers-color-scheme:dark){html.c97-system .c99ask polyline.up{stroke:#4fb59a}html.c97-system .c99ask polyline.dn{stroke:#e07b6f}}</style><style id="c98-app">.c98-alertbar{background:#fff4d6;color:#3d2c00;border-bottom:1px solid #e2c766;font:500 14px/1.45 Inter,system-ui,sans-serif;padding:9px 44px 9px 16px;text-align:center;position:relative;z-index:399}.c98-alertbar a{color:#3d2c00;text-decoration:underline;font-weight:600}.c98-alertbar button{position:absolute;right:8px;top:50%;transform:translateY(-50%);background:none;border:0;font-size:20px;line-height:1;color:#3d2c00;cursor:pointer;padding:4px 8px}html.c97-dark .c98-alertbar{background:#3a3014;color:#f3e3b4;border-color:#6b5a22}html.c97-dark .c98-alertbar a,html.c97-dark .c98-alertbar button{color:#f3e3b4}@media (prefers-color-scheme:dark){html.c97-system .c98-alertbar{background:#3a3014;color:#f3e3b4;border-color:#6b5a22}html.c97-system .c98-alertbar a,html.c97-system .c98-alertbar button{color:#f3e3b4}}</style><style id="c97-app">html.c93.c97-dark:root,html.c93.c97-dark:root[data-theme],html.c93.c97-dark:root:not([data-theme="light"]){color-scheme:dark;--paper:#151b23;--paper-2:#1b222c;--carbon:#202834;--carbon-2:#263040;--ink:#e7eaee;--ink-2:#c3cad3;--ink-3:#a3adb9;--rule:rgba(231,234,238,0.14);--rule-2:rgba(231,234,238,0.28);--rule-soft:rgba(231,234,238,0.07);--gold:#9cc0ea;--gold-2:#9cc0ea;--gold-wash:rgba(156,192,234,0.112);--gold-line:rgba(156,192,234,0.48);--pos:#86d1a1;--neg:#f2998a;--pos-wash:rgba(134,209,161,0.126);--neg-wash:rgba(242,153,138,0.126);--rail:#1b222c;--rail-2:#202834;--rail-ink:#e7eaee;--rail-ink-2:#c3cad3;--rail-rule:rgba(231,234,238,0.14);--b1:#151b23;--b2:#1b222c;--b3:#263040;--b4:#34404f;--gb:rgba(231,234,238,0.14);--tx:#e7eaee;--t2:#c3cad3;--t3:#a3adb9;--gd:#9cc0ea;--gdG:rgba(156,192,234,0.112);--gn:#86d1a1;--rd:#f2998a;--cy:#9cc0ea;--bl:#9cc0ea;--pu:#c5b8f0;--gnG:rgba(134,209,161,0.126);--rdG:rgba(242,153,138,0.126);--blG:rgba(156,192,234,0.112);--cyG:rgba(156,192,234,0.112);--on-accent:#1b222c;--shadow-1:0 1px 2px rgba(231,234,238,0.06);--shadow-2:0 2px 10px rgba(231,234,238,0.08)}html.c93.c97-dark ::selection{background:rgba(156,192,234,0.288)}html.c93.c97-dark .fe88-word[data-flag="green"]{border-color:rgba(134,209,161,0.63)}html.c93.c97-dark .fe88-word[data-flag="amber"]{color:#e6c372;border-color:rgba(230,195,114,0.63);background:rgba(230,195,114,0.112)}html.c93.c97-dark .fe88-word[data-flag="red"]{border-color:rgba(242,153,138,0.63)}html.c93.c97-dark .term-overlay-hdr{background:#151b23!important;color:#e7eaee!important;border-bottom:1px solid #334050!important}html.c93.c97-dark .term-overlay-title{color:#e7eaee!important}html.c93.c97-dark .term-overlay-close{color:#e7eaee!important;border:1px solid #3a4757!important}html.c93.c97-dark table.tt thead,html.c93.c97-dark table.tt thead tr,html.c93.c97-dark table.tt thead th{color:#a3adb9!important}html.c93.c97-dark table.tt thead th{border-bottom:1px solid #e7eaee!important}html.c93.c97-dark table.tt td{border-bottom:1px solid #2a3441!important;color:#e7eaee}html.c93.c97-dark table.tt tr:hover td{background:#1b222c!important}html.c93.c97-dark .trust-stat{color:#a3adb9!important}html.c93.c97-dark .asof-tag{color:#a3adb9!important}html.c93.c97-dark .gc,html.c93.c97-dark .si-card{background:#1b222c!important;border:1px solid #334050!important;color:#e7eaee!important}html.c93.c97-dark .news-toolbar{background:#1b222c!important;border:1px solid #334050!important}html.c93.c97-dark .news-toolbar button,html.c93.c97-dark .news-toolbar .nf-chip{color:#e7eaee!important;background:#151b23!important;border-color:#3a4757!important}html.c93.c97-dark .btn.btn-primary,html.c93.c97-dark a.btn-primary{color:#1b222c!important}html.c93.c97-dark:root,html.c93.c97-dark:root[data-theme]{--on-accent:#0f141a;color-scheme:dark}html.c93.c97-dark body .gc,html.c93.c97-dark body .panel,html.c93.c97-dark body .term-overlay-card{background-color:var(--paper)!important}html.c93.c97-dark img[src*="logo"]{filter:none}html.c93.c97-dark ::selection{background:rgba(156,192,234,.3)}@media (prefers-color-scheme:dark){html.c93.c97-system:root,html.c93.c97-system:root[data-theme],html.c93.c97-system:root:not([data-theme="light"]){color-scheme:dark;--paper:#151b23;--paper-2:#1b222c;--carbon:#202834;--carbon-2:#263040;--ink:#e7eaee;--ink-2:#c3cad3;--ink-3:#a3adb9;--rule:rgba(231,234,238,0.14);--rule-2:rgba(231,234,238,0.28);--rule-soft:rgba(231,234,238,0.07);--gold:#9cc0ea;--gold-2:#9cc0ea;--gold-wash:rgba(156,192,234,0.112);--gold-line:rgba(156,192,234,0.48);--pos:#86d1a1;--neg:#f2998a;--pos-wash:rgba(134,209,161,0.126);--neg-wash:rgba(242,153,138,0.126);--rail:#1b222c;--rail-2:#202834;--rail-ink:#e7eaee;--rail-ink-2:#c3cad3;--rail-rule:rgba(231,234,238,0.14);--b1:#151b23;--b2:#1b222c;--b3:#263040;--b4:#34404f;--gb:rgba(231,234,238,0.14);--tx:#e7eaee;--t2:#c3cad3;--t3:#a3adb9;--gd:#9cc0ea;--gdG:rgba(156,192,234,0.112);--gn:#86d1a1;--rd:#f2998a;--cy:#9cc0ea;--bl:#9cc0ea;--pu:#c5b8f0;--gnG:rgba(134,209,161,0.126);--rdG:rgba(242,153,138,0.126);--blG:rgba(156,192,234,0.112);--cyG:rgba(156,192,234,0.112);--on-accent:#1b222c;--shadow-1:0 1px 2px rgba(231,234,238,0.06);--shadow-2:0 2px 10px rgba(231,234,238,0.08)}html.c93.c97-system ::selection{background:rgba(156,192,234,0.288)}html.c93.c97-system .fe88-word[data-flag="green"]{border-color:rgba(134,209,161,0.63)}html.c93.c97-system .fe88-word[data-flag="amber"]{color:#e6c372;border-color:rgba(230,195,114,0.63);background:rgba(230,195,114,0.112)}html.c93.c97-system .fe88-word[data-flag="red"]{border-color:rgba(242,153,138,0.63)}html.c93.c97-system .term-overlay-hdr{background:#151b23!important;color:#e7eaee!important;border-bottom:1px solid #334050!important}html.c93.c97-system .term-overlay-title{color:#e7eaee!important}html.c93.c97-system .term-overlay-close{color:#e7eaee!important;border:1px solid #3a4757!important}html.c93.c97-system table.tt thead,html.c93.c97-system table.tt thead tr,html.c93.c97-system table.tt thead th{color:#a3adb9!important}html.c93.c97-system table.tt thead th{border-bottom:1px solid #e7eaee!important}html.c93.c97-system table.tt td{border-bottom:1px solid #2a3441!important;color:#e7eaee}html.c93.c97-system table.tt tr:hover td{background:#1b222c!important}html.c93.c97-system .trust-stat{color:#a3adb9!important}html.c93.c97-system .asof-tag{color:#a3adb9!important}html.c93.c97-system .gc,html.c93.c97-system .si-card{background:#1b222c!important;border:1px solid #334050!important;color:#e7eaee!important}html.c93.c97-system .news-toolbar{background:#1b222c!important;border:1px solid #334050!important}html.c93.c97-system .news-toolbar button,html.c93.c97-system .news-toolbar .nf-chip{color:#e7eaee!important;background:#151b23!important;border-color:#3a4757!important}html.c93.c97-system .btn.btn-primary,html.c93.c97-system a.btn-primary{color:#1b222c!important}html.c93.c97-system:root,html.c93.c97-system:root[data-theme]{--on-accent:#0f141a;color-scheme:dark}html.c93.c97-system body .gc,html.c93.c97-system body .panel,html.c93.c97-system body .term-overlay-card{background-color:var(--paper)!important}html.c93.c97-system img[src*="logo"]{filter:none}html.c93.c97-system ::selection{background:rgba(156,192,234,.3)}}.c97-tg{display:inline-flex;align-items:center;border:1px solid var(--rule-2);border-radius:4px;margin:0 10px;flex-shrink:0;overflow:hidden}.c97-tg button{font:600 12px/1 var(--ui);padding:0 10px;min-height:32px;min-width:44px;background:transparent;color:var(--ink-2);border:0;border-left:1px solid var(--rule);cursor:pointer}.c97-tg button:first-child{border-left:0}.c97-tg button.on{background:var(--ink);color:var(--paper)}.c97-tg button:focus-visible,.c97-cyc:focus-visible{outline:2px solid var(--gold);outline-offset:2px}.c97-cyc{font:600 12px/1 var(--ui);min-height:44px;padding:0 10px;margin-left:6px;background:transparent;color:var(--ink);border:1px solid var(--rule-2);border-radius:4px;cursor:pointer}@media (max-width:1100px){.cmd-bar .c97-tg button{padding:0 7px;min-width:40px}}.c97-pvbar{background:#1d3557;color:#fff;font:600 13px/1.45 Inter,system-ui,sans-serif;padding:9px 16px;text-align:center;position:relative;z-index:400}.c97-pvbar a{color:#fff;text-decoration:underline}.rt17-foot .c97-disc{display:block;font-weight:600;color:var(--ink-2);margin-bottom:4px}html.c93 [style*="background:#000;"]{background:#efece4!important}html.c93.c97-dark [style*="background:#000;"]{background:#202834!important}@media (prefers-color-scheme:dark){html.c93.c97-system [style*="background:#000;"]{background:#202834!important}}.rt50-row b,.rt50-sum{color:inherit!important}html.c97-dark #settingsOv .rt17-btn-gold{color:#0f141a!important}@media (prefers-color-scheme:dark){html.c97-system #settingsOv .rt17-btn-gold{color:#0f141a!important}}</style>
+<link rel="preload" href="/api/market-reference-quotes" as="fetch" crossorigin="anonymous">
+<link rel="stylesheet" href="/styles.css?v=chat110navy">
+<link rel="stylesheet" href="/__navy/site.css?v=chat110navy">
+<style id="c110-shell">html.fe64-js .seo-public,html.fe64-js .seo-panel-copy{display:none!important}html.dispatch-shell body .tape,html.dispatch-shell body #statusBar,html.dispatch-shell body .status,html.dispatch-shell body #siteIntelBar,html.dispatch-shell body #wlGlanceBar,html.dispatch-shell body #kbdStrip,html.dispatch-shell body .kbd-strip{display:none!important}html.dispatch-shell .c93-foot-links{display:flex;flex-wrap:wrap;gap:4px 14px;margin:0 0 8px}html.dispatch-shell .c93-foot-links a{text-decoration:underline;text-underline-offset:2px}</style>
+<style id="c100-insp">.c100-fig{all:unset;cursor:pointer;border-bottom:1px dotted currentColor;font:inherit;color:inherit}.c100-fig:focus-visible,[data-c100]:focus-visible{outline:2px solid #2563eb;outline-offset:2px;border-radius:2px}
+#c100-pane{position:fixed;z-index:2147483000;right:16px;bottom:16px;width:min(380px,calc(100vw - 24px));max-height:min(70vh,520px);overflow:auto;background:#fff;color:#151b23;border:1px solid #c9c4b8;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:14px 16px;font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+#c100-pane[hidden]{display:none}#c100-pane h2{font-size:16px;margin:0 30px 2px 0;line-height:1.3}#c100-pane .v{font-size:20px;font-weight:700;margin:2px 0 8px}#c100-pane dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:4px 10px}#c100-pane dt{font-weight:600;color:#4a4f57}#c100-pane dd{margin:0;overflow-wrap:anywhere}
+#c100-pane a{color:#1f3a8a;text-decoration:underline}#c100-pane .x{position:absolute;top:8px;right:8px;min-width:32px;min-height:32px;border:1px solid #c9c4b8;border-radius:6px;background:transparent;color:inherit;font-size:16px;cursor:pointer}#c100-pane .ft{margin:10px 0 0;font-size:12px;color:#4a4f57}
+html.c97-dark #c100-pane{background:#151b23;color:#ece9e2;border-color:#3a4452}html.c97-dark #c100-pane dt,html.c97-dark #c100-pane .ft{color:#b8bec8}html.c97-dark #c100-pane a{color:#9cc0ea}html.c97-dark #c100-pane .x{border-color:#3a4452}
+@media (prefers-color-scheme:dark){html.c97-system #c100-pane{background:#151b23;color:#ece9e2;border-color:#3a4452}html.c97-system #c100-pane dt,html.c97-system #c100-pane .ft{color:#b8bec8}html.c97-system #c100-pane a{color:#9cc0ea}}
+@media (max-width:600px){#c100-pane{left:12px;right:12px;bottom:12px;width:auto}}</style><style id="c101-inst-css">#c101-inst{position:fixed;left:0;right:0;bottom:0;z-index:20;max-width:none;max-height:40px;margin:0;display:flex;flex-wrap:nowrap;gap:8px;align-items:center;background:#fff;color:#1b1b1b;border:0;border-top:1px solid #c9c4b8;border-radius:0;box-shadow:none;padding:4px 10px;font:13px/1.3 Inter,system-ui,sans-serif;overflow:hidden}#c101-inst span{flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#c101-inst button{min-height:32px;padding:0 10px;border-radius:6px;font:600 13px Inter,system-ui,sans-serif;cursor:pointer}body:has(#c101-inst){padding-bottom:44px}#c101-inst .y{background:#1f6f5c;color:#fff;border:1px solid #1f6f5c}#c101-inst .n{background:transparent;color:inherit;border:1px solid #c9c4b8}.c101btn{min-height:40px;padding:0 14px;border-radius:6px;background:#1f6f5c;color:#fff;border:1px solid #1f6f5c;font:600 14px var(--sans,Inter,system-ui,sans-serif);cursor:pointer;margin-left:6px}
+html.c97-dark #c101-inst{background:#151b23;color:#ece9e2;border-color:#3a4452}@media (prefers-color-scheme:dark){html.c97-system #c101-inst{background:#151b23;color:#ece9e2;border-color:#3a4452}}</style><style id="c102r6o-inst">#c101-inst{left:0;right:0;max-width:100%;box-sizing:border-box;flex-wrap:wrap;max-height:none}#c101-inst span{min-width:0;white-space:normal}body:has(#c101-inst){padding-bottom:72px}@media (max-width:390px){#c101-inst{padding:6px 8px;gap:6px;font-size:12px;overflow:hidden}#c101-inst button{min-width:0;flex:1 1 auto}body:has(#c101-inst){padding-bottom:120px}}</style><script id="c102r6o-fix">(function(){function fit(){var d=document.getElementById("c101-inst");if(!document.body)return;document.body.style.paddingBottom=d?((d.offsetHeight||72)+12)+"px":""}function boot(){if(!document.body)return;fit();try{new MutationObserver(fit).observe(document.body,{childList:true})}catch(e){}window.addEventListener("resize",fit)}function uk(s){return String(s).replace(/\bUK UK\b/g,"UK")}function gold(s){return String(s).replace(/\bGC=F\b/g,"Gold").replace(/\bXAU\b/g,"Gold")}function pass(){if(!document.body)return;var tw=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT),n,list=[];while((n=tw.nextNode()))list.push(n);var i;for(i=0;i<list.length;i++){var node=list[i],p=node.parentNode;if(!p||/^(SCRIPT|STYLE|NOSCRIPT|TEXTAREA)$/.test(p.tagName||""))continue;var v=node.nodeValue,next=uk(v);if(p.closest&&p.closest(".cap-nums,.cap-lbl,.news-px,.news-act"))next=gold(next);if(next!==v)node.nodeValue=next}}if(document.body)boot();else document.addEventListener("DOMContentLoaded",boot);if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",pass);else pass();window.addEventListener("load",pass);setTimeout(pass,400)})();</script><script id="c102r6o-fred">(function(){var N={DGS10:"10-year Treasury yield, FRED",DFII10:"10-year real yield (TIPS), FRED",DTWEXBGS:"broad trade-weighted US dollar index, FRED",DGS2:"2-year Treasury yield, FRED",DGS30:"30-year Treasury yield, FRED",T10YIE:"10-year breakeven inflation, FRED",CPIAUCSL:"US CPI, FRED",CPILFESL:"US core CPI, FRED",PCEPI:"US PCE price index, FRED",PAYEMS:"US nonfarm payrolls, FRED",DFF:"federal funds rate, FRED",UNRATE:"US unemployment rate, FRED"};function name(id){return N[id]||"FRED"}function fix(s){return String(s).replace(/US Treasury daily print via FRED \(([A-Z0-9]+)\)/g,function(_m,id){return name(id)}).replace(/US Treasury via FRED \(([A-Z0-9]+)\)(?:, [^.]*)?/g,function(_m,id){return name(id)}).replace(/FRED series ([A-Z0-9]+)(?: \([^)]*\))?/g,function(_m,id){return name(id)}).replace(/FRED \(([A-Z0-9]+)\)/g,function(_m,id){return name(id)})}function walk(root){if(!root||!document.createTreeWalker)return;var tw=document.createTreeWalker(root,NodeFilter.SHOW_TEXT),n,list=[];while((n=tw.nextNode()))list.push(n);var i;for(i=0;i<list.length;i++){var node=list[i],p=node.parentNode;if(!p||/^(SCRIPT|STYLE|NOSCRIPT|TEXTAREA)$/.test(p.tagName||""))continue;var v=node.nodeValue,next=fix(v);if(next!==v)node.nodeValue=next}var els=root.querySelectorAll?root.querySelectorAll("[title]"):[],j;for(j=0;j<els.length;j++){if(/^(SCRIPT|STYLE)$/.test(els[j].tagName||""))continue;var t=els[j].getAttribute("title")||"",nt=fix(t);if(nt!==t)els[j].setAttribute("title",nt)}}function go(){try{if(document.body)walk(document.body)}catch(e){}}if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",go);else go();window.addEventListener("load",go);setTimeout(go,400);setTimeout(go,1500)})();</script></head>
+<body class="app-booting">
+<a href="#main" class="skip-link">Skip to content</a>
+<div class="dispatch-boot-loader" id="dispatchBootLoader" role="status" aria-live="polite" aria-busy="true">
+  <span class="dispatch-boot-spinner" aria-hidden="true"></span>
+  <span>Loading Dispatch</span>
+</div>
+<div class="app" id="app">
+  <div class="tape"><div class="tape-track" id="tape"></div></div>
+  <div class="status" id="statusBar"></div>
+  <div id="siteIntelBar" class="site-intel-bar"></div>
+
+<!-- Terminal layout wrapper (desktop only) -->
+<div class="terminal-wrap" id="termWrap">
+<!-- Sidebar nav (desktop only) -->
+<!-- Sidebar is generated from NAV_TOP + NAV_GROUPS in app.js (renderSidebarNav).
+     Keep it empty here so the markup cannot drift from the nav definition. -->
+<nav class="sidebar" id="sidebar" aria-label="Sections"></nav>
+<div class="terminal-right">
+<!-- Terminal command bar (desktop only) -->
+<div class="cmd-bar" id="cmdBar">
+  <a class="cmd-logo" href="/" aria-label="The Dispatch Market home"><span class="cmd-logo-text">The Dispatch Market</span></a>
+  <nav class="c93-nav" id="c93Nav" aria-label="Main"><a href="/brief/" data-c93-nav="brief">Brief</a><a href="/gold/" data-c93-nav="gold">Gold</a><a href="/calendar/">Calendar</a><a href="/markets/" data-c93-nav="mkt">Markets</a><a href="/research/" data-c93-nav="research">Research</a><a href="/methodology">Methodology</a><a href="/about">About</a><a href="/pricing">Pricing</a><button type="button" class="c93-more" aria-controls="c93Menu" aria-expanded="false" aria-haspopup="true">All sections</button></nav>
+  <div class="cmd-ac-wrap">
+    <div class="cmd-input-wrap" style="flex:1">
+      <input class="cmd-input" id="cmdInput" aria-label="Ticker or command" placeholder="Enter ticker or command — AAPL, NEWS, WATCH, PORT..." autocomplete="off" autocorrect="off" spellcheck="false">
+      <button type="button" class="cmd-go" onclick="runCmd()">GO</button>
+    </div>
+    <div class="cmd-ac" id="cmdAc"></div>
+    <div id="cmdHint" style="display:none;position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--b2);border:1px solid var(--b3);border-radius:8px;padding:8px 12px;font-family:var(--mn);font-size:10px;color:var(--t3);gap:8px;flex-wrap:wrap;align-items:center;z-index:399;">
+      <span style="color:var(--t2);font-weight:600">Try:</span>
+      <button type="button" onclick="document.getElementById('cmdInput').value='AAPL';runCmd()" style="cursor:pointer;color:var(--gd);border:1px solid rgba(245,166,35,0.25);padding:1px 7px;border-radius:4px;">AAPL</button>
+      <button type="button" onclick="document.getElementById('cmdInput').value='NVDA';runCmd()" style="cursor:pointer;color:var(--gd);border:1px solid rgba(245,166,35,0.25);padding:1px 7px;border-radius:4px;">NVDA</button>
+      <button type="button" onclick="document.getElementById('cmdInput').value='XAU';runCmd()" style="cursor:pointer;color:var(--gd);border:1px solid rgba(245,166,35,0.25);padding:1px 7px;border-radius:4px;">XAU</button>
+      <button type="button" onclick="document.getElementById('cmdInput').value='BTC';runCmd()" style="cursor:pointer;color:var(--gd);border:1px solid rgba(245,166,35,0.25);padding:1px 7px;border-radius:4px;">BTC</button>
+      <button type="button" onclick="document.getElementById('cmdInput').value='RELIANCE.NS';runCmd()" style="cursor:pointer;color:var(--cy);border:1px solid rgba(0,212,245,0.25);padding:1px 7px;border-radius:4px;">RELIANCE.NS</button>
+      <span style="color:var(--b4)">·</span>
+      <span style="color:var(--t3)">Press / to focus</span>
+    </div>
+  </div>
+  <div class="cmd-status" id="cmdStatus">
+    <span class="status-dot cmd-live-dot" id="liveDot"></span>
+    <span id="cmdLive" class="cmd-live-label">Fetching</span>
+    <button type="button" class="cmd-ctl-btn" onclick="togglePause()" id="pauseBtn" title="Pause/resume price updates">⏸</button>
+    <button type="button" class="cmd-ctl-btn" onclick="fetchLivePrices();fetchLiveNews()" title="Refresh now">⟳</button>
+  </div>
+  <button type="button" class="cmd-about-btn" onclick="openAbout()" title="About &amp; Guide"><span class="cmd-about-ico" aria-hidden="true">i</span><span class="cmd-about-txt">About</span></button>
+  <button type="button" class="hdr-act-btn" data-fe70-ask="desk" onclick="_openResearchAssistant('What matters most in markets right now?')">Ask</button>
+  <div id="cmdAuthBtn" class="auth-group"><a href="/__auth/login" class="auth-btn auth-btn--ghost">Sign in</a><span class="auth-divider" aria-hidden="true"></span><a href="/__auth/register" class="auth-btn auth-btn--ghost">Create free account</a><span class="auth-divider" aria-hidden="true"></span><a href="/__auth/subscribe" class="auth-btn auth-btn--premium">Premium · £15/month</a></div>
+  <div class="cmd-clk" id="cmdClk"></div>
+  <p class="c93-strip"><strong>Not investment advice. Capital at risk.</strong> Figures carry their source and UK time; free feeds may be delayed.</p>
+</div>
+
+<!-- Terminal 4-panel grid (desktop only) -->
+<style>@media (max-width:767px){#panelGrid{display:none!important}}</style>
+<div class="panel-grid" id="panelGrid">
+  <div class="panel" id="p1">
+    <div class="panel-hdr">
+      <span class="panel-title"><span class="panel-idx">01</span>Markets</span>
+      <span class="panel-hdr-r"><span class="panel-sub" id="p1sub"></span><button type="button" class="hdr-act-btn" onclick="_openResearchAssistant('What matters most in markets right now?')">Ask</button><button type="button" class="p-exp-btn" onclick="toggleExpand('p1')" title="Expand (press 1)">⛶</button></span>
+    </div>
+    <div class="panel-body" id="p1body"><div class="seo-panel-copy"><strong>Markets</strong><br>Equities, indices, crypto, and sectors in context.<br><a href="/markets/">Explore Markets →</a></div></div>
+  </div>
+  <div class="panel" id="p2">
+    <div class="panel-hdr">
+      <span class="panel-title" id="p2title"><span class="panel-idx">02</span>News</span>
+      <span class="panel-hdr-r"><span class="panel-sub" id="p2sub"></span><button type="button" class="p-exp-btn" onclick="toggleExpand('p2')" title="Expand (press 2)">⛶</button></span>
+    </div>
+    <div class="panel-body" id="p2body"><div class="seo-panel-copy"><strong>Newsroom</strong><br>Financial headlines connected to price and regime.<br><a href="/news/">Read the Newsroom →</a></div></div>
+  </div>
+  <div class="panel" id="p3">
+    <div class="panel-hdr">
+      <span class="panel-title"><span class="panel-idx">03</span>Signals</span>
+      <span class="panel-hdr-r"><span class="panel-sub">EVIDENCE-WEIGHTED</span><button type="button" class="p-exp-btn" onclick="toggleExpand('p3')" title="Expand (press 3)">⛶</button></span>
+    </div>
+    <div class="panel-body" id="p3body"><div class="seo-panel-copy"><strong>Signals</strong><br>Evidence-weighted macro context, not trading instructions.<br><a href="/signals/">Review Market Signals →</a></div></div>
+  </div>
+  <div class="panel" id="p4">
+    <div class="panel-hdr">
+      <span class="panel-title"><span class="panel-idx">04</span>Indices</span>
+      <span class="panel-hdr-r"><span class="panel-sub" id="p4sub">GLOBAL</span><button type="button" class="p-exp-btn" onclick="toggleExpand('p4')" title="Expand (press 4)">⛶</button></span>
+    </div>
+    <div class="panel-body" id="p4body"><div class="seo-panel-copy"><strong>Indices</strong><br>Global benchmarks and cross-asset perspective.<br><a href="/markets/">Browse market context →</a></div></div>
+  </div>
+</div>
+</div><!-- end terminal-right -->
+</div><!-- end terminal-wrap -->
+
+  <header class="hdr">
+    <a class="logo" href="/" aria-label="The Dispatch Market home"><span class="logo-text"><span class="logo-the">The</span><span class="logo-disp">Dispatch</span><span class="logo-markets">Market</span></span></a>
+    <button type="button" class="c93-menu-btn" aria-controls="c93Menu" aria-expanded="false" aria-haspopup="true" aria-label="Menu: all sections">Menu</button>
+    <div class="srch" onclick="openSearch()" role="button" tabindex="0" aria-label="Search tickers and commands" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openSearch();}">
+      <span class="srch-ico" aria-hidden="true">⌕</span>
+      <span class="srch-ph">Search…</span>
+      <kbd class="srch-kbd">/</kbd>
+    </div>
+    <div id="hdrAuthBtn" class="hdr-auth auth-group"><a href="/__auth/login" class="auth-btn auth-btn--ghost auth-btn--compact">Sign in</a><span class="auth-divider" aria-hidden="true"></span><a href="/__auth/register" class="auth-btn auth-btn--ghost auth-btn--compact">Create free account</a><span class="auth-divider" aria-hidden="true"></span><a href="/__auth/subscribe" class="auth-btn auth-btn--premium auth-btn--compact">Premium · £15/month</a></div>
+    <button type="button" class="hdr-act-btn" data-fe70-ask="mob" onclick="_openResearchAssistant('What matters most in markets right now?')">Ask</button>
+    <button class="info-btn" onclick="openAbout()" title="About">i</button>
+    <div><div class="clk" id="clk"></div><div class="clk-d" id="clkD"></div></div>
+    <p class="c93-strip"><strong>Not investment advice. Capital at risk.</strong> Figures carry their source and UK time; free feeds may be delayed.</p>
+  </header>
+  <div class="body-wrap"><main class="main" id="main"><article class="seo-public" aria-labelledby="seo-public-title">
+    <header class="seo-public-hero">
+      <p class="seo-public-eyebrow">DAILY HOUSE VIEW</p>
+      <h1 id="seo-public-title">Dispatch Brief: a daily market view</h1>
+      <p class="seo-public-intro">A concise starting point for the session: market regime, cross-asset context, and the risks most likely to change the read. Use it as research, not as a trading instruction.</p>
+    </header>
+    <nav class="seo-public-nav" aria-label="Public market sections"><a href="/playbook/">Weekly Playbook</a><a href="/gold/">Gold Desk</a><a href="/markets/">Markets</a><a href="/news/">Newsroom</a><a href="/research/">Research</a></nav>
+    <div class="seo-public-sections">
+    <section class="seo-public-section">
+      <h2>A regime before a prediction</h2>
+      <p>The Brief begins with the conditions around the market: breadth, volatility, rates, dollar pressure, and the behavior of major risk assets. That context helps distinguish a durable move from a headline reaction.</p>
+    </section>
+    <section class="seo-public-section">
+      <h2>Questions for the session</h2>
+      <p>Good market work is conditional. The daily view highlights what would confirm the current read, what would invalidate it, and which signals deserve attention before a conclusion is drawn.</p>
+    </section>
+    <section class="seo-public-section">
+      <h2>Connect the daily view to the week</h2>
+      <p>When the day’s tape needs a broader frame, continue to the Weekly Playbook and Gold Desk for scenario planning, structure, and macro catalysts.</p>
+    </section></div>
+    <aside class="seo-public-note">
+      <h2>Research with appropriate context</h2>
+      <p>The Dispatch Market is for educational and research purposes only. Market data may be delayed, incomplete, or inaccurate, and nothing on this site is financial advice or a recommendation to buy or sell an instrument.</p>
+    </aside>
+  </article></main></div>
+  <nav class="bnav" id="bnav"></nav>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- Search overlay -->
+<div class="sov hide" id="sov" role="dialog" aria-modal="true" aria-labelledby="search-dialog-title" onclick="closeSearch()">
+  <div class="sbox" onclick="event.stopPropagation()">
+    <div class="sbox-hdr">
+      <h2 class="sbox-title" id="search-dialog-title" tabindex="-1">Command Palette</h2>
+      <button type="button" class="sbox-x" onclick="closeSearch()" aria-label="Close search"><span aria-hidden="true">×</span></button>
+    </div>
+    <div class="sbox-inp-wrap">
+      <span class="sbox-ico" aria-hidden="true">⌕</span>
+      <label class="sr-only" for="sinp">Search tickers, commands, or research</label>
+      <input class="sinp" id="sinp" type="search" aria-label="Search tickers, commands, or research" placeholder="Ticker, command, or research…" autocomplete="off" autocorrect="off" spellcheck="false" oninput="doSearch(this.value)" onkeydown="_searchKeydown(event)">
+      <kbd class="sbox-kbd">esc</kbd>
+    </div>
+    <div class="sbox-chips" id="sChips"></div>
+    <div id="sres" class="sres-list"></div>
+    <div class="sbox-foot">
+      <span><kbd>↑</kbd><kbd>↓</kbd> navigate</span>
+      <span><kbd>↵</kbd> select</span>
+      <span><kbd>/</kbd> open</span>
+    </div>
+  </div>
+</div>
+
+<!-- About & Guide modal -->
+<div class="sov hide" id="aboutOv" role="dialog" aria-modal="true" aria-labelledby="about-dialog-title" onclick="closeAbout()">
+  <div class="about-card" onclick="event.stopPropagation()" style="position:relative;max-width:620px;">
+    <button type="button" class="about-close" onclick="closeAbout()" aria-label="Close About"><span aria-hidden="true">×</span></button>
+
+    <!-- Masthead -->
+      <div class="about-letterhead">
+       <h2 class="about-mast" id="about-dialog-title" tabindex="-1">The <em>Dispatch</em> Market</h2>
+       <div class="about-tag">Verified gold and macro research for independent investors, with sources on every figure.</div>
+       <div class="about-domain">THEDISPATCH.UK</div>
+      <div id="aboutAuthRow" style="margin-top:14px">
+         <a href="/__auth/subscribe" class="about-signin">Get Premium · £15/month</a>
+         <div class="about-signin-hint">Create an account first, then choose Premium. <a href="/__auth/login">Returning member? Sign in</a></div>
+      </div>
+    </div>
+
+    <div class="about-section">
+       <h3 class="about-h">The Saturday job</h3>
+       <div class="about-p">The Dispatch Market turns delayed, disclosed market data into a conditional gold playbook. Each week, an independent trader should be able to form a stance they can defend: what would confirm it, what would invalidate it, and which events could change the thesis.</div>
+    </div>
+
+     <div class="about-section">
+       <h3 class="about-h">Access</h3>
+       <div class="about-tier-grid">
+         <div class="about-tier">
+           <strong>Free</strong>
+           <span>Prices, the Dispatch Brief, and Market Lab.</span>
+         </div>
+         <div class="about-tier about-tier-premium">
+           <strong>Premium · £15/month</strong>
+           <span>Weekly Gold Playbook, AI Dispatch Brief, Ask research assistant and company statements. No token mark-up. <a href="/pricing">Compare plans</a></span>
+         </div>
+       </div>
+     </div>
+
+     <div class="about-section">
+       <h3 class="about-h">Editor</h3>
+      <div class="about-creator">
+        <div style="flex:1">
+          <div class="about-name">Vraj Patel</div>
+          <div class="about-role">Edited by Vraj Patel</div>
+           <div class="about-founder-copy">Independent market researcher. <a href="/about">About The Dispatch Market</a> · <a href="/methodology">Methodology</a></div>
+          <a href="https://www.linkedin.com/in/vraj2710" target="_blank" rel="noopener noreferrer" class="about-li">
+            <svg viewBox="0 0 24 24" fill="currentColor" style="width:13px;height:13px"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.063 2.063 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+            Vraj Patel on LinkedIn
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <div class="about-section">
+       <h3 class="about-h">Disclaimer</h3>
+       <div class="about-disclaimer">Research and education only. Market data may be delayed, incomplete, or inaccurate. Nothing here is financial advice or a recommendation to buy or sell. Not investment advice. Capital at risk.</div>
+    </div>
+
+     <button type="button" class="about-done" onclick="closeAbout()">Close</button>
+  </div>
+</div>
+
+<!-- Context menu -->
+<div class="ctx-menu" id="ctxMenu"></div>
+<script defer src="/app.js?v=chat110navy"></script>
+<script id="c100-insp-js">(function(){if(window.__c100)return;window.__c100=1;
+var SRC=[[/Tradeweb|CNBC/i,function(m,t){var tp=/real yield|TIPS|inflation/i.test(t);return["Market quote via CNBC (delayed)","https://www.cnbc.com/quotes/"+(tp?"US10YTIP":"US10Y"),tp?"10-year US inflation-protected Treasury (TIPS) yield, market quote":"10-year US Treasury yield, market quote"]}],
+[/FRED \((\w+)\)|FRED series (\w+)/,function(m){var s=m[1]||m[2];return["FRED, Federal Reserve Bank of St. Louis (US Treasury data)","https://fred.stlouisfed.org/series/"+s,s==="DFII10"?"10-year US Treasury inflation-protected (real) yield, daily (10-year real yield (TIPS), FRED)":s==="DGS10"?"10-year US Treasury yield, constant maturity, daily (FRED series DGS10)":"FRED series "+s]}],
+[/real yield/i,function(){return["FRED, Federal Reserve Bank of St. Louis (US Treasury data)","https://fred.stlouisfed.org/series/DFII10","10-year US Treasury inflation-protected (real) yield, daily (10-year real yield (TIPS), FRED)"]},1],
+[/10-year Treasury yield|US 10-year yield/i,function(){return["FRED, Federal Reserve Bank of St. Louis (US Treasury data)","https://fred.stlouisfed.org/series/DGS10","10-year US Treasury yield, constant maturity, daily (FRED series DGS10)"]},1],
+[/US Treasury daily par yield/i,function(){return["US Treasury","https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve","Daily Treasury par yield curve rates"]}],
+[/Bank of England/i,function(){return["Bank of England","https://www.bankofengland.co.uk/statistics/yield-curves","Nominal par gilt yields, end of day"]}],
+[/CFTC/i,function(){return["CFTC Commitments of Traders","https://publicreporting.cftc.gov/","Disaggregated futures-only report, gold on COMEX, weekly"]}],
+[/EIA/,function(){return["US Energy Information Administration","https://www.eia.gov/dnav/pet/pet_pri_spt_s1_d.htm","Crude oil spot price, daily"]}],
+[/Frankfurter|ECB/,function(){return["European Central Bank reference rates, via Frankfurter","https://www.frankfurter.app/","Euro foreign exchange reference rates"]}],
+[/Coinbase/i,function(){return["Coinbase","https://www.coinbase.com/price","Spot price in US dollars"]}],
+[/CoinGecko/i,function(){return["CoinGecko","https://www.coingecko.com/","Spot price in US dollars"]}],
+[/ICE US Dollar|US Dollar Index|dollar index/i,function(){return["ICE US Dollar Index, via Yahoo Finance","https://finance.yahoo.com/markets/","ICE US Dollar Index: the dollar against six major currencies"]},1],
+[/gold-api/i,function(m,t){return["gold-api.com","https://gold-api.com/",/silver/i.test(t)&&!/gold/i.test(t.split("|")[0])?"Spot silver price, US dollars per troy ounce":"Spot gold price, US dollars per troy ounce"]}],
+[/SEC EDGAR|SEC filing|data\.sec\.gov/i,function(){return["US SEC EDGAR","https://www.sec.gov/edgar/search/","Company financial data as filed (XBRL)"]}],
+[/Yahoo/i,function(m,t){return["Yahoo Finance, delayed","https://finance.yahoo.com/markets/",""]}],
+[/risk-appetite|The Dispatch/i,function(){return["The Dispatch Market model","/methodology/","In-house gauge built from the figures shown"]}]];
+var FORM=[[/£ per gram/i,"Gold in pounds per gram = gold spot in US$ ÷ pound in US$ (GBP/USD) ÷ 31.1035 grams per troy ounce"],[/£ per troy ounce|gold in pounds|£/i,"Gold in pounds = gold spot in US$ ÷ pound in US$ (GBP/USD)"],[/€ per troy ounce/i,"Gold in euros = gold spot in US$ ÷ euro in US$ (EUR/USD)"],[/gold\/silver ratio/i,"Gold/silver ratio = gold spot ÷ silver spot"],
+[/net position as a share/i,"Net position ÷ all open gold futures contracts"],[/^net position/i,"Contracts that gain if gold rises − contracts that gain if gold falls"],[/percentile/i,"Share of the last ten years of weekly reports with a net position at or below this week's"],[/change over a week/i,"Latest yield − yield about one week earlier"],[/change over a month/i,"Latest yield − yield about one month earlier"]];
+function T(e){return e?String(e.textContent||"").replace(/\s+/g," ").trim():""}
+function when(t){var m=/((?:[A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2},? )?\d{1,2}:\d{2} UK)/.exec(t);return m?m[1]:""}
+function status(t){if(/last known|saved/i.test(t))return"Last known: the feed did not answer, so this is the last reading saved (time shown)";if(/delayed/i.test(t))return"Delayed: free feeds lag the market, usually by 15 to 20 minutes";if(/last close|closed/i.test(t))return"Last close: that market is shut";if(/FRED|Treasury|Bank of England|CFTC|EIA|ECB|dated|End of day|Positions as of/i.test(t))return"Official print: published once a day or week, dated as shown";return"Latest reading"}
+function src(t,label){for(var i=0;i<SRC.length;i++){var r=SRC[i],m=r[0].exec(r[2]?label+" "+t:t);if(m&&!(r[2]&&/gold-api/i.test(t)))return r[1](m,label+"|"+t)}return[t||"See the note under the table","",""]}
+function form(label,t){for(var i=0;i<FORM.length;i++)if(FORM[i][0].test(label))return FORM[i][1];if(/÷/.test(t)&&/gold|silver/i.test(label))return t;return""}
+function info(el){var d=el.closest("[data-c100]");if(d){return{name:d.getAttribute("data-c100-name"),value:d.getAttribute("data-c100-value"),src:d.getAttribute("data-c100-src"),url:d.getAttribute("data-c100-url"),series:d.getAttribute("data-c100-series"),at:d.getAttribute("data-c100-at"),status:d.getAttribute("data-c100-status"),formula:d.getAttribute("data-c100-formula")}}
+var tr=el.closest("tr");if(!tr)return null;var tds=tr.querySelectorAll("td");if(!tds.length)return null;var table=tr.closest("table");
+var c0=tds[0].cloneNode(true);[].forEach.call(c0.querySelectorAll(".src,.c97p,.c97s"),function(x){x.remove()});var label=T(c0);
+var col=el.closest("td"),ci=[].indexOf.call(tds,col);var th=table.querySelectorAll("thead th");var head=th[ci]?T(th[ci]):"";
+var srcT="";var sc=tr.querySelector("td.src")||tr.querySelectorAll(".c97s");if(sc&&sc.length!==undefined){srcT=[].filter.call(sc,function(x){return!x.classList.contains("c101f-off")}).map(function(x){return T(x)}).join(" · ")}else if(sc){var sc1=sc.cloneNode(true);[].forEach.call(sc1.querySelectorAll(".c101f-off,.c101f-ses,.c101e-ses"),function(x){x.remove()});srcT=T(sc1)}
+if(!srcT){var w=table.closest(".c99wrap")||table;var n=w.nextElementSibling;while(n&&!(n.classList&&n.classList.contains("c97s"))&&!/^H2$/.test(n.tagName))n=n.nextElementSibling;if(n&&n.classList&&n.classList.contains("c97s"))srcT=T(n)}
+var sec=table.closest("section"),h2=sec&&sec.querySelector("h2"),ctxName=h2?T(h2):"";
+var S=src(srcT,label),name=label+(head&&ci>1&&!/reading|level|yield$/i.test(head)?" · "+head:"")+(/Treasuries|gilts/i.test(ctxName)?" ("+ctxName+")":"");
+var st=srcT.replace(/^Source:\s*/i,"");
+return{name:name,value:T(col||tds[1]),src:S[0],url:S[1],series:S[2]||label,at:when(srcT)||when(T(document.querySelector("main"))),status:status(srcT),formula:form(head&&ci>1?head:label,st)}}
+var pane,last;function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function open(el){var d=info(el);if(!d)return;if(!pane){pane=document.createElement("div");pane.id="c100-pane";pane.setAttribute("role","dialog");pane.setAttribute("aria-labelledby","c100-h");pane.hidden=true;document.body.appendChild(pane);pane.addEventListener("keydown",function(e){if(e.key==="Escape"){e.preventDefault();close()}if(e.key==="Tab"){var f=pane.querySelectorAll("a,button");if(!f.length)return;var a=f[0],b=f[f.length-1];if(e.shiftKey&&document.activeElement===a){e.preventDefault();b.focus()}else if(!e.shiftKey&&document.activeElement===b){e.preventDefault();a.focus()}}})}
+last=el;var u=d.url?(/^\//.test(d.url)?d.url:d.url):"";
+pane.innerHTML='<button type="button" class="x" aria-label="Close source details">×</button><h2 id="c100-h">'+esc(d.name||"Figure")+'</h2>'+(d.value?'<div class="v">'+esc(d.value)+'</div>':"")+'<dl><dt>Source</dt><dd>'+(u?'<a href="'+esc(u)+'" target="_blank" rel="noopener noreferrer">'+esc(d.src)+'</a>':esc(d.src))+'</dd>'+(d.series?'<dt>Series</dt><dd>'+esc(d.series)+'</dd>':"")+'<dt>Retrieved</dt><dd>'+esc(d.at||"Time shown on the page")+'</dd><dt>Status</dt><dd>'+esc(d.status||"Latest reading")+'</dd>'+(d.formula?'<dt>Formula</dt><dd>'+esc(d.formula)+'</dd>':"")+'</dl><p class="ft">Information only. Not investment advice. Capital at risk.</p>';
+pane.hidden=false;pane.querySelector(".x").onclick=close;pane.querySelector(".x").focus()}
+function close(){if(!pane||pane.hidden)return;pane.hidden=true;if(last&&last.focus){try{last.focus()}catch(e){}}}
+function deco(){[].forEach.call(document.querySelectorAll("table.ctx tbody tr td.n:nth-child(2),table.c97t tbody td.v"),function(td){if(td.querySelector(".c100-fig")||!T(td)||td.closest("form"))return;var b=document.createElement("button");b.type="button";b.className="c100-fig";b.setAttribute("aria-haspopup","dialog");b.title="Show the source of this figure";while(td.firstChild)b.appendChild(td.firstChild);td.appendChild(b)})}
+document.addEventListener("click",function(e){var t=e.target;if(!t||!t.closest)return;if(pane&&!pane.hidden&&!pane.contains(t)&&!t.closest(".c100-fig,[data-c100]"))close();var b=t.closest(".c100-fig,[data-c100]");if(b){e.preventDefault();e.stopPropagation();open(b)}},true);
+document.addEventListener("keydown",function(e){if(e.key==="Escape")close()});
+var tm;function sch(){clearTimeout(tm);tm=setTimeout(deco,150)}
+if(document.readyState!=="loading")deco();else document.addEventListener("DOMContentLoaded",deco);
+try{new MutationObserver(function(ms){for(var i=0;i<ms.length;i++){var n=ms[i].target;if(n&&n.closest&&n.closest("table"))return sch()}}).observe(document.documentElement,{childList:true,subtree:true})}catch(e){}
+})();</script><script id="c100b-js">window.C100B_FOUNDER={"photo":"/assets/founder.webp?v=fe56cbdeba4f","li":"https://www.linkedin.com/in/vraj2710","liLabel":"Vraj Patel on LinkedIn"};</script><script id="c101-inst-js">(function(){if(window.__c101i)return;window.__c101i=1;if(!window.__c102r6hFetch){window.__c102r6hFetch=1;var _f=window.fetch;if(typeof _f==="function"){window.fetch=function(input,init){var u="";try{u=typeof input==="string"?input:(input&&input.url)||""}catch(e0){}if(String(u).indexOf("/api/c98/alerts")>=0&&window._userSignedIn!==true){return Promise.resolve(new Response("",{status:204}))}return _f.apply(this,arguments)}}}try{var h=location.hostname;if("serviceWorker" in navigator&&(location.protocol==="https:"||h==="localhost"||h==="127.0.0.1")){var rg=function(){navigator.serviceWorker.register("/sw.js",{scope:"/"}).catch(function(){})};if(document.readyState==="complete")rg();else window.addEventListener("load",rg)}}catch(e){}
+var K="c101-install-dismissed",ev=null;function off(){try{var t=+localStorage.getItem(K)||0;return Date.now()-t<30*864e5}catch(e){return false}}
+function bar(){if(off()||document.getElementById("c101-inst"))return;var d=document.createElement("div");d.id="c101-inst";d.setAttribute("role","region");d.setAttribute("aria-label","Install the app");d.innerHTML='<span>Add The Dispatch Market to your home screen for one-tap Gold, Brief and Dashboard.</span><button type="button" class="y">Install</button><button type="button" class="n" aria-label="Not now">Not now</button>';document.body.appendChild(d);d.querySelector(".y").onclick=go;d.querySelector(".n").onclick=function(){try{localStorage.setItem(K,String(Date.now()))}catch(e){}d.remove()}}
+function go(){if(!ev)return;ev.prompt();ev.userChoice.then(function(){ev=null;var d=document.getElementById("c101-inst");if(d)d.remove();var b=document.getElementById("c101-install-btn");if(b)b.hidden=true}).catch(function(){})}
+window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();ev=e;var b=document.getElementById("c101-install-btn");if(b){b.hidden=false;b.onclick=go}if(!/[?&]source=pwa/.test(location.search)){var n=1;try{n=(+localStorage.getItem("c101-install-visits")||0)+1;localStorage.setItem("c101-install-visits",String(n))}catch(err){}if(n>=2)bar();else setTimeout(bar,30000)}});
+window.addEventListener("appinstalled",function(){var d=document.getElementById("c101-inst");if(d)d.remove()})})();</script><style id="c102r6o-header">@media (min-width:1024px) and (max-width:1440px){header.site .wrap,header.site .nav,header.site form.c97tg{min-width:0;max-width:100%;box-sizing:border-box}header.site .wrap{display:flex;flex-wrap:wrap;height:auto}header.site .nav{display:flex;flex-wrap:wrap;flex:1 1 auto}header.site form.c97tg{flex:0 1 auto}header.site .nav a{white-space:normal}html.c97-dark header.site .wrap,html.c97-system header.site .wrap{display:flex;flex-wrap:wrap;height:auto;min-width:0}html.c97-dark header.site .nav,html.c97-system header.site .nav{display:flex;flex-wrap:wrap;flex:1 1 auto;min-width:0}html.c97-dark header.site form.c97tg,html.c97-system header.site form.c97tg{min-width:0;max-width:100%;flex:0 1 auto}html.c97-dark header.site .nav a,html.c97-system header.site .nav a{white-space:normal}}</style><style id="c107-css">.c107-cites{margin:8px 0 0;padding:0;max-width:100%;min-width:0}.c107-cite{margin:4px 0 0;font-size:12px;line-height:1.45;opacity:.82;color:inherit;overflow-wrap:anywhere;word-break:break-word;max-width:100%}.c107-cite a,.c107-fred a,.c107-meth a{color:inherit;text-decoration:underline}.c107-fred{margin:8px 0 0;font-size:12px;line-height:1.45;opacity:.85;overflow-wrap:anywhere}.c107-meth{overflow-wrap:anywhere}.c107-hold{font-size:13px;opacity:.85}</style><script id="c107-credits">window.__c107cfg={"d":{"DGS10":"28 November 2026","DFII10":"28 November 2026","DCOILWTICO":"28 November 2026","DCOILBRENTEU":"28 November 2026","PAYEMS":"28 November 2026","UNRATE":"28 November 2026","CPIAUCSL":"28 November 2026","PCEPI":"28 November 2026","A191RL1Q225SBEA":"28 November 2026","DFEDTARU":"28 November 2026","DFEDTARL":"28 November 2026"},"eia":true,"hide":{}};(function(){
+"use strict";
+if(window.__c107)return;window.__c107=1;
+var CFG=window.__c107cfg||{d:{},eia:false,hide:{}};
+var CAT={
+DGS10:["Board of Governors of the Federal Reserve System (US)","Market Yield on U.S. Treasury Securities at 10-Year Constant Maturity, Quoted on an Investment Basis"],
+DFII10:["Board of Governors of the Federal Reserve System (US)","Market Yield on U.S. Treasury Securities at 10-Year Constant Maturity, Quoted on an Investment Basis, Inflation-Indexed"],
+DTWEXBGS:["Board of Governors of the Federal Reserve System (US)","Nominal Broad U.S. Dollar Index"],
+DCOILWTICO:["U.S. Energy Information Administration","Crude Oil Prices: West Texas Intermediate (WTI) - Cushing, Oklahoma"],
+DCOILBRENTEU:["U.S. Energy Information Administration","Crude Oil Prices: Brent - Europe"],
+PAYEMS:["U.S. Bureau of Labor Statistics","All Employees, Total Nonfarm"],
+UNRATE:["U.S. Bureau of Labor Statistics","Unemployment Rate"],
+CPIAUCSL:["U.S. Bureau of Labor Statistics","Consumer Price Index for All Urban Consumers: All Items in U.S. City Average"],
+PCEPI:["U.S. Bureau of Economic Analysis","Personal Consumption Expenditures: Chain-type Price Index"],
+A191RL1Q225SBEA:["U.S. Bureau of Economic Analysis","Real Gross Domestic Product"],
+DFEDTARU:["Board of Governors of the Federal Reserve System (US)","Federal Funds Target Range - Upper Limit"],
+DFEDTARL:["Board of Governors of the Federal Reserve System (US)","Federal Funds Target Range - Lower Limit"]
+};
+var D=document;
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+function cite(id){var c=CAT[id];if(!c)return"";var u="https://fred.stlouisfed.org/series/"+id,d=CFG.d&&CFG.d[id];
+return esc(c[0])+", "+esc(c[1])+" ["+id+"], retrieved from FRED, Federal Reserve Bank of St. Louis; <a href=\""+u+"\" rel=\"noopener\">"+u+"</a>"+(d?", "+esc(d):"")}
+function rowText(el){var r=el.closest&&el.closest("tr,.v3-pt,li");return r?(r.textContent||""):(el.textContent||"")}
+function idsFor(el,t){
+var out=[],m,re;
+if(/\(FRED ([A-Z0-9]+(?:, [A-Z0-9]+)*)\)/.test(t)){re=/\(FRED ([A-Z0-9]+(?:, [A-Z0-9]+)*)\)/g;while((m=re.exec(t)))m[1].split(", ").forEach(function(x){if(CAT[x])out.push(x)});}
+if(/^Official daily:/.test(t.trim())&&/US Treasury via FRED/.test(t))out.push(/real yield|TIPS|inflation-protected/i.test(rowText(el))?"DFII10":"DGS10");
+if(/FRED, US 10-year Treasury yield/.test(t))out.push("DGS10");
+if(/FRED, US 10-year real yield \(TIPS\)|10-year real yield \(TIPS\), FRED/.test(t))out.push("DFII10");
+if(/broad trade-weighted US dollar index, FRED/i.test(t))out.push("DTWEXBGS");
+if(CFG.eia&&/US EIA (spot|daily print)/.test(t))out.push(/Brent/i.test(rowText(el))?"DCOILBRENTEU":"DCOILWTICO");
+return out}
+function box(el){
+var c=el.closest("article,.v3-card,table,section,.c101card")||el.parentNode;
+if(c&&c.tagName==="TABLE"){var w=c.parentNode&&c.parentNode.classList&&c.parentNode.classList.contains("c101d-tw")?c.parentNode:c;return{key:w,after:true}}
+return{key:c,after:false}}
+function holder(b){
+if(b.key.__c107h&&b.key.__c107h.isConnected)return b.key.__c107h;
+var h=D.createElement("div");h.className="c107-cites";h.setAttribute("data-c107","1");
+if(b.after)b.key.parentNode.insertBefore(h,b.key.nextSibling);else b.key.appendChild(h);
+b.key.__c107h=h;return h}
+function hideFig(el){var r=el.closest("tr,.v3-pt,li,p");if(!r||r.getAttribute("data-c107-hidden"))return;r.setAttribute("data-c107-hidden","1");var N="<span class=\"c107-hold\">Not shown: awaiting publisher permission</span>";if(r.tagName==="TR"&&r.cells&&r.cells.length>1){for(var i=1;i<r.cells.length;i++)r.cells[i].innerHTML=i===1?N:""}else r.innerHTML=N}
+function add(el,id){if(CFG.hide&&CFG.hide[id]){hideFig(el);return}
+var b=box(el);if(!b.key||!b.key.parentNode)return;var h=holder(b);if(h.querySelector("[data-id=\""+id+"\"]"))return;
+var p=D.createElement("p");p.className="c107-cite";p.setAttribute("data-id",id);p.innerHTML=cite(id);h.appendChild(p)}
+function fiscal(){var as=D.querySelectorAll("a[href*=\"fiscaldata.treasury.gov\"]"),i;for(i=0;i<as.length;i++){var a=as[i];if(a.closest(".c107-cites,.c107-meth,footer"))continue;var b=box(a);if(!b.key||!b.key.parentNode)continue;var h=holder(b);if(h.querySelector("[data-id=\"fiscal\"]"))continue;var p=D.createElement("p");p.className="c107-cite";p.setAttribute("data-id","fiscal");p.innerHTML="Source: <a href=\"https://fiscaldata.treasury.gov\" rel=\"noopener\">U.S. Treasury, Fiscal Data</a>";h.appendChild(p)}}
+function scan(){
+if(!D.body)return;
+var tw=D.createTreeWalker(D.body,NodeFilter.SHOW_TEXT),n,list=[];
+while((n=tw.nextNode())){var v=n.nodeValue;if(v&&/FRED|US EIA/.test(v))list.push(n)}
+list.forEach(function(n){var p=n.parentElement;if(!p||/^(SCRIPT|STYLE|NOSCRIPT|TEXTAREA)$/.test(p.tagName)||p.closest(".c107-cites,footer,.c107-meth"))return;
+var t=p.textContent||"";if(t.length>400)return;idsFor(p,t).forEach(function(id){add(p,id)});
+var v=n.nodeValue,nv=v.replace(/\(FRED ([A-Z0-9]+(?:, [A-Z0-9]+)*)\)/g,function(all,ids){var l=ids.split(", ");for(var i=0;i<l.length;i++)if(!CAT[l[i]])return all;return"(FRED)"});if(nv!==v)n.nodeValue=nv});
+var as=D.querySelectorAll("a[href*=\"fred.stlouisfed.org/series/\"]"),i;for(i=0;i<as.length;i++){var a=as[i];if(a.closest(".c107-cites,footer,.c107-meth"))continue;var m=/series\/([A-Z0-9]+)/.exec(a.getAttribute("href")||"");if(m&&CAT[m[1]])add(a,m[1])}
+var mk=D.querySelectorAll("[data-c107-ids]"),k;for(k=0;k<mk.length;k++){var e=mk[k];if(e.closest(".c107-cites,footer,.c107-meth"))continue;var host=e.parentElement||e;(e.getAttribute("data-c107-ids")||"").split(",").forEach(function(x){if(CAT[x])add(host,x)})}
+fiscal()}
+var tm=0;function soon(){if(tm)return;tm=setTimeout(function(){tm=0;try{scan()}catch(e){}},250)}
+function boot(){try{scan()}catch(e){}try{new MutationObserver(function(ms){for(var i=0;i<ms.length;i++){var t=ms[i].target;if(t&&t.closest&&t.closest(".c107-cites"))continue;soon();return}}).observe(D.body,{childList:true,subtree:true,characterData:true})}catch(e){}}
+if(D.readyState==="loading")D.addEventListener("DOMContentLoaded",boot);else boot();
+})();</script><script src="/__auth/verify/reminder.js?v=c112" defer></script></body>
+</html>
+

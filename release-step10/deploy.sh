@@ -8,7 +8,7 @@
 # .release-snapshots/step10-<TS>/. Does NOT restart, publish, touch the DB, secrets, git or the network beyond this pinned payload.
 # Usage (Replit Shell, project folder): bash deploy.sh --measure | --dry-run | (no flag = apply)
 set -u
-PAYLOAD_COMMIT=0000000000000000000000000000000000000000
+PAYLOAD_COMMIT=9153ebb8c9b11ccb3ff976709c072db96bdf8b85
 BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/${PAYLOAD_COMMIT}/release-step10"
 MANIFEST=(
   "release_step10.py 3645b06a0f33ce1d6f75758ae186ea6d2b61fd72557aa07ded3685942481e430"
