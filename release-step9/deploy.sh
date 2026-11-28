@@ -9,7 +9,7 @@
 # DB, secrets, git or the network beyond downloading this pinned payload.
 # Usage (Replit Shell, project folder): bash deploy.sh --measure | --dry-run | (no flag = apply)
 set -u
-PAYLOAD_COMMIT=0000000000000000000000000000000000000000
+PAYLOAD_COMMIT=f33958f91e6ed4934ed32cfef1b9c71847ca3510
 BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/${PAYLOAD_COMMIT}/release-step9"
 MANIFEST=(
   "release_step9.py b411dd26f3c4b60041a69eed44ed19f538bd45e54640b149bfb68b1d4e7703e0"
