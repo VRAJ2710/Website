@@ -12,7 +12,7 @@
 # beyond downloading this pinned payload.
 # Usage (Replit Shell, project folder): bash deploy.sh --measure | --dry-run | (no flag = apply)
 set -u
-PAYLOAD_COMMIT=0000000000000000000000000000000000000000
+PAYLOAD_COMMIT=d4eb1f36ab5660adb386a17dfe69fce85ba75da6
 BASE_URL="https://raw.githubusercontent.com/VRAJ2710/Website/${PAYLOAD_COMMIT}/release-step8"
 MANIFEST=(
   "release_step8.py bd3a44261fa0f771b049c787322d9d3f73d2838f86335c673ad1295c7d48b6d9"
